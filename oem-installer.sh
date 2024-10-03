@@ -26,6 +26,7 @@ declare -r PROGRAM=`basename "$0"`
 ####################
 
 declare -r COMMAND_HELP='help'
+declare -r COMMAND_OPTIONS='options'
 declare -r COMMAND_INSTALL='install'
 declare -r COMMAND_UNINSTALL='uninstall'
 
@@ -213,7 +214,7 @@ echoHelpOption() {
 ################################################################################
 echoHelp() {
   local -r -i Complete=${1:-0}
-  echo "Usage: ${PROGRAM} [options...] [ ${COMMAND_HELP} | ${COMMAND_INSTALL} | ${COMMAND_UNINSTALL} ]"
+  echo "Usage: ${PROGRAM} [options...] < ${COMMAND_HELP} | ${COMMAND_OPTIONS} | ${COMMAND_INSTALL} | ${COMMAND_UNINSTALL} >"
   echo "A utility script to install and uninstall the ${DESCRIPTION_PRODUCT_DATABASE} and the ${DESCRIPTION_PRODUCT_MANAGER}."
   echo
   echo 'Commands:'
@@ -222,6 +223,7 @@ echoHelp() {
   else
     echoHelpCommand "$COMMAND_HELP" 'Display the program help'
   fi
+  echoHelpCommand "$COMMAND_OPTIONS" 'Display the program parameters'
   echoHelpCommand "$COMMAND_INSTALL" "Install the ${DESCRIPTION_PRODUCT_DATABASE} and ${DESCRIPTION_PRODUCT_MANAGER}"
   echoHelpCommand "$COMMAND_UNINSTALL" "Uninstall the ${DESCRIPTION_PRODUCT_DATABASE} and ${DESCRIPTION_PRODUCT_MANAGER}"
   echo
@@ -853,6 +855,38 @@ createDirectories() {
 }
 
 ################################################################################
+## @fn displayOptions
+##
+## @brief Display the program options.
+##
+################################################################################
+displayOptions() {
+  echoTitle 'Program options'
+  echoOption "$DESCRIPTION_DATABASE_VERSION" "$DATABASE_VERSION"
+  echoOption "$DESCRIPTION_MANAGER_VERSION" "$MANAGER_VERSION"
+  echoOption "$DESCRIPTION_INSTALLATION_REPOSITORY" "$INSTALLATION_REPOSITORY"
+  echoOption "$DESCRIPTION_DATABASE_REPOSITORY" "$DATABASE_REPOSITORY"
+  echoOption "$DESCRIPTION_MANAGER_REPOSITORY" "$MANAGER_REPOSITORY"
+  echoOption "$DESCRIPTION_INSTALLATION_BASE" "$INSTALLATION_BASE"
+  echoOption "$DESCRIPTION_INSTALLATION_INVENTORY" "$INSTALLATION_INVENTORY"
+  echoOption "$DESCRIPTION_INSTALLATION_USER" "$INSTALLATION_USER"
+  echoOption "$DESCRIPTION_INSTALLATION_GROUP" "$INSTALLATION_GROUP"
+  echoOption "$DESCRIPTION_INSTALLATION_HOSTNAME" "$INSTALLATION_HOSTNAME"
+  echoOption "$DESCRIPTION_INSTALLATION_SUDOERS" "$INSTALLATION_SUDOERS"
+  echoOption "$DESCRIPTION_DATABASE_BASE" "$DATABASE_BASE"
+  echoOption "$DESCRIPTION_DATABASE_HOME" "$DATABASE_HOME"
+  echoOption "$DESCRIPTION_DATABASE_NAME" "${DATABASE_NAME}.${DATABASE_DOMAIN}"
+  echoOption "$DESCRIPTION_DATABASE_DATA" "$DATABASE_DATA"
+  echoOption "$DESCRIPTION_DATABASE_RECOVERY" "$DATABASE_RECOVERY"
+  echoOption "$DESCRIPTION_MANAGER_BASE" "$MANAGER_BASE"
+  echoOption "$DESCRIPTION_MANAGER_HOME" "$MANAGER_HOME"
+  echoOption "$DESCRIPTION_AGENT_BASE" "$AGENT_BASE"
+  echoOption "$DESCRIPTION_DATABASE_RESPONSE" "$DATABASE_RESPONSE"
+  echoOption "$DESCRIPTION_MANAGER_RESPONSE" "$MANAGER_RESPONSE"
+  return $RETCODE_SUCCESS
+}
+
+################################################################################
 ## @fn generateDatabaseResponse
 ##
 ## @brief Generate the response file used to install the Oracle Database in
@@ -1442,7 +1476,7 @@ unset OptionValue
 
 if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
   if [[ 1 -eq $# ]] ; then
-    if [[ "$COMMAND_HELP" == "$1" ]] || [[ "$COMMAND_INSTALL" == "$1" ]] || [[ "$COMMAND_UNINSTALL" == "$1" ]] ; then
+    if [[ "$COMMAND_HELP" == "$1" ]] ||  [[ "$COMMAND_OPTIONS" == "$1" ]] || [[ "$COMMAND_INSTALL" == "$1" ]] || [[ "$COMMAND_UNINSTALL" == "$1" ]] ; then
       declare -r COMMAND="$1"
     else
       echoError $RETCODE_PARAMETER_ERROR "Unknown command program: ${1}"
@@ -1513,36 +1547,18 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
 fi
 
 if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-  echoOption "$DESCRIPTION_DATABASE_VERSION" "$DATABASE_VERSION"
-  echoOption "$DESCRIPTION_MANAGER_VERSION" "$MANAGER_VERSION"
-  echoOption "$DESCRIPTION_INSTALLATION_REPOSITORY" "$INSTALLATION_REPOSITORY"
-  echoOption "$DESCRIPTION_DATABASE_REPOSITORY" "$DATABASE_REPOSITORY"
-  echoOption "$DESCRIPTION_MANAGER_REPOSITORY" "$MANAGER_REPOSITORY"
-  echoOption "$DESCRIPTION_INSTALLATION_BASE" "$INSTALLATION_BASE"
-  echoOption "$DESCRIPTION_INSTALLATION_INVENTORY" "$INSTALLATION_INVENTORY"
-  echoOption "$DESCRIPTION_INSTALLATION_USER" "$INSTALLATION_USER"
-  echoOption "$DESCRIPTION_INSTALLATION_GROUP" "$INSTALLATION_GROUP"
-  echoOption "$DESCRIPTION_INSTALLATION_HOSTNAME" "$INSTALLATION_HOSTNAME"
-  echoOption "$DESCRIPTION_INSTALLATION_SUDOERS" "$INSTALLATION_SUDOERS"
-  echoOption "$DESCRIPTION_DATABASE_BASE" "$DATABASE_BASE"
-  echoOption "$DESCRIPTION_DATABASE_HOME" "$DATABASE_HOME"
-  echoOption "$DESCRIPTION_DATABASE_NAME" "${DATABASE_NAME}.${DATABASE_DOMAIN}"
-  echoOption "$DESCRIPTION_DATABASE_DATA" "$DATABASE_DATA"
-  echoOption "$DESCRIPTION_DATABASE_RECOVERY" "$DATABASE_RECOVERY"
-  echoOption "$DESCRIPTION_MANAGER_BASE" "$MANAGER_BASE"
-  echoOption "$DESCRIPTION_MANAGER_HOME" "$MANAGER_HOME"
-  echoOption "$DESCRIPTION_AGENT_BASE" "$AGENT_BASE"
-  echoOption "$DESCRIPTION_DATABASE_RESPONSE" "$DATABASE_RESPONSE"
-  echoOption "$DESCRIPTION_MANAGER_RESPONSE" "$MANAGER_RESPONSE"
-fi
-
-if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
   case "$COMMAND" in
     "$COMMAND_HELP")
       echoHelp 1
       Retcode=$?
       ;;
+    "$COMMAND_OPTIONS")
+      displayOptions
+      Retcode=$?
+      ;;
     "$COMMAND_INSTALL")
+      displayOptions
+      Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         configurePrerequisites "$INSTALLATION_USER" "$INSTALLATION_GROUP" "$INSTALLATION_SUDOERS"
         Retcode=$?
@@ -1584,6 +1600,8 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       fi
       ;;
     "$COMMAND_UNINSTALL")
+      displayOptions
+      Retcode=$?
 #      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
 #        uninstallManager "$INSTALLATION_USER" "$DATABASE_HOME"
 #        Retcode=$?
