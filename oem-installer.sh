@@ -78,7 +78,7 @@ declare -r DEFAULT_MANAGER_RESPONSE='/tmp/em_install.rsp'
 ########################################################
 
 declare -r DESCRIPTION_INSTALLATION_REPOSITORY='Oracle software repository directory'
-declare -r DESCRIPTION_INSTALLATION_STAGE='Staging installation directory'
+declare -r DESCRIPTION_INSTALLATION_STAGE='Staging (de-)installation directory'
 declare -r DESCRIPTION_INSTALLATION_ROOT='Oracle installation root directory'
 declare -r DESCRIPTION_INSTALLATION_INVENTORY='Oracle inventory directory'
 declare -r DESCRIPTION_INSTALLATION_BASE='Oracle installation base directory'
@@ -489,8 +489,14 @@ configureDatabase() {
   # Enable the automatic start of the Oracle Database during system boot. #
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo 'sed' '-i' 's/:N$/:Y/' "$ORATAB"
-    processCommandCode $? "Failed to modify ${ORATAB}"
+    executeCommand sudo 'test' '-f' "$ORATAB"
+    if [[ 0 -eq $? ]] ; then
+      echoNotice "File found: ${ORATAB}"
+      executeCommand sudo 'sed' '-i' 's/:N$/:Y/' "$ORATAB"
+      processCommandCode $? "Failed to modify ${ORATAB}"
+    else
+      echoNotice "${DESCRIPTION_INSTALLATION_SUDOERS} not found: ${Sudoers}"
+    fi
     Retcode=$?
   fi
 
@@ -752,6 +758,7 @@ copyDatabaseSoftware() {
 ## @return the return code of the function execution.
 ################################################################################
 createDirectories() {
+  local -r PERMISSIONS='755'
   local -r Inventory="${1:-}"
   local -r Base="${2:-}"
   local -r User="${3:-}"
@@ -759,7 +766,6 @@ createDirectories() {
   local -r DatabaseHome="${5:-}"
   local -r ManagerHome="${6:-}"
   local -r AgentBase="${7:-}"
-  local -r PERMISSIONS='755'
   local -i Retcode=$RETCODE_SUCCESS
 
   echoTitle 'Creating the Oracle products directories'
@@ -1317,6 +1323,19 @@ uninstallDatabase() {
   traceParameter $Retcode "$DESCRIPTION_DATABASE_HOME" "$Home"
   Retcode=$?
 
+  # Validate that the Oracle Database is installed in the provided home directory. #
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand sudo 'test' '-d' "$Home"
+    if [[ 0 -eq $? ]] ; then
+      echoNotice "${DESCRIPTION_PRODUCT_DATABASE} home directory found: ${Home}"
+      Retcode=$?
+    else
+      echoNotice "${DESCRIPTION_PRODUCT_DATABASE} home directory not found: ${Home}"
+      return $RETCODE_SUCCESS
+    fi
+  fi
+
   # Validate that the Oracle Database de-installer is present and usable by the installation user. #
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -1362,7 +1381,7 @@ uninstallDatabase() {
     Retcode=$?
   fi
 
-  return $?
+  return $Retcode
 }
 
 ################################################################################
@@ -1372,37 +1391,93 @@ uninstallDatabase() {
 ##
 ## @param[in] Stage A staging directory to use during the installation.
 ## @param[in] User  The installation user.
-## @param[in] Home  The home directory of the Oracle Database.
+## @param[in] Home  The home directory of the Oracle Enterprise Manager.
 ##
 ## @return the return code of the function execution.
 ################################################################################
 uninstallManager() {
+  local -r DatabasePassword='Abcd_1234'
+  local -r SysmanPassword='Abcd_1234'
+  local -r AdminPassword='Abcd_1234'
   local -r Stage="${1-:-}"
   local -r User="${2-:-}"
   local -r Home="${3:-}"
-  local -r Deinstaller='/tmp/EMDeinstall.pl'
-  local Response=''
+  local -r Deinstaller1="${Home}/sysman/install/EMDeinstall.pl"
+  local -r Deinstaller2="${Stage}/EMDeinstall.pl"
   local -i Retcode=$RETCODE_SUCCESS
 
   echoTitle "Uninstalling the ${DESCRIPTION_PRODUCT_MANAGER}"
 
+  traceParameter $Retcode "$DESCRIPTION_INSTALLATION_STAGE" "$Stage"
+  Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_INSTALLATION_USER" "$User"
   Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_DATABASE_HOME" "$Home"
+  traceParameter $Retcode "$DESCRIPTION_MANAGER_HOME" "$Home"
   Retcode=$?
 
-#sudo -u ${User} cp ${INSTALL_BASE}/sysman/install/EMDeinstall.pl ${TEMP_UNINSTALL}
+  # Validate that the Oracle Enterprise Manager is installed in the provided home directory. #
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo 'su' '-' ${User} '-s' '/usr/bin/bash' '-c' "${INSTALL_BASE}/perl/bin/perl ${Deinstaller} -mwHome ${INSTALL_BASE} -stageLoc ${Stage}"
+    executeCommand sudo 'test' '-d' "$Home"
+    if [[ 0 -eq $? ]] ; then
+      echoNotice "${DESCRIPTION_PRODUCT_MANAGER} home directory found: ${Home}"
+      Retcode=$?
+    else
+      echoNotice "${DESCRIPTION_PRODUCT_MANAGER} home directory not found: ${Home}"
+      return $RETCODE_SUCCESS
+    fi
+  fi
+
+  # Validate that the Oracle Enterprise Manager de-installer program is present. #
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand sudo '-u' "$User" 'test' '-r' "$Deinstaller1"
+    if [[ 0 -eq $? ]] ; then
+      echoNotice "${DESCRIPTION_PRODUCT_MANAGER} de-installer program found: ${Deinstaller1}"
+      Retcode=$?
+    else
+      echoNotice "${DESCRIPTION_PRODUCT_MANAGER} de-installer program not found: ${Deinstaller1}"
+      return $RETCODE_SUCCESS
+    fi
+  fi
+
+  # Stage the Oracle Enterprise Manager de-installer program to the staging location. #
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand sudo '-u' "${User}" 'cp' "$Deinstaller1" "$Deinstaller2"
+    processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} de-installer program ${Deinstaller1} was not copied to ${Deinstaller2}"
+    Retcode=$?
+  fi
+
+  # Uninstall the Oracle Enterprise Manager. #
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echo "sudo su - ${User} -s /usr/bin/bash -c \"${Home}/perl/bin/perl ${Deinstaller2} -mwHome ${Home} -stageLoc ${Stage}\""
+    printf "y\n${DatabasePassword}\n${SysmanPassword}\n${AdminPassword}\n" | sudo 'su' '-' "${User}" '-s' '/usr/bin/bash' '-c' "${Home}/perl/bin/perl ${Deinstaller2} -mwHome ${Home} -stageLoc ${Stage}"
     processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} de-installer program encountered an error"
     Retcode=$?
   fi
 
-#sudo -u ${User} cp /u01/app/oracle/middleware/sysman/install/EMDeinstall.pl ${Deinstaller}
+  # Delete the staged Oracle Enterprise Manager de-installer program. #
 
+  executeCommand sudo '-u' "$User" 'test' '-r' "$Deinstaller2"
+  if [[ 0 -eq $? ]] ; then
+    echoNotice "Staged ${DESCRIPTION_PRODUCT_MANAGER} de-installer program found: ${Deinstaller2}"
+  else
+    echoNotice "Staged ${DESCRIPTION_PRODUCT_MANAGER} de-installer program not found: ${Deinstaller2}"
+  fi
+  local -r -i Retcode2=$?
 
-  return 0
+  if [[ $RETCODE_SUCCESS -eq $Retcode2 ]] ; then
+    executeCommand sudo '-u' "$User" 'rm'  "$Deinstaller2"
+    processCommandCode $? "Failed to delete the temporary ${DESCRIPTION_PRODUCT_MANAGER} de-installer program: ${Deinstaller2}"
+    local -r -i Retcode3=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      Retcode=$Retcode3
+    fi
+  fi
+
+  return $Retcode
 }
 
 ################
@@ -1602,10 +1677,10 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     "$COMMAND_UNINSTALL")
       displayOptions
       Retcode=$?
-#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#        uninstallManager "$INSTALLATION_USER" "$DATABASE_HOME"
-#        Retcode=$?
-#      fi
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        uninstallManager "$INSTALLATION_STAGE" "$INSTALLATION_USER" "$MANAGER_HOME"
+        Retcode=$?
+      fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         uninstallDatabase "$INSTALLATION_USER" "$DATABASE_HOME"
         Retcode=$?
