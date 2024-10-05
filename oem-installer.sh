@@ -116,11 +116,12 @@ declare -r -i RETCODE_INTERNAL_ERROR=100
 # Other constants #
 ###################
 
-declare -r -i VALUE_FALSE=0
-declare -r -i VALUE_TRUE=1
+declare -r -i VALUE_TRUE=0
+declare -r -i VALUE_FALSE=1
 declare -r -i HELP_INDENT_LENGTH=2
 declare -r -i HELP_PADDING_LENGTH=24
 declare -r -i DESCRIPTION_LENGTH=56
+declare -r -i CACHE_GOAL=16 # In gigabytes (G)
 declare -r RESPONSE_FILE_PERMISSIONS='640'
 
 ################################ Utility functions ################################
@@ -1207,6 +1208,9 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
 prepareInstallation() {
   local -r SUDOERS_PERMISSIONS='440'
   local -r ORACLE_PERMISSIONS='755'
+  local -r CACHE_PERMISSIONS='600'
+  local -r CACHE_FILE='/.swapfile_oem'
+  local -r FSTAB='/etc/fstab'
   local -r Inventory="${1:-}"
   local -r Base="${2:-}"
   local -r User="${3:-}"
@@ -1340,14 +1344,78 @@ EOF" | sudo sh
     Retcode=$?
   fi
 
-##TODO: Adjust level of system cache.
-
   ##
-  ## Adjustment of the system cache.
+  ## Adjustment of the system cache to have at least 16GB.
   ##
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection 'Adjustment of the system cache'
+    echoSection 'Adjustment of the system cache for at least 16GB'
+  fi
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    local CacheString=''
+
+    echoCommand 'sudo' 'swapon' '--show' '--raw' '--noheadings' '|' 'awk' '-F' "' '" "'BEGIN{ Total = 0 } { if ( \"G\" == substr(\$3,length(\$3),1) ) Total += substr(\$3,1,length(\$3)-1) } END{ print Total }'"
+    CacheString=`sudo swapon --show --raw --noheadings | awk -F ' ' 'BEGIN{ Total = 0} { if ( "G" == substr($3,length($3),1) ) Total+=substr($3,1,length($3)-1) } END{ print Total }'`
+    processCommandCode $? 'Failed to ascertain the system cache size'
+    if [[ $RETCODE_SUCCESS -eq $? ]] && [[ -n "$CacheString" ]] && [[ "$CacheString" =~ ^[0-9]+$ ]] ; then
+      local -r -i CacheSize=$CacheString
+      echoInfo "System cache: ${CacheSize}G"
+      echoInfo "System cache objective: ${CACHE_GOAL}G"
+    else
+      local -r -i CacheSize=0
+    fi
+
+    if [[ 0 -ge $CacheSize ]] ; then
+      echoInfo "System cache not adjusted: Unable to determine current size: ${CacheSize}"
+    elif [[ $CACHE_GOAL -le $CacheSize ]] ; then
+      echoInfo 'System cache not adjusted: already large enough'
+    else
+      local -r -i CacheIncrease=$(($CACHE_GOAL-$CacheSize))
+      local -i CacheCreated=$VALUE_FALSE
+      local -i CacheAdded=$VALUE_FALSE
+      echoInfo "System cache increase: ${CacheIncrease}G"
+      executeCommand 'sudo' 'fallocate' '-l' "${CacheIncrease}G" "$CACHE_FILE"
+      CacheCreated=$?
+      processCommandCode $CacheCreated "Failed to allocate additional system cache file: ${CACHE_FILE}"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' 'chmod' "$CACHE_PERMISSIONS" "$CACHE_FILE"
+        processCommandCode $? "Failed to restrict file permissions on additional system cache file: ${CACHE_FILE}"
+        Retcode=$?
+      fi
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' 'mkswap' "$CACHE_FILE"
+        processCommandCode $? "Failed to format new system cache file: ${CACHE_FILE}"
+        Retcode=$?
+      fi
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' 'swapon' "$CACHE_FILE"
+        CacheAdded=$?
+        processCommandCode $CacheAdded "Failed to add new file to system cache: ${CACHE_FILE}"
+        Retcode=$?
+      fi
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'grep' '-e' "^${CACHE_FILE}[[:space:]]" "$FSTAB"
+        if [[ 0 -eq $? ]] ; then
+          echoNotice "${CACHE_FILE} already found in ${FSTAB}"
+        else
+          echoSuccess
+          echoCommand 'sudo' 'sh' '-c' "echo '-e' '${CACHE_FILE}\tnone\tswap\tsw\t0\t0' >> '${FSTAB}'"
+          sudo sh -c "echo -e '${CACHE_FILE}\tnone\tswap\tsw\t0\t0' >> '${FSTAB}'"
+          processCommandCode $? "Failed to add entry to ${FSTAB} for the new system cache file: ${CACHE_FILE}"
+        fi
+        Retcode=$?
+      fi
+      if [[ $RETCODE_SUCCESS -ne $Retcode ]] && [[ $VALUE_TRUE -eq $CacheAdded ]] ; then
+        executeCommand 'sudo' 'swapoff' "${CACHE_FILE}"
+        processCommandCode $? "Failed to remove new file from system cache: ${CACHE_FILE}"
+      fi
+      if [[ $RETCODE_SUCCESS -ne $Retcode ]] && [[ $VALUE_TRUE -eq $CacheCreated ]] ; then
+        executeCommand 'sudo' 'rm' "${CACHE_FILE}"
+        processCommandCode $? "Failed to delete new system cache file: ${CACHE_FILE}"
+      fi
+    fi
   fi
 
   ##
