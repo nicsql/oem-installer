@@ -121,6 +121,7 @@ declare -r -i VALUE_TRUE=1
 declare -r -i HELP_INDENT_LENGTH=2
 declare -r -i HELP_PADDING_LENGTH=24
 declare -r -i DESCRIPTION_LENGTH=56
+declare -r RESPONSE_FILE_PERMISSIONS='640'
 
 ################################ Utility functions ################################
 
@@ -519,155 +520,6 @@ displayOptions() {
 }
 
 ################################################################################
-## @fn generateManagerResponse
-##
-## @brief Generate the response file used to install the Oracle Enterprise
-##        Manager in silent mode.
-##
-## @param[in] Inventory        The inventory directory of the Oracle
-##                             installation (ex. /u01/app/oraInventory).
-## @param[in] User             The installation user.
-## @param[in] Group            The installation group.
-## @param[in] Hostname         The hostname of the machine.
-## @param[in] Database         The name of the database.
-## @param[in] DatabaseData     The data directory of the Oracle Database.
-## @param[in] DatabasePassword The password for the database "sys" account.
-## @param[in] ManagerBase      The base directory of the Oracle Enterprise
-##                             Manager.
-## @param[in] ManagerHome      The home directory of the Oracle Enterprise
-##                             Manager.
-## @param[in] InstanceHome     The home directory of the Oracle Enterprise
-##                             Manager instance.
-## @param[in] AgentBase        The base directory of the Oracle Enterprise
-##                             Manager agent.
-## @param[in] Response         The filename of the response file to generate.
-##                             An existing response file will be overwritten.
-##
-## @return the return code of the function execution.
-################################################################################
-generateManagerResponse() {
-  local -r PERMISSIONS='640'
-  local -r Inventory="${1:-}"
-  local -r User="${2:-}"
-  local -r Group="${3:-}"
-  local -r Hostname=${4:-}
-  local -r Database="${5:-}"
-  local -r DatabaseData="${6:-}"
-  local -r DatabasePassword="${7:-${DEFAULT_DATABASE_PASSWORD}}"
-  local -r ManagerBase="${8:-}"
-  local -r ManagerHome="${9:-}"
-  local -r InstanceHome="${10:-}"
-  local -r AgentBase="${11:-}"
-  local -r ManagerData="${ManagerBase}/oradata"
-  local -r WeblogicPassword=${DEFAULT_DATABASE_PASSWORD}
-  local -r RepositoryPassword=${DEFAULT_DATABASE_PASSWORD}
-  local -r AgentPassword=${DEFAULT_DATABASE_PASSWORD}
-  local -r CryptoPassword=${DEFAULT_DATABASE_PASSWORD}
-  local -r Response="${12:-}"
-  local -i Retcode=$RETCODE_SUCCESS
-
-  echoTitle "Generating the ${DESCRIPTION_MANAGER_RESPONSE}: ${Response}"
-
-  traceParameter $Retcode "$DESCRIPTION_INSTALLATION_INVENTORY" "$Inventory"
-  Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_INSTALLATION_USER" "$User"
-  Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_INSTALLATION_GROUP" "$Group"
-  Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_INSTALLATION_HOSTNAME" "$Hostname"
-  Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_DATABASE_NAME" "$Database"
-  Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_DATABASE_DATA" "$DatabaseData"
-  Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_MANAGER_BASE" "$ManagerBase"
-  Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_MANAGER_HOME" "$ManagerHome"
-  Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_MANAGER_INSTANCE" "$InstanceHome"
-  Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_AGENT_BASE" "$AgentBase"
-  Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_MANAGER_RESPONSE" "$Response"
-  Retcode=$?
-
-  # Generate the automated Oracle Enterprise Manager installation response file. #
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo '-u' "$User" 'test' '-r' "$Response"
-    if [[ 0 -eq $? ]] ; then
-      echoNotice "The ${DESCRIPTION_MANAGER_RESPONSE} already exists and will be overwritten: ${Response}"
-    else
-      echoNotice "The ${DESCRIPTION_MANAGER_RESPONSE} was not found: ${Response}"
-    fi
-    echoCommand 'sudo' "-u ${User} cat >${Response} <<EOF ... EOF"
-    echo "cat >${Response} <<EOF
-RESPONSEFILE_VERSION=2.2.1.0.0
-UNIX_GROUP_NAME=${Group}
-# Installation
-INSTALL_UPDATES_SELECTION=skip
-b_upgrade=false
-EM_INSTALL_TYPE=NOSEED
-CONFIGURATION_TYPE=ADVANCED
-EMPREREQ_AUTO_CORRECTION=yes
-CONFIGURE_ORACLE_SOFTWARE_LIBRARY=false
-INVENTORY_LOCATION=${Inventory}
-# Weblogic
-ORACLE_MIDDLEWARE_HOME_LOCATION=${ManagerHome}
-ORACLE_HOSTNAME=${Hostname}
-WLS_ADMIN_SERVER_USERNAME=weblogic
-WLS_ADMIN_SERVER_PASSWORD=${WeblogicPassword}
-WLS_ADMIN_SERVER_CONFIRM_PASSWORD=${WeblogicPassword}
-NODE_MANAGER_PASSWORD=${WeblogicPassword}
-NODE_MANAGER_CONFIRM_PASSWORD=${WeblogicPassword}
-ORACLE_INSTANCE_HOME_LOCATION=${InstanceHome}
-# Repository
-DATABASE_HOSTNAME=${Hostname}
-LISTENER_PORT=${DEFAULT_PORT_DATABASE}
-SERVICENAME_OR_SID=${Database}
-SYS_PASSWORD=${DatabasePassword}
-DEPLOYMENT_SIZE=SMALL
-SYSMAN_PASSWORD=${RepositoryPassword}
-SYSMAN_CONFIRM_PASSWORD=${RepositoryPassword}
-MANAGEMENT_TABLESPACE_LOCATION=${DatabaseData}/mgmt.dbf
-CONFIGURATION_DATA_TABLESPACE_LOCATION=${DatabaseData}/mgmt_ecm_depot1.dbf
-JVM_DIAGNOSTICS_TABLESPACE_LOCATION=${DatabaseData}/mgmt_deepdive.dbf
-# Agent
-AGENT_BASE_DIR=${AgentBase}
-AGENT_REGISTRATION_PASSWORD=${AgentPassword}
-AGENT_REGISTRATION_CONFIRM_PASSWORD=${AgentPassword}
-# TLS
-Is_oneWaySSL=false
-Is_twoWaySSL=true
-TRUSTSTORE_PASSWORD=${CryptoPassword}
-TRUSTSTORE_LOCATION=${ManagerData}/ewallet-truststore.p12
-KEYSTORE_PASSWORD=${CryptoPassword}
-KEYSTORE_LOCATION=${ManagerData}/ewallet-keystore.p12
-EOF" | sudo -u "$User" sh
-    processCommandCode $? "The ${DESCRIPTION_MANAGER_RESPONSE} was not created: ${Response}"
-    Retcode=$?
-  fi
-
-  # Limit the file permissions. #
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo 'chmod' ${PERMISSIONS} "$Response"
-    processCommandCode $? "Unable to restrict the file permissions to ${PERMISSIONS} on the ${DESCRIPTION_MANAGER_RESPONSE}: ${Response}"
-    Retcode=$?
-  fi
-
-  # Validate that the Oracle Enterprise Manager automated installation response file is accessible by the installation user. #
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo '-u' "$User" 'test' '-r' "$Response"
-    processCommandCode $? "The ${DESCRIPTION_MANAGER_RESPONSE} is inaccessible: ${Response}"
-    Retcode=$?
-  fi
-  
-  return $Retcode
-}
-
-################################################################################
 ## @fn installDatabase
 ##
 ## @brief Install and launch the Oracle Database.
@@ -680,7 +532,7 @@ EOF" | sudo -u "$User" sh
 ##                       Database software.
 ## @param[in] Base       The base directory of the Oracle Database.
 ## @param[in] Home       The home directory of the Oracle Database.
-## @param[in] Database   The name of the database.
+## @param[in] Name       The name of the database.
 ## @param[in] Data       The data directory of the Oracle Database.
 ## @param[in] Recovery   The recovery directory of the Oracle Database.
 ## @param[in] Password   The password for the database "sys" account.
@@ -690,7 +542,6 @@ EOF" | sudo -u "$User" sh
 ## @return the return code of the function execution.
 ################################################################################
 installDatabase() {
-  local -r PERMISSIONS='640'
   local -r ORATAB='/etc/oratab'
   local -r ORAENV='/usr/local/bin/oraenv'
   local -r Inventory="${1:-}"
@@ -699,7 +550,7 @@ installDatabase() {
   local -r Repository="${4:-}"
   local -r Base="${5:-}"
   local -r Home="${6:-}"
-  local -r Database="${7:-}"
+  local -r Name="${7:-}"
   local -r Data="${8:-}"
   local -r Recovery="${9:-}"
   local -r Password="${10:-}"
@@ -722,7 +573,7 @@ installDatabase() {
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_DATABASE_HOME" "$Home"
   Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_DATABASE_NAME" "$Database"
+  traceParameter $Retcode "$DESCRIPTION_DATABASE_NAME" "$Name"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_DATABASE_DATA" "$Data"
   Retcode=$?
@@ -748,7 +599,6 @@ installDatabase() {
     else
       echoNotice "The ${DESCRIPTION_DATABASE_RESPONSE} was not found: ${Response}"
    fi
-   Retcode=$?
    echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat >${Response} <<EOF ... EOF"
    echo "cat >${Response} <<EOF
 oracle.install.responseFileVersion=/oracle/install/rspfmt_dbinstall_response_schema_v19.0.0
@@ -768,8 +618,8 @@ oracle.install.db.rootconfig.configMethod=SUDO
 oracle.install.db.rootconfig.sudoPath=`which sudo`
 oracle.install.db.rootconfig.sudoUserName=${User}
 oracle.install.db.config.starterdb.type=GENERAL_PURPOSE
-oracle.install.db.config.starterdb.globalDBName=${Database}
-oracle.install.db.config.starterdb.SID=${Database}
+oracle.install.db.config.starterdb.globalDBName=${Name}
+oracle.install.db.config.starterdb.SID=${Name}
 oracle.install.db.config.starterdb.characterSet=AL32UTF8
 oracle.install.db.config.starterdb.memoryOption=false
 oracle.install.db.config.starterdb.memoryLimit=2048
@@ -780,7 +630,7 @@ oracle.install.db.config.starterdb.enableRecovery=true
 oracle.install.db.config.starterdb.storageType=FILE_SYSTEM_STORAGE
 oracle.install.db.config.starterdb.fileSystemStorage.dataLocation=${Data}
 oracle.install.db.config.starterdb.fileSystemStorage.recoveryLocation=${Recovery}
-EOF" | sudo -u "$User" '-g' "$Group" sh
+EOF" | sudo '-u' "$User" '-g' "$Group" sh
     Created=$?
     processCommandCode $Created "The ${DESCRIPTION_DATABASE_RESPONSE} was not created: ${Response}"
     Retcode=$?
@@ -789,8 +639,8 @@ EOF" | sudo -u "$User" '-g' "$Group" sh
   # Restrict the file permissions of the response file.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'chmod' ${PERMISSIONS} "$Response"
-    processCommandCode $? "Unable to restrict the file permissions to ${PERMISSIONS} on the ${DESCRIPTION_DATABASE_RESPONSE}: ${Response}"
+    executeCommand 'sudo' 'chmod' ${RESPONSE_FILE_PERMISSIONS} "$Response"
+    processCommandCode $? "Unable to restrict the file permissions to ${RESPONSE_FILE_PERMISSIONS} on the ${DESCRIPTION_DATABASE_RESPONSE}: ${Response}"
     Retcode=$?
   fi
 
@@ -886,7 +736,7 @@ EOF" | sudo -u "$User" '-g' "$Group" sh
   fi
 
   ##
-  ## Installation of the Oracle Database
+  ## Installation of the Oracle Database.
   ##
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -1006,8 +856,8 @@ EOF" | sudo -u "$User" '-g' "$Group" sh
   # Configure the Oracle Database environment.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoCommand 'printf' "${Database}\n" '|' sudo '-E' '-u' "$User" '-g' "$Group" 'env' "PATH=${PATH}" "$ORAENV"
-    printf "${Database}\n" | sudo '-E' '-u' "$User" '-g' "$Group" 'env' "PATH=${PATH}" "$ORAENV"
+    echoCommand 'printf' "${Name}\n" '|' sudo '-E' '-u' "$User" '-g' "$Group" 'env' "PATH=${PATH}" "$ORAENV"
+    printf "${Name}\n" | sudo '-E' '-u' "$User" '-g' "$Group" 'env' "PATH=${PATH}" "$ORAENV"
     processCommandCode $? "Failed to configure ${DESCRIPTION_PRODUCT_DATABASE} environment: ${ORAENV}"
     Retcode=$?
   fi
@@ -1024,7 +874,7 @@ EOF" | sudo -u "$User" '-g' "$Group" sh
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/sqlplus" '/nolog' <<EOF
-CONNECT sys/${Password}@${Database} AS sysdba
+CONNECT sys/${Password}@${Name} AS sysdba
 ALTER SYSTEM SET "_allow_insert_with_update_check"=true scope=both;
 ALTER SYSTEM SET session_cached_cursors=200 scope=spfile;
 ALTER SYSTEM SET shared_pool_size=600M scope=spfile;
@@ -1053,7 +903,7 @@ EOF
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/sqlplus" '/nolog' <<EOF
-CONNECT sys/${Password}@${Database} AS sysdba
+CONNECT sys/${Password}@${Name} AS sysdba
 STARTUP
 EOF
     processCommandCode $? "Failed to startup the ${DESCRIPTION_PRODUCT_DATABASE}: ${Database}"
@@ -1068,57 +918,189 @@ EOF
 ##
 ## @brief Install and launch the Oracle Enterprise Manager.
 ##
-## @param[in] Stage        A staging directory to use during the installation.
-## @param[in] User         The installation user.
-## @param[in] Repository   The source directory where the Oracle Enterprise
-##                         Manager download files were unzipped.
-## @param[in] ManagerHome  The home directory of the Oracle Enterprise Manager.
-## @param[in] InstanceHome The home directory of the Oracle Enterprise Manager
-##                         instance.
-## @param[in] Response     The response file used to install the Oracle
-##                         Enterprise Manager
+## @param[in] Stage             A staging directory to use during the
+##                              installation.
+## @param[in] Inventory         The inventory directory of the Oracle
+##                              installation (ex. /u01/app/oraInventory).
+## @param[in] User              The installation user.
+## @param[in] Group             The installation group.
+## @param[in] Hostname          The hostname of the machine.
+## @param[in] DatabaseName      The name of the database.
+## @param[in] DatabaseData      The data directory of the Oracle Database.
+## @param[in] DatabasePassword  The password for the database "sys" account.
+## @param[in] ManagerRepository The source directory where the Oracle Enterprise
+##                              Manager download files were unzipped.
+## @param[in] ManagerBase       The base directory of the Oracle Enterprise
+##                              Manager.
+## @param[in] ManagerHome       The home directory of the Oracle Enterprise
+##                              Manager.
+## @param[in] InstanceHome      The home directory of the Oracle Enterprise
+##                              Manager instance.
+## @param[in] AgentBase         The base directory of the Oracle Enterprise
+##                              Manager agent.
+## @param[in] Response          The filename of the response file to generate.
+##                              for the installation.  An existing response file
+##                              will be overwritten.
 ##
 ## @return the return code of the function execution.
 ################################################################################
 installManager() {
   local -r Stage="${1-:-}"
-  local -r User="${2-:-}"
-  local -r Repository="${3-:-}"
-  local -r ManagerHome="${4-:-}"
-  local -r InstanceHome="${5-:-}"
-  local -r Response="${6-:-}"
+  local -r Inventory="${2:-}"
+  local -r User="${3-:-}"
+  local -r Group="${4:-}"
+  local -r Hostname=${5:-}
+  local -r DatabaseName="${6:-}"
+  local -r DatabaseData="${7:-}"
+  local -r DatabasePassword="${8:-${DEFAULT_DATABASE_PASSWORD}}"
+  local -r ManagerRepository="${9-:-}"
+  local -r ManagerBase="${10:-}"
+  local -r ManagerHome="${11-:-}"
+  local -r InstanceHome="${12-:-}"
+  local -r AgentBase="${13:-}"
+  local -r Response="${14-:-}"
   local -r Installer="${ManagerHome}/allroot.sh"
+  local -r ManagerData="${ManagerBase}/oradata"
+  local -r WeblogicPassword=${DEFAULT_DATABASE_PASSWORD}
+  local -r RepositoryPassword=${DEFAULT_DATABASE_PASSWORD}
+  local -r AgentPassword=${DEFAULT_DATABASE_PASSWORD}
+  local -r CryptoPassword=${DEFAULT_DATABASE_PASSWORD}
+  local -i Created=1
   local -i Retcode=$RETCODE_SUCCESS
 
   echoTitle "Installing the ${DESCRIPTION_PRODUCT_MANAGER}"
 
+  traceParameter $Retcode "$DESCRIPTION_INSTALLATION_INVENTORY" "$Inventory"
+  Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_INSTALLATION_STAGE" "$Stage"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_INSTALLATION_USER" "$User"
   Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_MANAGER_REPOSITORY" "$Repository"
+  traceParameter $Retcode "$DESCRIPTION_INSTALLATION_GROUP" "$Group"
+  Retcode=$?
+  traceParameter $Retcode "$DESCRIPTION_INSTALLATION_HOSTNAME" "$Hostname"
+  Retcode=$?
+  traceParameter $Retcode "$DESCRIPTION_DATABASE_NAME" "$DatabaseName"
+  Retcode=$?
+  traceParameter $Retcode "$DESCRIPTION_DATABASE_DATA" "$DatabaseData"
+  Retcode=$?
+  traceParameter $Retcode "$DESCRIPTION_MANAGER_REPOSITORY" "$ManagerRepository"
+  Retcode=$?
+  traceParameter $Retcode "$DESCRIPTION_MANAGER_BASE" "$ManagerBase"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_MANAGER_HOME" "$ManagerHome"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_MANAGER_INSTANCE" "$InstanceHome"
   Retcode=$?
+  traceParameter $Retcode "$DESCRIPTION_AGENT_BASE" "$AgentBase"
+  Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_MANAGER_RESPONSE" "$Response"
   Retcode=$?
 
-  # Change the current working directory to the Oracle Enterprise Manager software repository. #
+  ##
+  ## Generation of the Oracle Enterprise Manager automated installation response file.
+  ##
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if [[ ! -d "$Repository" ]] || [[ ! -x "$Repository" ]] ; then
-      echoError $RETCODE_OPERATION_ERROR "${DESCRIPTION_MANAGER_REPOSITORY} is inaccessible: ${Repository}"
+    echoSection "Generation of the ${DESCRIPTION_MANAGER_RESPONSE}"
+  fi
+
+  # Generate the response file.
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-r' "$Response"
+    if [[ 0 -eq $? ]] ; then
+      echoNotice "The ${DESCRIPTION_MANAGER_RESPONSE} already exists and will be overwritten: ${Response}"
     else
-      echoCommand 'cd' "$Repository"
-      cd "$Repository"
-      processCommandCode $? "Failed to change the current working directory to: ${Repository}"
+      echoNotice "The ${DESCRIPTION_MANAGER_RESPONSE} was not found: ${Response}"
+    fi
+    echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat >${Response} <<EOF ... EOF"
+    echo "cat >${Response} <<EOF
+RESPONSEFILE_VERSION=2.2.1.0.0
+UNIX_GROUP_NAME=${Group}
+# Installation
+INSTALL_UPDATES_SELECTION=skip
+b_upgrade=false
+EM_INSTALL_TYPE=NOSEED
+CONFIGURATION_TYPE=ADVANCED
+EMPREREQ_AUTO_CORRECTION=yes
+CONFIGURE_ORACLE_SOFTWARE_LIBRARY=false
+INVENTORY_LOCATION=${Inventory}
+# Weblogic
+ORACLE_MIDDLEWARE_HOME_LOCATION=${ManagerHome}
+ORACLE_HOSTNAME=${Hostname}
+WLS_ADMIN_SERVER_USERNAME=weblogic
+WLS_ADMIN_SERVER_PASSWORD=${WeblogicPassword}
+WLS_ADMIN_SERVER_CONFIRM_PASSWORD=${WeblogicPassword}
+NODE_MANAGER_PASSWORD=${WeblogicPassword}
+NODE_MANAGER_CONFIRM_PASSWORD=${WeblogicPassword}
+ORACLE_INSTANCE_HOME_LOCATION=${InstanceHome}
+# Repository
+DATABASE_HOSTNAME=${Hostname}
+LISTENER_PORT=${DEFAULT_PORT_DATABASE}
+SERVICENAME_OR_SID=${DatabaseName}
+SYS_PASSWORD=${DatabasePassword}
+DEPLOYMENT_SIZE=SMALL
+SYSMAN_PASSWORD=${RepositoryPassword}
+SYSMAN_CONFIRM_PASSWORD=${RepositoryPassword}
+MANAGEMENT_TABLESPACE_LOCATION=${DatabaseData}/mgmt.dbf
+CONFIGURATION_DATA_TABLESPACE_LOCATION=${DatabaseData}/mgmt_ecm_depot1.dbf
+JVM_DIAGNOSTICS_TABLESPACE_LOCATION=${DatabaseData}/mgmt_deepdive.dbf
+# Agent
+AGENT_BASE_DIR=${AgentBase}
+AGENT_REGISTRATION_PASSWORD=${AgentPassword}
+AGENT_REGISTRATION_CONFIRM_PASSWORD=${AgentPassword}
+# TLS
+Is_oneWaySSL=false
+Is_twoWaySSL=true
+TRUSTSTORE_PASSWORD=${CryptoPassword}
+TRUSTSTORE_LOCATION=${ManagerData}/ewallet-truststore.p12
+KEYSTORE_PASSWORD=${CryptoPassword}
+KEYSTORE_LOCATION=${ManagerData}/ewallet-keystore.p12
+EOF" | sudo '-u' "$User" '-g' "$Group" sh
+    Created=$?
+    processCommandCode $Created "The ${DESCRIPTION_MANAGER_RESPONSE} was not created: ${Response}"
+    Retcode=$?
+  fi
+
+  # Restrict the file permissions of the response file.
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' 'chmod' ${RESPONSE_FILE_PERMISSIONS} "$Response"
+    processCommandCode $? "Unable to restrict the file permissions to ${RESPONSE_FILE_PERMISSIONS} on the ${DESCRIPTION_MANAGER_RESPONSE}: ${Response}"
+    Retcode=$?
+  fi
+
+  # Validate that the response file is accessible by the installation user.
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$Response"
+    processCommandCode $? "The ${DESCRIPTION_MANAGER_RESPONSE} is inaccessible: ${Response}"
+    Retcode=$?
+  fi
+
+  ##
+  ## Installation of the Oracle Enterprise Manager.
+  ##
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "Installation of the ${DESCRIPTION_PRODUCT_MANAGER}"
+  fi
+
+  # Change the current working directory to the Oracle Enterprise Manager software repository.
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    if [[ ! -d "$ManagerRepository" ]] || [[ ! -x "$ManagerRepository" ]] ; then
+      echoError $RETCODE_OPERATION_ERROR "${DESCRIPTION_MANAGER_REPOSITORY} is inaccessible: ${ManagerRepository}"
+    else
+      echoCommand 'cd' "$ManagerRepository"
+      cd "$ManagerRepository"
+      processCommandCode $? "Failed to change the current working directory to: ${ManagerRepository}"
     fi
     Retcode=$?
   fi
 
-  # Export the ORACLE_HOME environment variable. #
+  # Export the ORACLE_HOME environment variable.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoCommand 'export' "ORACLE_HOME=${ManagerHome}"
@@ -1127,7 +1109,7 @@ installManager() {
     Retcode=$?
   fi
 
-  # Export the OMS_INSTANCE_HOME environment variable. #
+  # Export the OMS_INSTANCE_HOME environment variable.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoCommand 'export' "OMS_INSTANCE_HOME=${ManagerInstance}"
@@ -1136,43 +1118,58 @@ installManager() {
     Retcode=$?
   fi
 
-  # Run the Oracle Enterprise Manager installer program using the installation user. #
+  # Run the Oracle Enterprise Manager installer program using the installation user.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo '-E' '-u' "$User" './em13500_linux64.bin' '-silent' '-responseFile' "$Response" "-J-Djava.io.tmpdir=${Stage}"
-    processCommandCode $? "Failed to install Oracle Enterprise Manager: ${Repository}/em13500_linux64.bin"
+    executeCommand sudo '-E' '-u' "$User" '-g' "$Group" './em13500_linux64.bin' '-silent' '-responseFile' "$Response" "-J-Djava.io.tmpdir=${Stage}"
+    processCommandCode $? "Failed to install Oracle Enterprise Manager: ${ManagerRepository}/em13500_linux64.bin"
     Retcode=$?
   fi
 
-  # Run the Oracle Enterprise Manager root installer program using the root user. #
+  ##
+  ## Perform the post-installation steps
+  ##
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo '-E' '-u' "$User" 'sudo' 'test' '-x' "$Installer"
-    processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} root installer program was not found or is innaccessible: ${Installer}"
-    Retcode=$?
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      executeCommand sudo '-E' '-u' "$User" 'sudo' '-E' "$Installer"
-      processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} root installer program produced an error: ${Installer}"
-      Retcode=$?
-    fi
+    echoSection "Post-installation steps"
   fi
 
-  # Configure firewalld to allow network access to the Oracle Enterprise Manager. #
+  # Delete the Oracle Enterprise Manager automated installation response file.
+
+  if [[ 0 -eq $Created ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'rm' "$Response"
+    processCommandCode $? "Failed to the delete the ${DESCRIPTION_MANAGER_RESPONSE}: ${Response}"
+  fi
+
+  # Run the Oracle Enterprise Manager root installer program using the root user.
+
+#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+#    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$Installer"
+#    processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} root installer program was not found or is innaccessible: ${Installer}"
+#    Retcode=$?
+#    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+#      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' '-E' "$Installer"
+#      processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} root installer program produced an error: ${Installer}"
+#      Retcode=$?
+#    fi
+#  fi
+
+  # Configure firewalld to allow network access to the Oracle Enterprise Manager.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo 'systemctl' 'status' 'firewalld'
+    executeCommand 'sudo' 'systemctl' 'status' 'firewalld'
     if [[ 0 -eq $? ]] ; then
       echoSuccess
-      executeCommand sudo 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${DEFAULT_PORT_WEBLOGIC}/tcp"
+      executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${DEFAULT_PORT_WEBLOGIC}/tcp"
       processCommandCode $? "Failed to allow public access to the network port of the Weblogic administrative console: ${DEFAULT_PORT_WEBLOGIC}"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand sudo 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${DEFAULT_PORT_MANAGER}/tcp"
+        executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${DEFAULT_PORT_MANAGER}/tcp"
         processCommandCode $? "Failed to allow public access to the network port of the ${DESCRIPTION_PRODUCT_MANAGER} console: ${DEFAULT_PORT_MANAGER}"
         Retcode=$?
       fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand sudo 'firewall-cmd' '--reload'
+        executeCommand 'sudo' 'firewall-cmd' '--reload'
         processCommandCode $? 'Failed to reload firewalld'
         Retcode=$?
       fi
@@ -1797,25 +1794,24 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           "$DATABASE_RESPONSE"
         Retcode=$?
       fi
-#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#        generateManagerResponse "$INSTALLATION_INVENTORY" \
-#          "$INSTALLATION_USER" \
-#          "$INSTALLATION_GROUP" \
-#          "$INSTALLATION_HOSTNAME" \
-#          "$DATABASE_NAME" \
-#          "$DATABASE_DATA" \
-#          "$DATABASE_PASSWORD" \
-#          "$MANAGER_BASE" \
-#          "$MANAGER_HOME" \
-#          "$MANAGER_INSTANCE" \
-#          "$AGENT_BASE" \
-#          "$MANAGER_RESPONSE"
-#        Retcode=$?
-#      fi
-#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#        installManager "$INSTALLATION_STAGE" "$INSTALLATION_USER" "$MANAGER_REPOSITORY" "$MANAGER_HOME" "$MANAGER_INSTANCE" "$MANAGER_RESPONSE"
-#        Retcode=$?
-#      fi
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        installManager \
+          "$INSTALLATION_STAGE" \
+          "$INSTALLATION_INVENTORY" \
+          "$INSTALLATION_USER" \
+          "$INSTALLATION_GROUP" \
+          "$INSTALLATION_HOSTNAME" \
+          "$DATABASE_NAME" \
+          "$DATABASE_DATA" \
+          "$DATABASE_PASSWORD" \
+          "$MANAGER_REPOSITORY" \
+          "$MANAGER_BASE" \
+          "$MANAGER_HOME" \
+          "$MANAGER_INSTANCE" \
+          "$AGENT_BASE" \
+          "$MANAGER_RESPONSE"
+        Retcode=$?
+      fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         echo 'Installation successful'
         echo "ORACLE_BASE=${DATABASE_BASE}"
@@ -1827,10 +1823,10 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     "$COMMAND_UNINSTALL")
       displayOptions
       Retcode=$?
-#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#        uninstallManager "$INSTALLATION_STAGE" "$INSTALLATION_USER" "$MANAGER_HOME"
-#        Retcode=$?
-#      fi
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        uninstallManager "$INSTALLATION_STAGE" "$INSTALLATION_USER" "$MANAGER_HOME"
+        Retcode=$?
+      fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         uninstallDatabase "$INSTALLATION_USER" "$DATABASE_HOME"
         Retcode=$?
