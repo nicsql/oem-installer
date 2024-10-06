@@ -141,6 +141,35 @@ echoCommand() {
 }
 
 ################################################################################
+## @fn echoCommandMessage
+##
+## @brief Echo a command completion notice message.
+##
+## @param[in] Message The message to echo.
+##
+## @return RETCODE_SUCCESS
+################################################################################
+echoCommandMessage() {
+  local -r Message="${1:-}"
+  if [[ -n "$Message" ]] ; then
+    echo "...${Message^}"
+  fi
+  return $RETCODE_SUCCESS
+}
+
+################################################################################
+## @fn echoCommandSuccess
+##
+## @brief Echo a message that indicates the successful completion of a command.
+##
+## @return RETCODE_SUCCESS
+################################################################################
+echoCommandSuccess() {
+  echoCommandMessage 'success'
+  return $?
+}
+
+################################################################################
 ## @fn echoError
 ##
 ## @brief Echo an error message and return the return code.
@@ -282,23 +311,6 @@ echoInfo() {
 }
 
 ################################################################################
-## @fn echoNotice
-##
-## @brief Echo a command completion notice message.
-##
-## @param[in] Message The message to echo.
-##
-## @return RETCODE_SUCCESS
-################################################################################
-echoNotice() {
-  local -r Message="${1:-}"
-  if [[ -n "$Message" ]] ; then
-    echo "...${Message^}"
-  fi
-  return $RETCODE_SUCCESS
-}
-
-################################################################################
 ## @fn echoOption
 ##
 ## @brief Echo the value of a program option or function parameter.
@@ -396,7 +408,7 @@ processCommandCode() {
   local -r -i ExitCode=${1:-$RETCODE_INTERNAL_ERROR}
   local -r Message="${2:-}"
   if [[ $RETCODE_SUCCESS -eq $ExitCode ]] ; then
-    echoNotice "Success"
+    echoCommandSuccess
   else
     echoError $ExitCode "$Message"
   fi
@@ -559,6 +571,14 @@ installDatabase() {
   local -r InventoryInstaller="${Inventory}/orainstRoot.sh"
   local -r DatabaseInstaller="${Home}/root.sh"
   local -r Requirements="${Home}/cv/admin/cvu_config"
+  local -r Marker1="${Home}/INSTALLATION_MARKER_1"
+  local -r Marker2="${Home}/INSTALLATION_MARKER_2"
+  local -r Marker3="${Home}/INSTALLATION_MARKER_3"
+  local -r Marker4="${Home}/INSTALLATION_MARKER_4"
+  local -r Marker5="${Home}/INSTALLATION_MARKER_5"
+  local -r Marker6="${Home}/INSTALLATION_MARKER_6"
+  local -r Marker7="${Home}/INSTALLATION_MARKER_7"
+  local -r Marker8="${Home}/INSTALLATION_MARKER_8"
   local -i Created=1
   local -i Retcode=$RETCODE_SUCCESS
 
@@ -596,9 +616,9 @@ installDatabase() {
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$Response"
     if [[ 0 -eq $? ]] ; then
-      echoNotice "The ${DESCRIPTION_DATABASE_RESPONSE} already exists and will be overwritten: ${Response}"
+      echoCommandMessage "The ${DESCRIPTION_DATABASE_RESPONSE} already exists and will be overwritten: ${Response}"
     else
-      echoNotice "The ${DESCRIPTION_DATABASE_RESPONSE} was not found: ${Response}"
+      echoCommandMessage "The ${DESCRIPTION_DATABASE_RESPONSE} was not found: ${Response}"
    fi
    echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat >${Response} <<EOF ... EOF"
    echo "cat >${Response} <<EOF
@@ -691,16 +711,23 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
   # Copy the Oracle Database software.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Requirements"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker1"
     if [[ 0 -eq $? ]] ; then
-      echoNotice "The ${DESCRIPTION_PRODUCT_DATABASE} software is already copied: ${Home}"
+      echoCommandMessage "The ${DESCRIPTION_PRODUCT_DATABASE} software is already copied: ${Home}"
+      Retcode=$?
     else
-      echoNotice "The ${DESCRIPTION_PRODUCT_DATABASE} software is not already copied: ${Home}"
+      echoCommandMessage "The ${DESCRIPTION_PRODUCT_DATABASE} software is not already copied: ${Home}"
       echoCommand 'tar' 'cf' '-' '.' '|' "(cd ${Home} ; sudo -u ${User} '-g' "$Group" tar xf -)"
       tar cf - . | (cd "$Home" ; sudo -u "$User" '-g' "$Group" tar xf -)
       processCommandCode $? "Failed to copy the ${DESCRIPTION_PRODUCT_DATABASE} files using the user '${User}:${Group}' from '${Repository}' to '${Home}'"
+      Retcode=$?
+      # Create indicator that the software has been copied.
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker1"
+        processCommandCode $? "Failed to create installation marker file: ${Marker1}"
+        Retcode=$?
+      fi
     fi
-    Retcode=$?
   fi
 
   ##
@@ -722,16 +749,16 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       echoCommand 'sudo' 'grep' "$HACK" "$Requirements"
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        echoNotice "Software not hacked for OL8"
+        echoCommandMessage "Software not hacked for OL8"
         local Output=''
         echoCommand 'echo' "${HACK}.1" '|' 'sudo' "tee -a ${Requirements}"
         Output=`echo "${HACK}.1" | sudo tee -a "$Requirements"`
         processCommandCode $? "Failed to modify file: ${Requirements}"
       else
-        echoNotice "Software already hacked for OL8"
+        echoCommandMessage "Software already hacked for OL8"
       fi
     else
-      echoNotice "${DESCRIPTION_INSTALLATION_SUDOERS} already exists: ${Sudoers}"
+      echoCommandMessage "${DESCRIPTION_INSTALLATION_SUDOERS} already exists: ${Sudoers}"
     fi
     Retcode=$?
   fi
@@ -769,14 +796,22 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
   # Install the Oracle Database.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'test' '-r' "${Home}/oraInst.loc"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker2"
     if [[ 0 -eq $? ]] ; then
-      echoNotice "${DESCRIPTION_PRODUCT_DATABASE} is already installed"
+      echoCommandMessage "${DESCRIPTION_PRODUCT_DATABASE} is already installed"
+      Retcode=$?
     else
+      echoCommandMessage "${DESCRIPTION_PRODUCT_DATABASE} is not already installed"
       executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" './runInstaller' '-silent' '-responseFile' "$Response"
       processCommandCode $? "Error occurred when running ${DESCRIPTION_PRODUCT_DATABASE} installer program (runInstaller)"
+      Retcode=$?
+      # Create indicator that the software has been installed.
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker2"
+        processCommandCode $? "Failed to create installation marker file: ${Marker2}"
+        Retcode=$?
+      fi
     fi
-    Retcode=$?
   fi
 
   ##
@@ -790,47 +825,77 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
   # Run the Oracle inventory root installer program, if it exists, using the installation user.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$InventoryInstaller"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker3"
     if [[ 0 -eq $? ]] ; then
-      echoSuccess
-      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' "$InventoryInstaller"
-      processCommandCode $? "The Oracle Inventory root installer program produced an error: ${InventoryInstaller}"
+      echoCommandMessage "The Oracle Inventory root installer has already been run"
+      Retcode=$?
     else
-      echoNotice "The Oracle Inventory root installer program was not found or is innaccessible: ${InventoryInstaller}"
-      echoNotice "Skipping running the Oracle Inventory root installer program: ${InventoryInstaller}"
+      echoCommandMessage "The Oracle Inventory root installer has not already been run"
+      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$InventoryInstaller"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandSuccess
+        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' "$InventoryInstaller"
+        processCommandCode $? "The Oracle Inventory root installer program produced an error: ${InventoryInstaller}"
+        Retcode=$?
+        # Create indicator that the Oracle Inventory root installer has been run.
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker3"
+          processCommandCode $? "Failed to create installation marker file: ${Marker3}"
+          Retcode=$?
+        fi
+      else
+        echoCommandMessage "The Oracle Inventory root installer program was not found or is innaccessible: ${InventoryInstaller}"
+        echoInfo "Skipping running the Oracle Inventory root installer program: ${InventoryInstaller}"
+        Retcode=$?
+      fi
     fi
-    Retcode=$?
   fi
 
   # Run the Oracle Database root installer program using the installation user.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$DatabaseInstaller"
-    processCommandCode $? "The ${DESCRIPTION_PRODUCT_DATABASE} root installer program was not found or is innaccessible: ${DatabaseInstaller}"
-    Retcode=$?
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      executeCommand 'sudo' 'test' '-f' "$ORATAB"
-      if [[ 0 -eq $? ]] ; then
-        echoNotice "${DESCRIPTION_PRODUCT_DATABASE} root installer has already been run"
-      else
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker4"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_PRODUCT_DATABASE} root installer has already been run"
+      Retcode=$?
+    else
+      echoCommandMessage "The ${DESCRIPTION_PRODUCT_DATABASE} root installer has not already been run"
+      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$DatabaseInstaller"
+      processCommandCode $? "The ${DESCRIPTION_PRODUCT_DATABASE} root installer program was not found or is innaccessible: ${DatabaseInstaller}"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' '-E' "$DatabaseInstaller"
         processCommandCode $? "The ${DESCRIPTION_PRODUCT_DATABASE} root installer program produced an error: ${DatabaseInstaller}"
+        Retcode=$?
+        # Create indicator that the Oracle Database root installer has been run.
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker4"
+          processCommandCode $? "Failed to create installation marker file: ${Marker4}"
+          Retcode=$?
+        fi
       fi
-      Retcode=$?
     fi
   fi
 
   # Configure the Oracle Database network settings using the installation user.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'test' '-r' "${Home}/network/admin/listener.ora"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker5"
     if [[ 0 -eq $? ]] ; then
-      echoNotice "The network configuration of the ${DESCRIPTION_PRODUCT_DATABASE} is already configured"
+      echoCommandMessage "The network information of the ${DESCRIPTION_PRODUCT_DATABASE} is already configured"
+      Retcode=$?
     else
+      echoCommandMessage "The network information of the ${DESCRIPTION_PRODUCT_DATABASE} is not configured"
       executeCommand 'sudo' '-E' '-u' "$User" './runInstaller' '-executeConfigTools' '-silent' '-responseFile' "$Response"
       processCommandCode $? "Error occurred when running ${DESCRIPTION_PRODUCT_DATABASE} installer (runInstaller -executeConfigTools)"
+      Retcode=$?
+      # Create indicator that the network information of the Oracle Database has been configured.
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker5"
+        processCommandCode $? "Failed to create installation marker file: ${Marker5}"
+        Retcode=$?
+      fi
     fi
-    Retcode=$?
   fi
 
   # Delete the Oracle Database automated installation response file.
@@ -843,24 +908,51 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
   # Enable the automatic start of the Oracle Database during system boot.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'test' '-f' "$ORATAB"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker6"
     if [[ 0 -eq $? ]] ; then
-      echoNotice "File found: ${ORATAB}"
-      executeCommand 'sudo' 'sed' '-i' 's/:N$/:Y/' "$ORATAB"
-      processCommandCode $? "Failed to modify ${ORATAB}"
+      echoCommandMessage "The automatic restart of the ${DESCRIPTION_PRODUCT_DATABASE} is already enabled"
+      Retcode=$?
     else
-      echoNotice "The ${DESCRIPTION_INSTALLATION_SUDOERS} not found: ${Sudoers}"
+      echoCommandMessage "The automatic restart of the ${DESCRIPTION_PRODUCT_DATABASE} is not enabled"
+      executeCommand 'sudo' 'test' '-f' "$ORATAB"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandMessage "File found: ${ORATAB}"
+        executeCommand 'sudo' 'sed' '-i' 's/:N$/:Y/' "$ORATAB"
+        processCommandCode $? "Failed to modify ${ORATAB}"
+        Retcode=$?
+        # Create indicator that the automatic start of the Oracle Database has been enabled.
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker6"
+          processCommandCode $? "Failed to create installation marker file: ${Marker6}"
+          Retcode=$?
+        fi
+      else
+        echoCommandMessage "The ${DESCRIPTION_INSTALLATION_SUDOERS} not found: ${Sudoers}"
+        Retcode=$?
+      fi
     fi
-    Retcode=$?
   fi
 
   # Configure the Oracle Database environment.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoCommand 'printf' "${Name}\n" '|' sudo '-E' '-u' "$User" '-g' "$Group" 'env' "PATH=${PATH}" "$ORAENV"
-    printf "${Name}\n" | sudo '-E' '-u' "$User" '-g' "$Group" 'env' "PATH=${PATH}" "$ORAENV"
-    processCommandCode $? "Failed to configure ${DESCRIPTION_PRODUCT_DATABASE} environment: ${ORAENV}"
-    Retcode=$?
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker7"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The environment of the ${DESCRIPTION_PRODUCT_DATABASE} is already configured"
+      Retcode=$?
+    else
+      echoCommandMessage "The environment of the ${DESCRIPTION_PRODUCT_DATABASE} is not configured"
+      echoCommand 'printf' "${Name}\n" '|' sudo '-E' '-u' "$User" '-g' "$Group" 'env' "PATH=${PATH}" "$ORAENV"
+      printf "${Name}\n" | sudo '-E' '-u' "$User" '-g' "$Group" 'env' "PATH=${PATH}" "$ORAENV"
+      processCommandCode $? "Failed to configure ${DESCRIPTION_PRODUCT_DATABASE} environment: ${ORAENV}"
+      Retcode=$?
+      # Create indicator that the environment of the Oracle Database has been configured.
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker7"
+        processCommandCode $? "Failed to create installation marker file: ${Marker7}"
+        Retcode=$?
+      fi
+    fi
   fi
 
   ##
@@ -871,10 +963,17 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
     echoSection "Configuration of the ${DESCRIPTION_PRODUCT_DATABASE}"
   fi
 
-  # Configure the Oracle Database parameters required by Oracle Enterprise Manager.
-
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/sqlplus" '/nolog' <<EOF
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker8"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_PRODUCT_DATABASE} is already configured"
+      Retcode=$?
+    else
+      echoCommandMessage "The ${DESCRIPTION_PRODUCT_DATABASE} is not configured"
+
+      # Configure the Oracle Database parameters required by Oracle Enterprise Manager.
+
+      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/sqlplus" '/nolog' <<EOF
 CONNECT sys/${Password}@${Name} AS sysdba
 ALTER SYSTEM SET "_allow_insert_with_update_check"=true scope=both;
 ALTER SYSTEM SET session_cached_cursors=200 scope=spfile;
@@ -882,33 +981,42 @@ ALTER SYSTEM SET shared_pool_size=600M scope=spfile;
 ALTER SYSTEM SET processes=600 scope=spfile;
 SHUTDOWN TRANSACTIONAL
 EOF
-    processCommandCode $? "Failed to configure ${DESCRIPTION_PRODUCT_DATABASE} parameters"
-    Retcode=$?
-  fi
+      processCommandCode $? "Failed to configure ${DESCRIPTION_PRODUCT_DATABASE} parameters"
+      Retcode=$?
 
-  # Bounce the Oracle Database.
+      # Bounce the Oracle Database.
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/dbshut" "$Home"
-    processCommandCode $? "Failed to stop the ${DESCRIPTION_PRODUCT_DATABASE} listener"
-    Retcode=$?
-  fi
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/dbshut" "$Home"
+        processCommandCode $? "Failed to stop the ${DESCRIPTION_PRODUCT_DATABASE} listener"
+        Retcode=$?
+      fi
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/dbstart" "$Home"
-    processCommandCode $? "Failed to restart the ${DESCRIPTION_PRODUCT_DATABASE} listener"
-    Retcode=$?
-  fi
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/dbstart" "$Home"
+        processCommandCode $? "Failed to restart the ${DESCRIPTION_PRODUCT_DATABASE} listener"
+        Retcode=$?
+      fi
 
-  # Restart the Oracle Database.
+      # Restart the Oracle Database.
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/sqlplus" '/nolog' <<EOF
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/sqlplus" '/nolog' <<EOF
 CONNECT sys/${Password}@${Name} AS sysdba
 STARTUP
 EOF
-    processCommandCode $? "Failed to startup the ${DESCRIPTION_PRODUCT_DATABASE}: ${Database}"
-    Retcode=$?
+        processCommandCode $? "Failed to startup the ${DESCRIPTION_PRODUCT_DATABASE}: ${Database}"
+        Retcode=$?
+      fi
+
+      # Create indicator that the Oracle Database has been configured.
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker8"
+        processCommandCode $? "Failed to create installation marker file: ${Marker8}"
+        Retcode=$?
+      fi
+    fi
   fi
 
   return $Retcode
@@ -1011,9 +1119,9 @@ installManager() {
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-r' "$Response"
     if [[ 0 -eq $? ]] ; then
-      echoNotice "The ${DESCRIPTION_MANAGER_RESPONSE} already exists and will be overwritten: ${Response}"
+      echoCommandMessage "The ${DESCRIPTION_MANAGER_RESPONSE} already exists and will be overwritten: ${Response}"
     else
-      echoNotice "The ${DESCRIPTION_MANAGER_RESPONSE} was not found: ${Response}"
+      echoCommandMessage "The ${DESCRIPTION_MANAGER_RESPONSE} was not found: ${Response}"
     fi
     echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat >${Response} <<EOF ... EOF"
     echo "cat >${Response} <<EOF
@@ -1144,23 +1252,23 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
 
   # Run the Oracle Enterprise Manager root installer program using the root user.
 
-#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$Installer"
-#    processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} root installer program was not found or is innaccessible: ${Installer}"
-#    Retcode=$?
-#    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' '-E' "$Installer"
-#      processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} root installer program produced an error: ${Installer}"
-#      Retcode=$?
-#    fi
-#  fi
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$Installer"
+    processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} root installer program was not found or is innaccessible: ${Installer}"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' '-E' "$Installer"
+      processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} root installer program produced an error: ${Installer}"
+      Retcode=$?
+    fi
+  fi
 
   # Configure firewalld to allow network access to the Oracle Enterprise Manager.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' 'systemctl' 'status' 'firewalld'
     if [[ 0 -eq $? ]] ; then
-      echoSuccess
+      echoCommandSuccess
       executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${DEFAULT_PORT_WEBLOGIC}/tcp"
       processCommandCode $? "Failed to allow public access to the network port of the Weblogic administrative console: ${DEFAULT_PORT_WEBLOGIC}"
       Retcode=$?
@@ -1175,7 +1283,7 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
         Retcode=$?
       fi
     else
-      echoNotice 'Firewalld may not be running'
+      echoCommandMessage 'Firewalld may not be running'
       Retcode=$?
     fi
   fi
@@ -1256,7 +1364,7 @@ prepareInstallation() {
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'getent' 'group' "$Group"
     if [[ 0 -eq $? ]] ; then
-      echoNotice "${DESCRIPTION_INSTALLATION_GROUP} already exists: ${Group}"
+      echoCommandMessage "${DESCRIPTION_INSTALLATION_GROUP} already exists: ${Group}"
     else
       executeCommand 'sudo' '/usr/sbin/groupadd' "$Group"
       processCommandCode $? "Failed to create ${DESCRIPTION_INSTALLATION_GROUP}: ${Group}"
@@ -1272,7 +1380,7 @@ prepareInstallation() {
     echoCommand 'id' "$User"
     Output1=`id "$User"`
     Retcode=$?
-    echoNotice "returned ${Retcode}"
+    echoCommandMessage "returned ${Retcode}"
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       echoInfo "${DESCRIPTION_INSTALLATION_USER} already exists: ${User}"
       echoCommand 'echo' "$Output1" '|' 'awk' "-F ' ' '{ print $2 }'" '|' 'awk' "-F '(' '{ print $2 }'" '|' 'tr' "-d' ')'"
@@ -1299,10 +1407,10 @@ prepareInstallation() {
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' 'test' '-r' "$Sudoers"
     if [[ 0 -eq $? ]] ; then
-      echoNotice "${DESCRIPTION_INSTALLATION_SUDOERS} already exists: ${Sudoers}"
+      echoCommandMessage "${DESCRIPTION_INSTALLATION_SUDOERS} already exists: ${Sudoers}"
       Retcode=$?
     else
-      echoNotice "${DESCRIPTION_INSTALLATION_SUDOERS} not found: ${Sudoers}"
+      echoCommandMessage "${DESCRIPTION_INSTALLATION_SUDOERS} not found: ${Sudoers}"
       echoCommand 'sudo' "cat >${Sudoers} <<EOF ... EOF"
       echo "cat >${Sudoers} <<EOF
 # Created by ${PROGRAM} on $(date)
@@ -1354,7 +1462,6 @@ EOF" | sudo sh
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local CacheString=''
-
     echoCommand 'sudo' 'swapon' '--show' '--raw' '--noheadings' '|' 'awk' '-F' "' '" "'BEGIN{ Total = 0 } { if ( \"G\" == substr(\$3,length(\$3),1) ) Total += substr(\$3,1,length(\$3)-1) } END{ print Total }'"
     CacheString=`sudo swapon --show --raw --noheadings | awk -F ' ' 'BEGIN{ Total = 0} { if ( "G" == substr($3,length($3),1) ) Total+=substr($3,1,length($3)-1) } END{ print Total }'`
     processCommandCode $? 'Failed to ascertain the system cache size'
@@ -1365,7 +1472,6 @@ EOF" | sudo sh
     else
       local -r -i CacheSize=0
     fi
-
     if [[ 0 -ge $CacheSize ]] ; then
       echoInfo "System cache not adjusted: Unable to determine current size: ${CacheSize}"
     elif [[ $CACHE_GOAL -le $CacheSize ]] ; then
@@ -1398,9 +1504,9 @@ EOF" | sudo sh
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         executeCommand 'grep' '-e' "^${CACHE_FILE}[[:space:]]" "$FSTAB"
         if [[ 0 -eq $? ]] ; then
-          echoNotice "${CACHE_FILE} already found in ${FSTAB}"
+          echoCommandMessage "${CACHE_FILE} already found in ${FSTAB}"
         else
-          echoSuccess
+          echoCommandSuccess
           echoCommand 'sudo' 'sh' '-c' "echo '-e' '${CACHE_FILE}\tnone\tswap\tsw\t0\t0' >> '${FSTAB}'"
           sudo sh -c "echo -e '${CACHE_FILE}\tnone\tswap\tsw\t0\t0' >> '${FSTAB}'"
           processCommandCode $? "Failed to add entry to ${FSTAB} for the new system cache file: ${CACHE_FILE}"
@@ -1429,10 +1535,12 @@ EOF" | sudo sh
   # Create the installation inventory directory.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if [[ -d "$Inventory" ]] ; then
-      echoInfo "The ${DESCRIPTION_INSTALLATION_INVENTORY} already exists: ${Inventory}"
+    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$Inventory"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_INSTALLATION_INVENTORY} already exists: ${Inventory}"
       Retcode=$?
     else
+      echoCommandMessage "The ${DESCRIPTION_INSTALLATION_INVENTORY} does not exists: ${Inventory}"
       executeCommand 'sudo' 'mkdir' '-m' "$ORACLE_PERMISSIONS" '-p' "$Inventory"
       processCommandCode $? "Failed to create the ${DESCRIPTION_INSTALLATION_INVENTORY}: ${Inventory}"
       Retcode=$?
@@ -1447,10 +1555,12 @@ EOF" | sudo sh
   # Create the installation base directory.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if [[ -d "$Base" ]] ; then
-      echoInfo "The ${DESCRIPTION_INSTALLATION_BASE} already exists: ${Base}"
+    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$Base"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_INSTALLATION_BASE} already exists: ${Base}"
       Retcode=$?
     else
+      echoCommandMessage "The ${DESCRIPTION_INSTALLATION_BASE} does not exists: ${Base}"
       executeCommand 'sudo' 'mkdir' '-m' "$ORACLE_PERMISSIONS" '-p' "$Base"
       processCommandCode $? "Failed to create the ${DESCRIPTION_INSTALLATION_BASE}: ${Base}"
       Retcode=$?
@@ -1465,9 +1575,11 @@ EOF" | sudo sh
   # Create the Oracle Database home directory.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if [[ -d "$DatabaseHome" ]] ; then
-      echoInfo "The ${DESCRIPTION_DATABASE_HOME} already exists: ${DatabaseHome}"
+    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$DatabaseHome"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_DATABASE_HOME} already exists: ${DatabaseHome}"
     else
+      echoCommandMessage "The ${DESCRIPTION_DATABASE_HOME} does not exists: ${DatabaseHome}"
       executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mkdir' '-m' "$ORACLE_PERMISSIONS" '-p' "$DatabaseHome"
       processCommandCode $? "Failed to create the ${DESCRIPTION_DATABASE_HOME}: ${DatabaseHome}"
     fi
@@ -1477,9 +1589,11 @@ EOF" | sudo sh
   # Create the Oracle Enterprise Manager home directory.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if [[ -d "$ManagerHome" ]] ; then
-      echoInfo "The ${DESCRIPTION_MANAGER_HOME} already exists: ${ManagerHome}"
+    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$ManagerHome"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_MANAGER_HOME} already exists: ${ManagerHome}"
     else
+      echoCommandMessage "The ${DESCRIPTION_MANAGER_HOME} does not exists: ${ManagerHome}"
       executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mkdir' '-m' "$ORACLE_PERMISSIONS" '-p' "$ManagerHome"
       processCommandCode $? "Failed to create the ${DESCRIPTION_MANAGER_HOME}: ${ManagerHome}"
     fi
@@ -1489,9 +1603,11 @@ EOF" | sudo sh
   # Create the Oracle Enterprise Manager instance home directory.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if [[ -d "$InstanceHome" ]] ; then
-      echoInfo "The ${DESCRIPTION_MANAGER_INSTANCE} already exists: ${InstanceHome}"
+    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$InstanceHome"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_MANAGER_INSTANCE} already exists: ${InstanceHome}"
     else
+      echoCommandMessage "The ${DESCRIPTION_MANAGER_INSTANCE} does not exists: ${InstanceHome}"
       executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mkdir' '-m' "$ORACLE_PERMISSIONS" '-p' "$InstanceHome"
       processCommandCode $? "Failed to create the ${DESCRIPTION_MANAGER_INSTANCE}: ${InstanceHome}"
     fi
@@ -1501,9 +1617,11 @@ EOF" | sudo sh
   # Create the Oracle Enterprise Manager agent base directory.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if [[ -d "$AgentBase" ]] ; then
-      echoInfo "The ${DESCRIPTION_AGENT_BASE} already exists: ${AgentBase}"
+    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$AgentBase"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_AGENT_BASE} already exists: ${AgentBase}"
     else
+      echoCommandMessage "The ${DESCRIPTION_AGENT_BASE} does not exists: ${AgentBase}"
       executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mkdir' '-m' "$ORACLE_PERMISSIONS" '-p' "$AgentBase"
       processCommandCode $? "Failed to create the ${DESCRIPTION_AGENT_BASE}: ${AgentBase}"
     fi
@@ -1540,12 +1658,12 @@ uninstallDatabase() {
   # Validate that the Oracle Database is installed in the provided home directory. #
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo 'test' '-d' "$Home"
+    executeCommand 'sudo' 'test' '-d' "$Home"
     if [[ 0 -eq $? ]] ; then
-      echoNotice "${DESCRIPTION_PRODUCT_DATABASE} home directory found: ${Home}"
+      echoCommandMessage "${DESCRIPTION_PRODUCT_DATABASE} home directory found: ${Home}"
       Retcode=$?
     else
-      echoNotice "${DESCRIPTION_PRODUCT_DATABASE} home directory not found: ${Home}"
+      echoCommandMessage "${DESCRIPTION_PRODUCT_DATABASE} home directory not found: ${Home}"
       return $RETCODE_SUCCESS
     fi
   fi
@@ -1553,7 +1671,7 @@ uninstallDatabase() {
   # Validate that the Oracle Database de-installer is present and usable by the installation user. #
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo '-u' "$User" 'test' '-x' "$Deinstaller"
+    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-x' "$Deinstaller"
     processCommandCode $? "${DESCRIPTION_PRODUCT_DATABASE} de-installer program is inaccessible: ${Deinstaller}"
     Retcode=$?
   fi
@@ -1569,7 +1687,7 @@ uninstallDatabase() {
       if [[ 'Location of response file generated' == "$Left" ]] ; then
         Right=`echo "$Line" | awk -F ':' '{ print $2 }'`
       fi
-    done < <(sudo -u "$User" "$Deinstaller" -silent -checkonly)
+    done < <(sudo -u "$User" -g "$Group" "$Deinstaller" -silent -checkonly)
     if [[ -n "$Right" ]] ; then
       Response=$(echo "$Right" | awk -F \' '{ print $2 }')
     fi
@@ -1584,7 +1702,7 @@ uninstallDatabase() {
   # Validate that the automated uninstallation response file is present and accessible to the installation user. #
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo '-u' "$User" 'test' '-r' "$Response"
+    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-r' "$Response"
     processCommandCode $? "${DESCRIPTION_DATABASE_RESPONSE} is inaccessible: ${Response}"
     Retcode=$?
   fi
@@ -1592,7 +1710,7 @@ uninstallDatabase() {
   # Uninstall the Oracle Database software. #
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo '-u' "$User" "$Deinstaller" '-silent' '-paramfile' "$Response"
+    executeCommand 'sudo' '-u' "$User" -g "$Group" "$Deinstaller" '-silent' '-paramfile' "$Response"
     processCommandCode $? "The ${DESCRIPTION_PRODUCT_DATABASE} de-installer program encountered an error (response file = ${Response})"
     Retcode=$?
   fi
@@ -1636,10 +1754,10 @@ uninstallManager() {
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand sudo 'test' '-d' "$Home"
     if [[ 0 -eq $? ]] ; then
-      echoNotice "${DESCRIPTION_PRODUCT_MANAGER} home directory found: ${Home}"
+      echoCommandMessage "${DESCRIPTION_PRODUCT_MANAGER} home directory found: ${Home}"
       Retcode=$?
     else
-      echoNotice "${DESCRIPTION_PRODUCT_MANAGER} home directory not found: ${Home}"
+      echoCommandMessage "${DESCRIPTION_PRODUCT_MANAGER} home directory not found: ${Home}"
       return $RETCODE_SUCCESS
     fi
   fi
@@ -1649,10 +1767,10 @@ uninstallManager() {
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand sudo '-u' "$User" 'test' '-r' "$Deinstaller1"
     if [[ 0 -eq $? ]] ; then
-      echoNotice "${DESCRIPTION_PRODUCT_MANAGER} de-installer program found: ${Deinstaller1}"
+      echoCommandMessage "${DESCRIPTION_PRODUCT_MANAGER} de-installer program found: ${Deinstaller1}"
       Retcode=$?
     else
-      echoNotice "${DESCRIPTION_PRODUCT_MANAGER} de-installer program not found: ${Deinstaller1}"
+      echoCommandMessage "${DESCRIPTION_PRODUCT_MANAGER} de-installer program not found: ${Deinstaller1}"
       return $RETCODE_SUCCESS
     fi
   fi
@@ -1678,9 +1796,9 @@ uninstallManager() {
 
   executeCommand sudo '-u' "$User" 'test' '-r' "$Deinstaller2"
   if [[ 0 -eq $? ]] ; then
-    echoNotice "Staged ${DESCRIPTION_PRODUCT_MANAGER} de-installer program found: ${Deinstaller2}"
+    echoCommandMessage "Staged ${DESCRIPTION_PRODUCT_MANAGER} de-installer program found: ${Deinstaller2}"
   else
-    echoNotice "Staged ${DESCRIPTION_PRODUCT_MANAGER} de-installer program not found: ${Deinstaller2}"
+    echoCommandMessage "Staged ${DESCRIPTION_PRODUCT_MANAGER} de-installer program not found: ${Deinstaller2}"
   fi
   local -r -i Retcode2=$?
 
@@ -1862,6 +1980,7 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           "$DATABASE_RESPONSE"
         Retcode=$?
       fi
+exit $Retcode
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         installManager \
           "$INSTALLATION_STAGE" \
