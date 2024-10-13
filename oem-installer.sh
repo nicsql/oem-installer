@@ -102,6 +102,8 @@ declare -r DESCRIPTION_MANAGER_INSTANCE="${DESCRIPTION_PRODUCT_MANAGER} instance
 declare -r DESCRIPTION_MANAGER_VERSION="${DESCRIPTION_PRODUCT_MANAGER} version"
 declare -r DESCRIPTION_MANAGER_RESPONSE="${DESCRIPTION_PRODUCT_MANAGER} response file"
 declare -r DESCRIPTION_AGENT_BASE="${DESCRIPTION_PRODUCT_AGENT} base directory"
+declare -r DESCRIPTIOM_SYSTEMD_FILE="Systemd service file for the ${DESCRIPTION_PRODUCT_DATABASE}"
+declare -r DESCRIPTION_CONTROL_FILE="${DESCRIPTION_PRODUCT_DATABASE} service control program"
 
 #########################
 # Return code constants #
@@ -122,6 +124,14 @@ declare -r -i HELP_INDENT_LENGTH=2
 declare -r -i HELP_PADDING_LENGTH=24
 declare -r -i DESCRIPTION_LENGTH=56
 declare -r -i CACHE_GOAL=16 # In gigabytes (G)
+declare -r CACHE_FILE_NAME='/.swapfile_oem'
+declare -r CACHE_FILE_PERMISSIONS='600'
+declare -r CONTROL_FILE_NAME='oracle'
+declare -r CONTROL_FILE_PERMISSIONS='740'
+declare -r SYSTEMD_NAME='dbora.service'
+declare -r SYSTEMD_FILE_NAME="/lib/systemd/system/${SYSTEMD_NAME}"
+declare -r SYSTEMD_FILE_PERMISSIONS='644'
+declare -r SUDOERS_FILE_PERMISSIONS='440'
 declare -r RESPONSE_FILE_PERMISSIONS='640'
 
 ################################ Utility functions ################################
@@ -541,16 +551,35 @@ displayOptions() {
 ##                       (ex. /u01/app/oraInventory).
 ## @param[in] User       The installation user.
 ## @param[in] Group      The installation group.
+## @param[in] Hostname   The hostname of the machine.
 ## @param[in] Repository The source directory from which to copy the Oracle
 ##                       Database software.
 ## @param[in] Base       The base directory of the Oracle Database.
+##                       (ex. /u01/app/oracle/database).
 ## @param[in] Home       The home directory of the Oracle Database.
+##                       (ex. /u01/app/oracle/database/product/xxxx/dbhome_1).
 ## @param[in] Name       The name of the database.
 ## @param[in] Data       The data directory of the Oracle Database.
 ## @param[in] Recovery   The recovery directory of the Oracle Database.
 ## @param[in] Password   The password for the database "sys" account.
 ## @param[in] Response   The filename of the response file to generate. An
 ##                       existing response file will be overwritten.
+##
+## @note The function performs the following steps:
+## @li Generation of a response file for an automated installation of the
+##     Oracle Database.
+## @li Copy the Oracle Database software to the Oracle Home directory.
+## @li Modificcation of the installation requirements to allow Oracle linux 8.1
+##     and higher.
+## @li Installation of the Oracle Database by running the Oracle installer
+##     program runInstaller.
+## @li Execute the orainstRoot.sh and root.sh scripts.
+## @li Run the Oracle installer program runInstaller with the option
+##     -executeConfigTools to configure the networking information.
+## @li Delete the response file.
+## @li Modify the file /etc/oratab and create a script to start and stop the
+##     database with Systemd.
+## @li Configure the Oracle Database with the necessary settings for OEM.
 ##
 ## @return the return code of the function execution.
 ################################################################################
@@ -560,14 +589,15 @@ installDatabase() {
   local -r Inventory="${1:-}"
   local -r User="${2:-}"
   local -r Group="${3:-}"
-  local -r Repository="${4:-}"
-  local -r Base="${5:-}"
-  local -r Home="${6:-}"
-  local -r Name="${7:-}"
-  local -r Data="${8:-}"
-  local -r Recovery="${9:-}"
-  local -r Password="${10:-}"
-  local -r Response="${11:-}"
+  local -r Hostname="${4:-}"
+  local -r Repository="${5:-}"
+  local -r Base="${6:-}"
+  local -r Home="${7:-}"
+  local -r Name="${8:-}"
+  local -r Data="${9:-}"
+  local -r Recovery="${10:-}"
+  local -r Password="${11:-}"
+  local -r Response="${12:-}"
   local -r InventoryInstaller="${Inventory}/orainstRoot.sh"
   local -r DatabaseInstaller="${Home}/root.sh"
   local -r Requirements="${Home}/cv/admin/cvu_config"
@@ -589,6 +619,8 @@ installDatabase() {
   traceParameter $Retcode "$DESCRIPTION_INSTALLATION_USER" "$User"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_INSTALLATION_GROUP" "$Group"
+  Retcode=$?
+  traceParameter $Retcode "$DESCRIPTION_INSTALLATION_HOSTNAME" "$Hostname"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_DATABASE_BASE" "$Base"
   Retcode=$?
@@ -619,9 +651,9 @@ installDatabase() {
       echoCommandMessage "The ${DESCRIPTION_DATABASE_RESPONSE} already exists and will be overwritten: ${Response}"
     else
       echoCommandMessage "The ${DESCRIPTION_DATABASE_RESPONSE} was not found: ${Response}"
-   fi
-   echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat >${Response} <<EOF ... EOF"
-   echo "cat >${Response} <<EOF
+    fi
+    echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat > ${Response} <<EOF ... EOF"
+    echo "cat > ${Response} <<EOF
 oracle.install.responseFileVersion=/oracle/install/rspfmt_dbinstall_response_schema_v19.0.0
 oracle.install.option=INSTALL_DB_AND_CONFIG
 UNIX_GROUP_NAME=${Group}
@@ -651,7 +683,7 @@ oracle.install.db.config.starterdb.enableRecovery=true
 oracle.install.db.config.starterdb.storageType=FILE_SYSTEM_STORAGE
 oracle.install.db.config.starterdb.fileSystemStorage.dataLocation=${Data}
 oracle.install.db.config.starterdb.fileSystemStorage.recoveryLocation=${Recovery}
-EOF" | sudo '-u' "$User" '-g' "$Group" sh
+EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     Created=$?
     processCommandCode $Created "The ${DESCRIPTION_DATABASE_RESPONSE} was not created: ${Response}"
     Retcode=$?
@@ -905,15 +937,23 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
     processCommandCode $? "Failed to the delete the ${DESCRIPTION_DATABASE_RESPONSE}: ${Response}"
   fi
 
-  # Enable the automatic start of the Oracle Database during system boot.
+  ##
+  ## Create the script to start and stop the Oracle Database.
+  ##
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "Creation of the script to start and stop the ${DESCRIPTION_PRODUCT_DATABASE}"
+  fi
+
+  # Modify the /etc/oratab file to enable the automatic start and shutdown of the database with dbstart and sbshut.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker6"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "The automatic restart of the ${DESCRIPTION_PRODUCT_DATABASE} is already enabled"
+      echoCommandMessage "The automatic start of the ${DESCRIPTION_PRODUCT_DATABASE} is already enabled"
       Retcode=$?
     else
-      echoCommandMessage "The automatic restart of the ${DESCRIPTION_PRODUCT_DATABASE} is not enabled"
+      echoCommandMessage "The automatic start of the ${DESCRIPTION_PRODUCT_DATABASE} is not enabled"
       executeCommand 'sudo' 'test' '-f' "$ORATAB"
       if [[ 0 -eq $? ]] ; then
         echoCommandMessage "File found: ${ORATAB}"
@@ -930,6 +970,78 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
         echoCommandMessage "The ${DESCRIPTION_INSTALLATION_SUDOERS} not found: ${Sudoers}"
         Retcode=$?
       fi
+    fi
+  fi
+
+  # Retrieve the home directory of the installation user.
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    local -r UserHome="$(getent 'passwd' ${User} | cut '-d:' '-f6')"
+    if [[ -z "$UserHome" ]] ; then
+      echoError $RETCODE_PARAMETER_ERROR "Unable to determine the home directory of the ${DESCRIPTION_INSTALLATION_USER}: ${User}"
+      Retcode=$?
+    else
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$UserHome"
+      processCommandCode $? "Unable to access the home directory of the ${DESCRIPTION_INSTALLATION_USER} (${User}): ${UserHome}"
+      Retcode=$?
+    fi
+  fi
+
+  # Create the Oracle Database service control script.
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    local -r ControlFile="${UserHome}/${CONTROL_FILE_NAME}.${Name}.sh"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-x' "$ControlFile"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_CONTROL_FILE} already exists and will be overwritten: ${ControlFile}"
+    else
+      echoCommandMessage "The ${DESCRIPTION_CONTROL_FILE} was not found: ${ControlFile}"
+    fi
+    echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat > ${ControlFile} <<EOF ... EOF"
+    echo '-e' "cat > ${ControlFile} <<EOF
+#!/usr/bin/bash
+export ORACLE_HOSTNAME=${Hostname}
+export ORACLE_HOSTNAME=${Hostname}
+export ORACLE_BASE=${Base}
+export ORACLE_HOME=${Home}
+export ORACLE_SID=${Name}
+export ORACLE_UNQNAME=${Name}
+export ORACLE_TRACE='T'
+export TMPDIR='/tmp'
+export TMP='/tmp'
+export PATH=\"${Home}/bin:/usr/local/bin:\\\${PATH}\"
+export LD_LIBRARY_PATH='${Home}/lib:/lib:/usr/lib'
+export CLASSPATH='${Home}/jlib:${Home}/rdbms/jlib'
+declare Log=''
+declare -i Retcode=0
+if [[ 1 -ne \\\$# ]] ; then
+  Log='Incorrect number of parameters.  Expected the parameters \"start\" or \"stop\" only.'
+  Retcode=1
+elif [[ 'start' = \"\\\$1\" ]] ; then
+  if [[ -x '${Home}/bin/dbstart' ]] ; then
+    Log=\\\$(${Home}/bin/dbstart \"${Home}\")
+    Retcode=\\\$?
+  fi
+elif [[ 'stop' = \"\\\$1\" ]] ; then
+  if [[ -x '${Home}/bin/dbshut' ]] ; then
+    Log=\\\$(${Home}/bin/dbshut \"${Home}\")
+    Retcode=\\\$?
+  fi
+else
+  Log=\"[ERROR] Invalid command: \\\${1}\"
+  Retcode=1
+fi
+if [[ 0 -ne \\\$Retcode ]] ; then
+  echo \"\\\$Log\"
+fi
+exit \\\$Retcode
+EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
+    processCommandCode $? "Failed to create the ${DESCRIPTION_CONTROL_FILE}: ${ControlFile}"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      executeCommand 'sudo' 'chmod' "$CONTROL_FILE_PERMISSIONS" "$ControlFile"
+      processCommandCode $? "Unable to restrict the file permissions to ${CONTROL_FILE_PERMISSIONS} on the ${DESCRIPTION_CONTROL_FILE}: ${ControlFile}"
+      Retcode=$?
     fi
   fi
 
@@ -1123,8 +1235,8 @@ installManager() {
     else
       echoCommandMessage "The ${DESCRIPTION_MANAGER_RESPONSE} was not found: ${Response}"
     fi
-    echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat >${Response} <<EOF ... EOF"
-    echo "cat >${Response} <<EOF
+    echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat > ${Response} <<EOF ... EOF"
+    echo "cat > ${Response} <<EOF
 RESPONSEFILE_VERSION=2.2.1.0.0
 UNIX_GROUP_NAME=${Group}
 # Installation
@@ -1166,7 +1278,7 @@ TRUSTSTORE_PASSWORD=${CryptoPassword}
 TRUSTSTORE_LOCATION=${ManagerData}/ewallet-truststore.p12
 KEYSTORE_PASSWORD=${CryptoPassword}
 KEYSTORE_LOCATION=${ManagerData}/ewallet-keystore.p12
-EOF" | sudo '-u' "$User" '-g' "$Group" sh
+EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     Created=$?
     processCommandCode $Created "The ${DESCRIPTION_MANAGER_RESPONSE} was not created: ${Response}"
     Retcode=$?
@@ -1304,6 +1416,8 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
 ## @param[in] Group        The installation group.
 ## @param[in] Sudoers      The sudoers supplementary file to be created for the
 ##                         installation user.
+## @param[in] DatabaseBase The base directory of the Oracle Database.
+##                         (ex. /u01/app/oracle/database).
 ## @param[in] DatabaseHome The home directory of the Oracle Database.
 ## @param[in] ManagerHome  The home directory of the Oracle Enterprise Manager.
 ## @param[in] InstanceHome The home directory of the Oracle Enterprise Manager
@@ -1314,20 +1428,18 @@ EOF" | sudo '-u' "$User" '-g' "$Group" sh
 ## @return the return code of the function execution.
 ################################################################################
 prepareInstallation() {
-  local -r SUDOERS_PERMISSIONS='440'
   local -r ORACLE_PERMISSIONS='755'
-  local -r CACHE_PERMISSIONS='600'
-  local -r CACHE_FILE='/.swapfile_oem'
   local -r FSTAB='/etc/fstab'
   local -r Inventory="${1:-}"
   local -r Base="${2:-}"
   local -r User="${3:-}"
   local -r Group="${4:-}"
   local -r Sudoers="${5:-}"
-  local -r DatabaseHome="${6:-}"
-  local -r ManagerHome="${7:-}"
-  local -r InstanceHome="${8:-}"
-  local -r AgentBase="${9:-}"
+  local -r DatabaseBase="${6:-}"
+  local -r DatabaseHome="${7:-}"
+  local -r ManagerHome="${8:-}"
+  local -r InstanceHome="${9:-}"
+  local -r AgentBase="${10:-}"
   local -i Retcode=$RETCODE_SUCCESS
 
   echoTitle 'Preparing for installation of the Oracle products'
@@ -1341,6 +1453,8 @@ prepareInstallation() {
   traceParameter $Retcode "$DESCRIPTION_INSTALLATION_GROUP" "$Group"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_INSTALLATION_SUDOERS" "$Sudoers"
+  Retcode=$?
+  traceParameter $Retcode "$DESCRIPTION_DATABASE_BASE" "$DatabaseBase"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_DATABASE_HOME" "$DatabaseHome"
   Retcode=$?
@@ -1383,7 +1497,7 @@ prepareInstallation() {
     echoCommandMessage "returned ${Retcode}"
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       echoInfo "${DESCRIPTION_INSTALLATION_USER} already exists: ${User}"
-      echoCommand 'echo' "$Output1" '|' 'awk' "-F ' ' '{ print $2 }'" '|' 'awk' "-F '(' '{ print $2 }'" '|' 'tr' "-d' ')'"
+      echoCommand 'echo' "$Output1" '|' 'awk' "-F ' ' '{ print \$2 }'" '|' 'awk' "-F '(' '{ print \$2 }'" '|' 'tr' "-d' ')'"
       Output2=`echo "$Output1" | awk -F ' ' '{ print $2 }' | awk -F '(' '{ print $2 }' | tr -d ')'`
       processCommandCode $? "Failed to validate group membership of ${DESCRIPTION_INSTALLATION_USER}: ${User}"
       Retcode=$?
@@ -1402,6 +1516,20 @@ prepareInstallation() {
     fi
   fi
 
+  # Retrieve the home directory of the installation user.
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    local -r UserHome="$(getent 'passwd' ${User} | cut '-d:' '-f6')"
+    if [[ -z "$UserHome" ]] ; then
+      echoError $RETCODE_PARAMETER_ERROR "Unable to determine the home directory of the ${DESCRIPTION_INSTALLATION_USER}: ${User}"
+      Retcode=$?
+    else
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$UserHome"
+      processCommandCode $? "Unable to access the home directory of the ${DESCRIPTION_INSTALLATION_USER} (${User}): ${UserHome}"
+      Retcode=$?
+    fi
+  fi
+
   # Add the installation user to the operating systems's list of sudoers.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -1411,18 +1539,18 @@ prepareInstallation() {
       Retcode=$?
     else
       echoCommandMessage "${DESCRIPTION_INSTALLATION_SUDOERS} not found: ${Sudoers}"
-      echoCommand 'sudo' "cat >${Sudoers} <<EOF ... EOF"
-      echo "cat >${Sudoers} <<EOF
+      echoCommand 'sudo' "cat > ${Sudoers} <<EOF ... EOF"
+      echo "cat > ${Sudoers} <<EOF
 # Created by ${PROGRAM} on $(date)
 # Grant sudo privileges to the Oracle installation user
 ${User} ALL=(ALL) NOPASSWD:ALL
-EOF" | sudo sh
+EOF" | sudo 'sh'
       processCommandCode $? "Failed to create ${DESCRIPTION_INSTALLATION_SUDOERS}: ${Sudoers}"
       Retcode=$?
       # Restrict the file permissions of the Oracle Database automated installation response file.
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'chmod' ${SUDOERS_PERMISSIONS} "$Sudoers"
-        processCommandCode $? "Unable to restrict the file permissions to ${SUDOERS_PERMISSIONS} on the ${DESCRIPTION_INSTALLATION_SUDOERS}: ${Sudoers}"
+        executeCommand 'sudo' 'chmod' "$SUDOERS_FILE_PERMISSIONS" "$Sudoers"
+        processCommandCode $? "Unable to restrict the file permissions to ${SUDOERS_FILE_PERMISSIONS} on the ${DESCRIPTION_INSTALLATION_SUDOERS}: ${Sudoers}"
         Retcode=$?
       fi
     fi
@@ -1463,7 +1591,7 @@ EOF" | sudo sh
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local CacheString=''
     echoCommand 'sudo' 'swapon' '--show' '--raw' '--noheadings' '|' 'awk' '-F' "' '" "'BEGIN{ Total = 0 } { if ( \"G\" == substr(\$3,length(\$3),1) ) Total += substr(\$3,1,length(\$3)-1) } END{ print Total }'"
-    CacheString=`sudo swapon --show --raw --noheadings | awk -F ' ' 'BEGIN{ Total = 0} { if ( "G" == substr($3,length($3),1) ) Total+=substr($3,1,length($3)-1) } END{ print Total }'`
+    CacheString=`sudo swapon '--show' '--raw' '--noheadings' | awk '-F' ' ' 'BEGIN{ Total = 0} { if ( "G" == substr($3,length($3),1) ) Total+=substr($3,1,length($3)-1) } END{ print Total }'`
     processCommandCode $? 'Failed to ascertain the system cache size'
     if [[ $RETCODE_SUCCESS -eq $? ]] && [[ -n "$CacheString" ]] && [[ "$CacheString" =~ ^[0-9]+$ ]] ; then
       local -r -i CacheSize=$CacheString
@@ -1481,45 +1609,45 @@ EOF" | sudo sh
       local -i CacheCreated=$VALUE_FALSE
       local -i CacheAdded=$VALUE_FALSE
       echoInfo "System cache increase: ${CacheIncrease}G"
-      executeCommand 'sudo' 'fallocate' '-l' "${CacheIncrease}G" "$CACHE_FILE"
+      executeCommand 'sudo' 'fallocate' '-l' "${CacheIncrease}G" "$CACHE_FILE_NAME"
       CacheCreated=$?
-      processCommandCode $CacheCreated "Failed to allocate additional system cache file: ${CACHE_FILE}"
+      processCommandCode $CacheCreated "Failed to allocate additional system cache file: ${CACHE_FILE_NAME}"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'chmod' "$CACHE_PERMISSIONS" "$CACHE_FILE"
-        processCommandCode $? "Failed to restrict file permissions on additional system cache file: ${CACHE_FILE}"
+        executeCommand 'sudo' 'chmod' "$CACHE_FILE_PERMISSIONS" "$CACHE_FILE_NAME"
+        processCommandCode $? "Failed to restrict file permissions on additional system cache file: ${CACHE_FILE_NAME}"
         Retcode=$?
       fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'mkswap' "$CACHE_FILE"
-        processCommandCode $? "Failed to format new system cache file: ${CACHE_FILE}"
+        executeCommand 'sudo' 'mkswap' "$CACHE_FILE_NAME"
+        processCommandCode $? "Failed to format new system cache file: ${CACHE_FILE_NAME}"
         Retcode=$?
       fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'swapon' "$CACHE_FILE"
+        executeCommand 'sudo' 'swapon' "$CACHE_FILE_NAME"
         CacheAdded=$?
-        processCommandCode $CacheAdded "Failed to add new file to system cache: ${CACHE_FILE}"
+        processCommandCode $CacheAdded "Failed to add new file to system cache: ${CACHE_FILE_NAME}"
         Retcode=$?
       fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'grep' '-e' "^${CACHE_FILE}[[:space:]]" "$FSTAB"
+        executeCommand 'grep' '-e' "^${CACHE_FILE_NAME}[[:space:]]" "$FSTAB"
         if [[ 0 -eq $? ]] ; then
-          echoCommandMessage "${CACHE_FILE} already found in ${FSTAB}"
+          echoCommandMessage "${CACHE_FILE_NAME} already found in ${FSTAB}"
         else
           echoCommandSuccess
-          echoCommand 'sudo' 'sh' '-c' "echo '-e' '${CACHE_FILE}\tnone\tswap\tsw\t0\t0' >> '${FSTAB}'"
-          sudo sh -c "echo -e '${CACHE_FILE}\tnone\tswap\tsw\t0\t0' >> '${FSTAB}'"
-          processCommandCode $? "Failed to add entry to ${FSTAB} for the new system cache file: ${CACHE_FILE}"
+          echoCommand 'sudo' 'sh' '-c' "echo '-e' '${CACHE_FILE_NAME}\tnone\tswap\tsw\t0\t0' >> '${FSTAB}'"
+          sudo 'sh' '-c' "echo -e '${CACHE_FILE_NAME}\tnone\tswap\tsw\t0\t0' >> '${FSTAB}'"
+          processCommandCode $? "Failed to add entry to ${FSTAB} for the new system cache file: ${CACHE_FILE_NAME}"
         fi
         Retcode=$?
       fi
       if [[ $RETCODE_SUCCESS -ne $Retcode ]] && [[ $VALUE_TRUE -eq $CacheAdded ]] ; then
-        executeCommand 'sudo' 'swapoff' "${CACHE_FILE}"
-        processCommandCode $? "Failed to remove new file from system cache: ${CACHE_FILE}"
+        executeCommand 'sudo' 'swapoff' "$CACHE_FILE_NAME"
+        processCommandCode $? "Failed to remove new file from system cache: ${CACHE_FILE_NAME}"
       fi
       if [[ $RETCODE_SUCCESS -ne $Retcode ]] && [[ $VALUE_TRUE -eq $CacheCreated ]] ; then
-        executeCommand 'sudo' 'rm' "${CACHE_FILE}"
-        processCommandCode $? "Failed to delete new system cache file: ${CACHE_FILE}"
+        executeCommand 'sudo' 'rm' "$CACHE_FILE_NAME"
+        processCommandCode $? "Failed to delete new system cache file: ${CACHE_FILE_NAME}"
       fi
     fi
   fi
@@ -1555,7 +1683,7 @@ EOF" | sudo sh
   # Create the installation base directory.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$Base"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$Base"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "The ${DESCRIPTION_INSTALLATION_BASE} already exists: ${Base}"
       Retcode=$?
@@ -1575,7 +1703,7 @@ EOF" | sudo sh
   # Create the Oracle Database home directory.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$DatabaseHome"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$DatabaseHome"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "The ${DESCRIPTION_DATABASE_HOME} already exists: ${DatabaseHome}"
     else
@@ -1589,7 +1717,7 @@ EOF" | sudo sh
   # Create the Oracle Enterprise Manager home directory.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$ManagerHome"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$ManagerHome"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "The ${DESCRIPTION_MANAGER_HOME} already exists: ${ManagerHome}"
     else
@@ -1603,7 +1731,7 @@ EOF" | sudo sh
   # Create the Oracle Enterprise Manager instance home directory.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$InstanceHome"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$InstanceHome"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "The ${DESCRIPTION_MANAGER_INSTANCE} already exists: ${InstanceHome}"
     else
@@ -1617,7 +1745,7 @@ EOF" | sudo sh
   # Create the Oracle Enterprise Manager agent base directory.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$AgentBase"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$AgentBase"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "The ${DESCRIPTION_AGENT_BASE} already exists: ${AgentBase}"
     else
@@ -1628,6 +1756,89 @@ EOF" | sudo sh
     Retcode=$?
   fi
 
+  ##
+  ## Enabling the control of the Oracle Database with Systemd. 
+  ##
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection 'Enablement of Systemd control of the Oracle Database'
+  fi
+
+  # Create the Oracle Database service control program.
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    local -r ControlFile="${UserHome}/${CONTROL_FILE_NAME}.sh"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-x' "$ControlFile"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_CONTROL_FILE} already exists and will be overwritten: ${ControlFile}"
+    else
+      echoCommandMessage "The ${DESCRIPTION_CONTROL_FILE} was not found: ${ControlFile}"
+    fi
+    echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat > ${ControlFile} <<EOF ... EOF"
+    echo '-e' "cat > ${ControlFile} <<EOF
+#!/usr/bin/bash
+declare -i Retcode=0
+for File in ${UserHome}/${CONTROL_FILE_NAME}.*.sh ; do
+  if [[ -f \"\\\$File\" ]] && [[ -x \"\\\$File\" ]] ; then
+    \"\\\$File\" \\\$@
+    Retcode=\\\$?
+    if [[ 0 -ne \\\$Retcode ]] ; then
+      break
+    fi
+  fi
+done
+exit \\\$Retcode
+EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
+    processCommandCode $? "Failed to create the ${DESCRIPTION_CONTROL_FILE}: ${ControlFile}"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      executeCommand 'sudo' 'chmod' "$CONTROL_FILE_PERMISSIONS" "$ControlFile"
+      processCommandCode $? "Unable to restrict the file permissions to ${CONTROL_FILE_PERMISSIONS} on the ${DESCRIPTION_CONTROL_FILE}: ${ControlFile}"
+      Retcode=$?
+    fi
+  fi
+
+  # Create the Systemd service file for Oracle Database.
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' 'root' '-g' 'root' 'test' '-f' "$SYSTEMD_FILE_NAME"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTIOM_SYSTEMD_FILE} already exists and will be overwritten: ${SYSTEMD_FILE_NAME}"
+    else
+      echoCommandMessage "The ${DESCRIPTIOM_SYSTEMD_FILE} was not found: ${SYSTEMD_FILE_NAME}"
+    fi
+    echoCommand 'sudo' '-u' 'root' '-g' 'root' "cat > ${SYSTEMD_FILE_NAME} <<EOF ... EOF"
+    echo "cat > ${SYSTEMD_FILE_NAME} <<EOF
+[Unit]
+Description=The ${DESCRIPTION_PRODUCT_DATABASE} Service
+After=syslog.target network.target
+
+[Service]
+LimitMEMLOCK=infinity
+LimitNOFILE=65535
+RemainAfterExit=yes
+User=${User}
+Group=${Group}
+Restart=no
+ExecStart=/usr/bin/bash -c '${ControlFile} start'
+ExecStop=/usr/bin/bash -c '${ControlFile} stop'
+
+[Install]
+WantedBy=multi-user.target
+EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
+    processCommandCode $? "Failed to create the Systemd service file for Oracle Database: ${SYSTEMD_FILE_NAME}"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      executeCommand 'sudo' 'chmod' "$SYSTEMD_FILE_PERMISSIONS" "$SYSTEMD_FILE_NAME"
+      processCommandCode $? "Unable to restrict the file permissions to ${SYSTEMD_FILE_PERMISSIONS} on the ${DESCRIPTIOM_SYSTEMD_FILE}: ${SYSTEMD_FILE_NAME}"
+      Retcode=$?
+#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+#  sudo systemctl 'start' "$SYSTEMD_NAME"
+#  sudo systemctl 'enable' "$SYSTEMD_NAME"
+#      fi
+    fi
+  fi
+
   return $Retcode
 }
 
@@ -1636,14 +1847,16 @@ EOF" | sudo sh
 ##
 ## @brief Uninstall the Oracle Database.
 ##
-## @param[in] User The installation user.
-## @param[in] Home The home directory of the Oracle Database.
+## @param[in] User  The installation user.
+## @param[in] Group The installation group.
+## @param[in] Home  The home directory of the Oracle Database.
 ##
 ## @return the return code of the function execution.
 ################################################################################
 uninstallDatabase() {
   local -r User="${1-:-}"
-  local -r Home="${2:-}"
+  local -r Group="${2-:-}"
+  local -r Home="${3:-}"
   local -r Deinstaller="${Home}/deinstall/deinstall"
   local Response=''
   local -i Retcode=$RETCODE_SUCCESS
@@ -1651,6 +1864,8 @@ uninstallDatabase() {
   echoTitle "Uninstalling the ${DESCRIPTION_PRODUCT_DATABASE}"
 
   traceParameter $Retcode "$DESCRIPTION_INSTALLATION_USER" "$User"
+  Retcode=$?
+  traceParameter $Retcode "$DESCRIPTION_INSTALLATION_GROUP" "$Group"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_DATABASE_HOME" "$Home"
   Retcode=$?
@@ -1725,6 +1940,7 @@ uninstallDatabase() {
 ##
 ## @param[in] Stage A staging directory to use during the installation.
 ## @param[in] User  The installation user.
+## @param[in] Group The installation group.
 ## @param[in] Home  The home directory of the Oracle Enterprise Manager.
 ##
 ## @return the return code of the function execution.
@@ -1735,7 +1951,8 @@ uninstallManager() {
   local -r AdminPassword='Abcd_1234'
   local -r Stage="${1-:-}"
   local -r User="${2-:-}"
-  local -r Home="${3:-}"
+  local -r Group="${3-:-}"
+  local -r Home="${4:-}"
   local -r Deinstaller1="${Home}/sysman/install/EMDeinstall.pl"
   local -r Deinstaller2="${Stage}/EMDeinstall.pl"
   local -i Retcode=$RETCODE_SUCCESS
@@ -1745,6 +1962,8 @@ uninstallManager() {
   traceParameter $Retcode "$DESCRIPTION_INSTALLATION_STAGE" "$Stage"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_INSTALLATION_USER" "$User"
+  Retcode=$?
+  traceParameter $Retcode "$DESCRIPTION_INSTALLATION_GROUP" "$Group"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_MANAGER_HOME" "$Home"
   Retcode=$?
@@ -1765,7 +1984,7 @@ uninstallManager() {
   # Validate that the Oracle Enterprise Manager de-installer program is present. #
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo '-u' "$User" 'test' '-r' "$Deinstaller1"
+    executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-r' "$Deinstaller1"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "${DESCRIPTION_PRODUCT_MANAGER} de-installer program found: ${Deinstaller1}"
       Retcode=$?
@@ -1778,7 +1997,7 @@ uninstallManager() {
   # Stage the Oracle Enterprise Manager de-installer program to the staging location. #
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo '-u' "${User}" 'cp' "$Deinstaller1" "$Deinstaller2"
+    executeCommand sudo '-u' "${User}" '-g' "$Group" 'cp' "$Deinstaller1" "$Deinstaller2"
     processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} de-installer program ${Deinstaller1} was not copied to ${Deinstaller2}"
     Retcode=$?
   fi
@@ -1794,7 +2013,7 @@ uninstallManager() {
 
   # Delete the staged Oracle Enterprise Manager de-installer program. #
 
-  executeCommand sudo '-u' "$User" 'test' '-r' "$Deinstaller2"
+  executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-r' "$Deinstaller2"
   if [[ 0 -eq $? ]] ; then
     echoCommandMessage "Staged ${DESCRIPTION_PRODUCT_MANAGER} de-installer program found: ${Deinstaller2}"
   else
@@ -1803,7 +2022,7 @@ uninstallManager() {
   local -r -i Retcode2=$?
 
   if [[ $RETCODE_SUCCESS -eq $Retcode2 ]] ; then
-    executeCommand sudo '-u' "$User" 'rm'  "$Deinstaller2"
+    executeCommand sudo '-u' "$User" '-g' "$Group" 'rm'  "$Deinstaller2"
     processCommandCode $? "Failed to delete the temporary ${DESCRIPTION_PRODUCT_MANAGER} de-installer program: ${Deinstaller2}"
     local -r -i Retcode3=$?
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -1962,7 +2181,17 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       displayOptions
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        prepareInstallation "$INSTALLATION_INVENTORY" "$INSTALLATION_BASE" "$INSTALLATION_USER" "$INSTALLATION_GROUP" "$INSTALLATION_SUDOERS" "$DATABASE_HOME" "$MANAGER_HOME" "$MANAGER_INSTANCE" "$AGENT_BASE"
+        prepareInstallation \
+          "$INSTALLATION_INVENTORY" \
+          "$INSTALLATION_BASE" \
+          "$INSTALLATION_USER" \
+          "$INSTALLATION_GROUP" \
+          "$INSTALLATION_SUDOERS" \
+          "$DATABASE_BASE" \
+          "$DATABASE_HOME" \
+          "$MANAGER_HOME" \
+          "$MANAGER_INSTANCE" \
+          "$AGENT_BASE"
         Retcode=$?
       fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -1970,6 +2199,7 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           "$INSTALLATION_INVENTORY" \
           "$INSTALLATION_USER" \
           "$INSTALLATION_GROUP" \
+          "$INSTALLATION_HOSTNAME" \
           "$DATABASE_REPOSITORY" \
           "$DATABASE_BASE" \
           "$DATABASE_HOME" \
@@ -2011,11 +2241,18 @@ exit $Retcode
       displayOptions
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        uninstallManager "$INSTALLATION_STAGE" "$INSTALLATION_USER" "$MANAGER_HOME"
+        uninstallManager \
+          "$INSTALLATION_STAGE" \
+          "$INSTALLATION_USER" \
+          "$INSTALLATION_GROUP" \
+          "$MANAGER_HOME"
         Retcode=$?
       fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        uninstallDatabase "$INSTALLATION_USER" "$DATABASE_HOME"
+        uninstallDatabase \
+          "$INSTALLATION_USER" \
+          "$INSTALLATION_GROUP" \
+          "$DATABASE_HOME"
         Retcode=$?
       fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
