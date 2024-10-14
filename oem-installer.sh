@@ -128,7 +128,7 @@ declare -r SUDOERS_FILE_NAME='/etc/sudoers.d/101-oracle-user'
 declare -r SUDOERS_FILE_PERMISSIONS='440'
 declare -r CACHE_FILE_NAME='/.swapfile_oem'
 declare -r CACHE_FILE_PERMISSIONS='600'
-declare -r CONTROL_FILE_NAME='oracle.sh'
+declare -r CONTROL_FILE_NAME='database.sh'
 declare -r CONTROL_FILE_PERMISSIONS='740'
 declare -r SYSTEMD_NAME='dbora.service'
 declare -r SYSTEMD_FILE_NAME="/lib/systemd/system/${SYSTEMD_NAME}"
@@ -569,7 +569,7 @@ displayOptions() {
 ##
 ## @note This function performs the following steps:
 ##
-## @li Generation of a response file for an automated installation of the
+## @li Generation of a response file for the automated installation of the
 ##     Oracle Database.
 ## @li Copy of the Oracle Database software to the Oracle Home directory.
 ## @li Modification of the installation requirements to allow Oracle linux 8.1
@@ -1056,6 +1056,16 @@ EOF
 ## @param[in] Response          The filename of the response file to generate.
 ##                              for the installation.  An existing response file
 ##                              will be overwritten.
+##
+## @note This function performs the following steps:
+##
+## @li Generation of a response file for the automated installation of the
+##     Oracle Enterprise Manager.
+## @li Installation of the Oracle Enterprise Manager.
+## @li Deletion of the automated installation response file.
+## @li Execution of the allroot.sh script.
+## @li Configuration of Firewalld to allow external network access to Oracle
+##     Enterprise Manager.
 ##
 ## @return The return code of the function execution.
 ################################################################################
@@ -1769,7 +1779,7 @@ EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
 ##
 ## @note This function performs the following steps:
 ##
-## @li Generation of a response file for an automated deinstallation of the
+## @li Generation of a response file for the automated deinstallation of the
 ##     Oracle Database.
 ## @li Deinstallation of the Oracle Database.
 ##
