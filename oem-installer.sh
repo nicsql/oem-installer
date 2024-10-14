@@ -517,6 +517,7 @@ traceParameter() {
 ##
 ## @brief Display the program options.
 ##
+## @return RETCODE_SUCCESS
 ################################################################################
 displayOptions() {
   echoTitle 'Program options'
@@ -548,7 +549,7 @@ displayOptions() {
 ################################################################################
 ## @fn installDatabase
 ##
-## @brief Install and launch the Oracle Database.
+## @brief Install and launch the Oracle Database (Listener + Starter database).
 ##
 ## @param[in] Inventory  The inventory directory of the Oracle installation
 ##                       (ex. /u01/app/oraInventory).
@@ -567,23 +568,25 @@ displayOptions() {
 ## @param[in] Response   The filename of the response file to generate. An
 ##                       existing response file will be overwritten.
 ##
-## @note The function performs the following steps:
+## @note This function performs the following steps:
+##
 ## @li Generation of a response file for an automated installation of the
 ##     Oracle Database.
-## @li Copy the Oracle Database software to the Oracle Home directory.
-## @li Modificcation of the installation requirements to allow Oracle linux 8.1
+## @li Copy of the Oracle Database software to the Oracle Home directory.
+## @li Modification of the installation requirements to allow Oracle linux 8.1
 ##     and higher.
 ## @li Installation of the Oracle Database by running the Oracle installer
 ##     program runInstaller.
-## @li Execute the orainstRoot.sh and root.sh scripts.
-## @li Run the Oracle installer program runInstaller with the option
-##     -executeConfigTools to configure the networking information.
-## @li Delete the response file.
-## @li Modify the file /etc/oratab to enable starting and stopping the database
-##     with Systemd.
-## @li Configure the Oracle Database with the necessary settings for OEM.
+## @li Execution of the orainstRoot.sh and root.sh scripts.
+## @li Configuration of the networking information by executing the Oracle
+##     installer program runInstaller with the option -executeConfigTools.
+## @li Deletion of the automated installation response file.
+## @li Modification of the file /etc/oratab to enable the automatic starting
+##     and stopping the database with Systemd.
+## @li Configuration of the settings of the Oracle Database that are necessary
+##     for supporting Oracle Enterprise Manager.
 ##
-## @return the return code of the function execution.
+## @return The return code of the function execution.
 ################################################################################
 installDatabase() {
   local -r Inventory="${1:-}"
@@ -1057,7 +1060,7 @@ EOF
 ##                              for the installation.  An existing response file
 ##                              will be overwritten.
 ##
-## @return the return code of the function execution.
+## @return The return code of the function execution.
 ################################################################################
 installManager() {
   local -r Stage="${1-:-}"
@@ -1319,7 +1322,16 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
 ## @param[in] AgentBase    The base directory of the Oracle Enterprise Manager
 ##                         agent.
 ##
-## @return the return code of the function execution.
+## @note This function performs the following steps:
+##
+## @li Creation of the installation operating system group and user.
+## @li Addition of the installation user to the list of the system sudoers.
+## @li Installation of the system libraries.
+## @li Adjustment of the system memory cache.
+## @li Creation of the Oracle products installation directories. 
+## @li Creation of the Systemd service for the Oracle Database.
+##
+## @return The return code of the function execution.
 ################################################################################
 prepareInstallation() {
   local -r FSTAB='/etc/fstab'
@@ -1763,7 +1775,13 @@ EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
 ## @param[in] Group The installation group.
 ## @param[in] Home  The home directory of the Oracle Database.
 ##
-## @return the return code of the function execution.
+## @note This function performs the following steps:
+##
+## @li Generation of a response file for an automated deinstallation of the
+##     Oracle Database.
+## @li Deinstallation of the Oracle Database.
+##
+## @return The return code of the function execution.
 ################################################################################
 uninstallDatabase() {
   local -r User="${1-:-}"
@@ -1855,7 +1873,7 @@ uninstallDatabase() {
 ## @param[in] Group The installation group.
 ## @param[in] Home  The home directory of the Oracle Enterprise Manager.
 ##
-## @return the return code of the function execution.
+## @return The return code of the function execution.
 ################################################################################
 uninstallManager() {
   local -r DatabasePassword='Abcd_1234'
