@@ -63,7 +63,6 @@ declare -r DEFAULT_INSTALLATION_ROOT='/u01/app'
 declare -r DEFAULT_INSTALLATION_USER='oracle'
 declare -r DEFAULT_INSTALLATION_GROUP='oinstall'
 declare -r DEFAULT_INSTALLATION_HOSTNAME=`hostname -f`
-declare -r DEFAULT_INSTALLATION_SUDOERS='/etc/sudoers.d/101-oracle-user'
 declare -r DEFAULT_DATABASE_VERSION='19.3.0.0.0'
 declare -r DEFAULT_DATABASE_NAME='emrep'
 declare -r DEFAULT_DATABASE_PASSWORD='Abcd_1234'
@@ -86,7 +85,6 @@ declare -r DESCRIPTION_INSTALLATION_BASE='Oracle installation base directory'
 declare -r DESCRIPTION_INSTALLATION_USER='installation user'
 declare -r DESCRIPTION_INSTALLATION_GROUP='installation group'
 declare -r DESCRIPTION_INSTALLATION_HOSTNAME='installation host name'
-declare -r DESCRIPTION_INSTALLATION_SUDOERS="${DESCRIPTION_INSTALLATION_USER} sudoers supplementary file"
 declare -r DESCRIPTION_DATABASE_VERSION="${DESCRIPTION_PRODUCT_DATABASE} version"
 declare -r DESCRIPTION_DATABASE_REPOSITORY="${DESCRIPTION_PRODUCT_DATABASE} software repository directory"
 declare -r DESCRIPTION_DATABASE_BASE="${DESCRIPTION_PRODUCT_DATABASE} base directory"
@@ -102,6 +100,7 @@ declare -r DESCRIPTION_MANAGER_INSTANCE="${DESCRIPTION_PRODUCT_MANAGER} instance
 declare -r DESCRIPTION_MANAGER_VERSION="${DESCRIPTION_PRODUCT_MANAGER} version"
 declare -r DESCRIPTION_MANAGER_RESPONSE="${DESCRIPTION_PRODUCT_MANAGER} response file"
 declare -r DESCRIPTION_AGENT_BASE="${DESCRIPTION_PRODUCT_AGENT} base directory"
+declare -r DESCRIPTION_SUDOERS_FILE="${DESCRIPTION_INSTALLATION_USER} sudoers supplementary file"
 declare -r DESCRIPTIOM_SYSTEMD_SERVICE="Systemd service for the ${DESCRIPTION_PRODUCT_DATABASE}"
 declare -r DESCRIPTIOM_SYSTEMD_FILE="Systemd service file for the ${DESCRIPTION_PRODUCT_DATABASE}"
 declare -r DESCRIPTION_CONTROL_FILE="${DESCRIPTION_PRODUCT_DATABASE} service control program"
@@ -124,7 +123,8 @@ declare -r -i VALUE_FALSE=1
 declare -r -i HELP_INDENT_LENGTH=2
 declare -r -i HELP_PADDING_LENGTH=24
 declare -r -i DESCRIPTION_LENGTH=56
-declare -r -i CACHE_GOAL=16 # In gigabytes (G)
+declare -r -i CACHE_GOAL=16 # In gigabytes
+declare -r SUDOERS_FILE_NAME='/etc/sudoers.d/101-oracle-user'
 declare -r SUDOERS_FILE_PERMISSIONS='440'
 declare -r CACHE_FILE_NAME='/.swapfile_oem'
 declare -r CACHE_FILE_PERMISSIONS='600'
@@ -531,7 +531,6 @@ displayOptions() {
   echoOption "$DESCRIPTION_INSTALLATION_USER" "$INSTALLATION_USER"
   echoOption "$DESCRIPTION_INSTALLATION_GROUP" "$INSTALLATION_GROUP"
   echoOption "$DESCRIPTION_INSTALLATION_HOSTNAME" "$INSTALLATION_HOSTNAME"
-  echoOption "$DESCRIPTION_INSTALLATION_SUDOERS" "$INSTALLATION_SUDOERS"
   echoOption "$DESCRIPTION_DATABASE_BASE" "$DATABASE_BASE"
   echoOption "$DESCRIPTION_DATABASE_HOME" "$DATABASE_HOME"
   echoOption "$DESCRIPTION_DATABASE_NAME" "$DATABASE_NAME"
@@ -788,10 +787,8 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
       else
         echoCommandMessage "Software already hacked for OL8"
       fi
-    else
-      echoCommandMessage "${DESCRIPTION_INSTALLATION_SUDOERS} already exists: ${Sudoers}"
+      Retcode=$?
     fi
-    Retcode=$?
   fi
 
   ##
@@ -958,7 +955,7 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
           Retcode=$?
         fi
       else
-        echoCommandMessage "The ${DESCRIPTION_INSTALLATION_SUDOERS} not found: ${Sudoers}"
+        echoCommandMessage "File not found: ${ORATAB_FILE_NAME}"
         Retcode=$?
       fi
     fi
@@ -1009,14 +1006,14 @@ EOF
 
       # Restart the Oracle Database.
 
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/sqlplus" '/nolog' <<EOF
-CONNECT sys/${Password}@${Name} AS sysdba
-STARTUP
-EOF
-        processCommandCode $? "Failed to startup the ${DESCRIPTION_PRODUCT_DATABASE}: ${Database}"
-        Retcode=$?
-      fi
+#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+#        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/sqlplus" '/nolog' <<EOF
+#CONNECT sys/${Password}@${Name} AS sysdba
+#STARTUP
+#EOF
+#        processCommandCode $? "Failed to startup the ${DESCRIPTION_PRODUCT_DATABASE}: ${Database}"
+#        Retcode=$?
+#      fi
 
       # Create indicator that the Oracle Database has been configured.
 
@@ -1311,8 +1308,6 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
 ##                         (ex. /u01/app/oracle).
 ## @param[in] User         The installation user.
 ## @param[in] Group        The installation group.
-## @param[in] Sudoers      The sudoers supplementary file to be created for the
-##                         installation user.
 ## @param[in] DatabaseBase The base directory of the Oracle Database.
 ##                         (ex. /u01/app/oracle/database).
 ## @param[in] DatabaseHome The home directory of the Oracle Database.
@@ -1339,12 +1334,11 @@ prepareInstallation() {
   local -r Base="${2:-}"
   local -r User="${3:-}"
   local -r Group="${4:-}"
-  local -r Sudoers="${5:-}"
-  local -r DatabaseBase="${6:-}"
-  local -r DatabaseHome="${7:-}"
-  local -r ManagerHome="${8:-}"
-  local -r InstanceHome="${9:-}"
-  local -r AgentBase="${10:-}"
+  local -r DatabaseBase="${5:-}"
+  local -r DatabaseHome="${6:-}"
+  local -r ManagerHome="${7:-}"
+  local -r InstanceHome="${8:-}"
+  local -r AgentBase="${9:-}"
   local -i Retcode=$RETCODE_SUCCESS
 
   echoTitle 'Preparing for installation of the Oracle products'
@@ -1356,8 +1350,6 @@ prepareInstallation() {
   traceParameter $Retcode "$DESCRIPTION_INSTALLATION_USER" "$User"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_INSTALLATION_GROUP" "$Group"
-  Retcode=$?
-  traceParameter $Retcode "$DESCRIPTION_INSTALLATION_SUDOERS" "$Sudoers"
   Retcode=$?
   traceParameter $Retcode "$DESCRIPTION_DATABASE_BASE" "$DatabaseBase"
   Retcode=$?
@@ -1438,24 +1430,24 @@ prepareInstallation() {
   # Add the installation user to the operating systems's list of sudoers.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'test' '-r' "$Sudoers"
+    executeCommand 'sudo' 'test' '-r' "$SUDOERS_FILE_NAME"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "${DESCRIPTION_INSTALLATION_SUDOERS} already exists: ${Sudoers}"
+      echoCommandMessage "${DESCRIPTION_SUDOERS_FILE} already exists: ${SUDOERS_FILE_NAME}"
       Retcode=$?
     else
-      echoCommandMessage "${DESCRIPTION_INSTALLATION_SUDOERS} not found: ${Sudoers}"
-      echoCommand 'sudo' "cat > ${Sudoers} <<EOF ... EOF"
-      echo "cat > ${Sudoers} <<EOF
+      echoCommandMessage "${DESCRIPTION_SUDOERS_FILE} not found: ${SUDOERS_FILE_NAME}"
+      echoCommand 'sudo' "cat > ${SUDOERS_FILE_NAME} <<EOF ... EOF"
+      echo "cat > ${SUDOERS_FILE_NAME} <<EOF
 # Created by ${PROGRAM} on $(date)
 # Grant sudo privileges to the Oracle installation user
 ${User} ALL=(ALL) NOPASSWD:ALL
 EOF" | sudo 'sh'
-      processCommandCode $? "Failed to create ${DESCRIPTION_INSTALLATION_SUDOERS}: ${Sudoers}"
+      processCommandCode $? "Failed to create ${DESCRIPTION_SUDOERS_FILE}: ${SUDOERS_FILE_NAME}"
       Retcode=$?
       # Restrict the file permissions of the Oracle Database automated installation response file.
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'chmod' "$SUDOERS_FILE_PERMISSIONS" "$Sudoers"
-        processCommandCode $? "Failed to restrict the file permissions to ${SUDOERS_FILE_PERMISSIONS} on the ${DESCRIPTION_INSTALLATION_SUDOERS}: ${Sudoers}"
+        executeCommand 'sudo' 'chmod' "$SUDOERS_FILE_PERMISSIONS" "$SUDOERS_FILE_NAME"
+        processCommandCode $? "Failed to restrict the file permissions to ${SUDOERS_FILE_PERMISSIONS} on the ${DESCRIPTION_SUDOERS_FILE}: ${SUDOERS_FILE_NAME}"
         Retcode=$?
       fi
     fi
@@ -1464,8 +1456,8 @@ EOF" | sudo 'sh'
   # Validate that the installation user sudoers supplementary file exists.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'test' '-f' "$Sudoers"
-    processCommandCode $? "${DESCRIPTION_INSTALLATION_SUDOERS} is inaccessible: ${Sudoers}"
+    executeCommand 'sudo' 'test' '-f' "$SUDOERS_FILE_NAME"
+    processCommandCode $? "${DESCRIPTION_SUDOERS_FILE} is inaccessible: ${SUDOERS_FILE_NAME}"
     Retcode=$?
   fi
 
@@ -2081,7 +2073,6 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
   declare -r INSTALLATION_BASE="${INSTALLATION_ROOT}/${INSTALLATION_USER}"
   declare -r INSTALLATION_INVENTORY="${INSTALLATION_ROOT}/oraInventory"
   declare -r INSTALLATION_HOSTNAME="$DEFAULT_INSTALLATION_HOSTNAME"
-  declare -r INSTALLATION_SUDOERS="$DEFAULT_INSTALLATION_SUDOERS"
   declare -r DATABASE_REPOSITORY="${INSTALLATION_REPOSITORY}/${PRODUCT_DATABASE}/${DATABASE_VERSION}"
   declare -r DATABASE_BASE="${INSTALLATION_BASE}/${PRODUCT_DATABASE}"
   declare -r DATABASE_HOME="${DATABASE_BASE}/product/${DATABASE_VERSION}/dbhome_1"
@@ -2116,7 +2107,6 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           "$INSTALLATION_BASE" \
           "$INSTALLATION_USER" \
           "$INSTALLATION_GROUP" \
-          "$INSTALLATION_SUDOERS" \
           "$DATABASE_BASE" \
           "$DATABASE_HOME" \
           "$MANAGER_HOME" \
