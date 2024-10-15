@@ -929,8 +929,14 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
   # Delete the Oracle Database automated installation response file.
 
   if [[ 0 -eq $Created ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'rm' "$Response"
-    processCommandCode $? "Failed to the delete the ${DESCRIPTION_DATABASE_RESPONSE}: ${Response}"
+    executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-f' "$Response"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_DATABASE_RESPONSE} will be deleted: ${Response}"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'rm' "$Response"
+      processCommandCode $? "Failed to the delete the ${DESCRIPTION_DATABASE_RESPONSE}: ${Response}"
+    else
+      echoCommandMessage "The ${DESCRIPTION_DATABASE_RESPONSE} was not found: ${Response}"
+    fi
   fi
 
   # Modify the oratab file to enable the automatic start and shutdown of the database with dbstart and sbshut.
@@ -1003,17 +1009,6 @@ EOF
         processCommandCode $? "Failed to restart the ${DESCRIPTION_PRODUCT_DATABASE} listener"
         Retcode=$?
       fi
-
-      # Restart the Oracle Database.
-
-#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${Home}/bin/sqlplus" '/nolog' <<EOF
-#CONNECT sys/${Password}@${Name} AS sysdba
-#STARTUP
-#EOF
-#        processCommandCode $? "Failed to startup the ${DESCRIPTION_PRODUCT_DATABASE}: ${Database}"
-#        Retcode=$?
-#      fi
 
       # Create indicator that the Oracle Database has been configured.
 
@@ -1090,6 +1085,9 @@ installManager() {
   local -r RepositoryPassword=${DEFAULT_DATABASE_PASSWORD}
   local -r AgentPassword=${DEFAULT_DATABASE_PASSWORD}
   local -r CryptoPassword=${DEFAULT_DATABASE_PASSWORD}
+  local -r Marker1="${ManagerHome}/INSTALLATION_MARKER_1"
+  local -r Marker2="${ManagerHome}/INSTALLATION_MARKER_2"
+  local -r Marker3="${ManagerHome}/INSTALLATION_MARKER_3"
   local -i Created=1
   local -i Retcode=$RETCODE_SUCCESS
 
@@ -1246,9 +1244,22 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
   # Run the Oracle Enterprise Manager installer program using the installation user.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo '-E' '-u' "$User" '-g' "$Group" './em13500_linux64.bin' '-silent' '-responseFile' "$Response" "-J-Djava.io.tmpdir=${Stage}"
-    processCommandCode $? "Failed to install Oracle Enterprise Manager: ${ManagerRepository}/em13500_linux64.bin"
-    Retcode=$?
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker1"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_PRODUCT_MANAGER} software is already installed: ${ManagerHome}"
+      Retcode=$?
+    else
+      echoCommandMessage "The ${DESCRIPTION_PRODUCT_MANAGER} software is not already installed: ${ManagerHome}"
+      executeCommand sudo '-E' '-u' "$User" '-g' "$Group" './em13500_linux64.bin' '-silent' '-responseFile' "$Response" "-J-Djava.io.tmpdir=${Stage}"
+      processCommandCode $? "Failed to install Oracle Enterprise Manager: ${ManagerRepository}/em13500_linux64.bin"
+      Retcode=$?
+      # Create indicator that the Oracle Enterprise Manager has been installed.
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker1"
+        processCommandCode $? "Failed to create installation marker file: ${Marker1}"
+        Retcode=$?
+      fi
+    fi
   fi
 
   ##
@@ -1262,45 +1273,77 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
   # Delete the Oracle Enterprise Manager automated installation response file.
 
   if [[ 0 -eq $Created ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'rm' "$Response"
-    processCommandCode $? "Failed to the delete the ${DESCRIPTION_MANAGER_RESPONSE}: ${Response}"
+    executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-f' "$Response"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_MANAGER_RESPONSE} will be deleted: ${Response}"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'rm' "$Response"
+      processCommandCode $? "Failed to the delete the ${DESCRIPTION_MANAGER_RESPONSE}: ${Response}"
+    else
+      echoCommandMessage "The ${DESCRIPTION_MANAGER_RESPONSE} was not found: ${Response}"
+    fi
   fi
 
   # Run the Oracle Enterprise Manager root installer program using the root user.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$Installer"
-    processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} root installer program was not found or is innaccessible: ${Installer}"
-    Retcode=$?
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' '-E' "$Installer"
-      processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} root installer program produced an error: ${Installer}"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker2"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "The ${DESCRIPTION_PRODUCT_MANAGER} root installer has already been run"
       Retcode=$?
+    else
+      echoCommandMessage "The ${DESCRIPTION_PRODUCT_MANAGER} root installer has not already been run"
+      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$Installer"
+      processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} root installer program was not found or is innaccessible: ${Installer}"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' '-E' "$Installer"
+        processCommandCode $? "The ${DESCRIPTION_PRODUCT_MANAGER} root installer program produced an error: ${Installer}"
+        Retcode=$?
+        # Create indicator that the Oracle Enterprise Manager root installer has been run.
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker2"
+          processCommandCode $? "Failed to create installation marker file: ${Marker2}"
+          Retcode=$?
+        fi
+      fi
     fi
   fi
 
   # Configure firewalld to allow network access to the Oracle Enterprise Manager.
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'systemctl' 'status' 'firewalld'
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker3"
     if [[ 0 -eq $? ]] ; then
-      echoCommandSuccess
-      executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${DEFAULT_PORT_WEBLOGIC}/tcp"
-      processCommandCode $? "Failed to allow public access to the network port of the Weblogic administrative console: ${DEFAULT_PORT_WEBLOGIC}"
+      echoCommandMessage "Firewalld has already been configured for the ${DESCRIPTION_PRODUCT_MANAGER}"
       Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${DEFAULT_PORT_MANAGER}/tcp"
-        processCommandCode $? "Failed to allow public access to the network port of the ${DESCRIPTION_PRODUCT_MANAGER} console: ${DEFAULT_PORT_MANAGER}"
-        Retcode=$?
-      fi
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'firewall-cmd' '--reload'
-        processCommandCode $? 'Failed to reload firewalld'
-        Retcode=$?
-      fi
     else
-      echoCommandMessage 'Firewalld may not be running'
-      Retcode=$?
+      echoCommandMessage "Firewalld has not already been configured for the ${DESCRIPTION_PRODUCT_MANAGER}"
+      executeCommand 'sudo' 'systemctl' 'status' 'firewalld'
+      if [[ 0 -eq $? ]] ; then
+        echoCommandSuccess
+        executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${DEFAULT_PORT_WEBLOGIC}/tcp"
+        processCommandCode $? "Failed to allow public access to the network port of the Weblogic administrative console: ${DEFAULT_PORT_WEBLOGIC}"
+        Retcode=$?
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${DEFAULT_PORT_MANAGER}/tcp"
+          processCommandCode $? "Failed to allow public access to the network port of the ${DESCRIPTION_PRODUCT_MANAGER} console: ${DEFAULT_PORT_MANAGER}"
+          Retcode=$?
+        fi
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' 'firewall-cmd' '--reload'
+          processCommandCode $? 'Failed to reload firewalld'
+          Retcode=$?
+          # Create indicator that Firewalld has been configured for the Oracle Enterprise Manager.
+          if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+            executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker3"
+            processCommandCode $? "Failed to create installation marker file: ${Marker3}"
+            Retcode=$?
+          fi
+        fi
+      else
+        echoCommandMessage 'Firewalld may not be running'
+        Retcode=$?
+      fi
     fi
   fi
 
@@ -1684,34 +1727,73 @@ EOF" | sudo 'sh'
     echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat > ${ControlFile} <<EOF ... EOF"
     echo '-e' "cat > ${ControlFile} <<EOF
 #!/usr/bin/bash
-export ORACLE_TRACE='T'
+
+# Created by ${PROGRAM} on $(date)
+
 export TMPDIR='/tmp'
 export TMP='/tmp'
 export PATH=\"${DatabaseHome}/bin:/usr/local/bin:\\\${PATH}\"
 export LD_LIBRARY_PATH='${DatabaseHome}/lib:/lib:/usr/lib'
 export CLASSPATH='${DatabaseHome}/jlib:${DatabaseHome}/rdbms/jlib'
+
+controlManager() {
+  local Log=''
+  local -i Retcode=0
+  if [[ 0 -eq \\\$Retcode ]] ; then
+    export ORACLE_HOME='$ManagerHome'
+    if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\${ORACLE_HOME}/bin/emctl\" ]] ; then
+      cd \"\\\$ORACLE_HOME\"
+      Log=\\\$(bin/emctl \\\$1 oms)
+      Retcode=\\\$?
+    fi
+  fi
+  if [[ 0 -eq \\\$Retcode ]] && [[ -r '${AgentBase}/agentInstall.rsp' ]] ; then
+    export ORACLE_HOME=\\\$(grep 'ORACLE_HOME' '${AgentBase}/agentInstall.rsp' | awk -F '=' '{print \\\$2}')
+    if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\${ORACLE_HOME}/bin/emctl\" ]] ; then
+      cd \"\\\$ORACLE_HOME\"
+      Log=\\\$(bin/emctl \\\$1 agent)
+      Retcode=\\\$?
+    fi
+  fi
+  if [[ 0 -ne \\\$Retcode ]] ; then
+    echo \"\\\$Log\"
+  fi
+  return \\\$Retcode
+}
+
 declare Log=''
 declare -i Retcode=0
+
 if [[ 1 -ne \\\$# ]] ; then
   Log='Incorrect number of parameters.  Expected the parameters \"start\" or \"stop\" only.'
   Retcode=1
 elif [[ 'start' = \"\\\$1\" ]] ; then
-  if [[ -x '${DatabaseHome}/bin/dbstart' ]] ; then
-    Log=\\\$(${DatabaseHome}/bin/dbstart \"${DatabaseHome}\")
+  if [[ 0 -eq \\\$Retcode ]] && [[ -x '${DatabaseHome}/bin/dbstart' ]] ; then
+    Log=\\\$(\"${DatabaseHome}/bin/dbstart\" '$DatabaseHome')
+    Retcode=\\\$?
+  fi
+  if [[ 0 -eq \\\$Retcode ]] ; then
+    Log=\\\$(controlManager 'start')
     Retcode=\\\$?
   fi
 elif [[ 'stop' = \"\\\$1\" ]] ; then
-  if [[ -x '${DatabaseHome}/bin/dbshut' ]] ; then
-    Log=\\\$(${DatabaseHome}/bin/dbshut \"${DatabaseHome}\")
+  if [[ 0 -eq \\\$Retcode ]] ; then
+    Log=\\\$(controlManager 'stop')
+    Retcode=\\\$?
+  fi
+  if [[ 0 -eq \\\$Retcode ]] &&[[ -x '${DatabaseHome}/bin/dbshut' ]] ; then
+    Log=\\\$(\"${DatabaseHome}/bin/dbshut\" '$DatabaseHome')
     Retcode=\\\$?
   fi
 else
   Log=\"[ERROR] Invalid command: \\\${1}\"
   Retcode=1
 fi
+
 if [[ 0 -ne \\\$Retcode ]] ; then
   echo \"\\\$Log\"
 fi
+
 exit \\\$Retcode
 EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     processCommandCode $? "Failed to create the ${DESCRIPTION_CONTROL_FILE}: ${ControlFile}"
@@ -1734,6 +1816,8 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     fi
     echoCommand 'sudo' '-u' 'root' '-g' 'root' "cat > ${SYSTEMD_FILE_NAME} <<EOF ... EOF"
     echo "cat > ${SYSTEMD_FILE_NAME} <<EOF
+# Created by ${PROGRAM} on $(date)
+
 [Unit]
 Description=The ${DESCRIPTION_PRODUCT_DATABASE} Service
 After=syslog.target network.target
@@ -1874,6 +1958,13 @@ uninstallDatabase() {
 ## @param[in] User  The installation user.
 ## @param[in] Group The installation group.
 ## @param[in] Home  The home directory of the Oracle Enterprise Manager.
+##
+## @note This function performs the following steps:
+##
+## @li Copy of the Oracle Enterprise Manager deinstallation program to a
+##     temporary direcrory.
+## @li Deinstallation the Oracle Enterprise Mananger.
+## @li Deletion of the Oracle Enterprise Manager deinstallation program.
 ##
 ## @return The return code of the function execution.
 ################################################################################
@@ -2139,7 +2230,6 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           "$DATABASE_RESPONSE"
         Retcode=$?
       fi
-exit $Retcode
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         installManager \
           "$INSTALLATION_STAGE" \
