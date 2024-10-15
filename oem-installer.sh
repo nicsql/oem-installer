@@ -45,7 +45,9 @@ declare -r DESCRIPTION_PRODUCT_AGENT='Oracle Enterprise Manager Agent'
 # Program options #
 ###################
 
-declare OPTION_INSTALLATION_REPOSITORY='repository'
+declare OPTION_REPOSITORY_ROOT='repository'
+declare OPTION_REPOSITORY_DATABASE='repository-database'
+declare OPTION_REPOSITORY_MANAGER='repository-manager'
 declare OPTION_INSTALLATION_ROOT='root'
 declare OPTION_INSTALLATION_USER='user'
 declare OPTION_INSTALLATION_GROUP='group'
@@ -57,7 +59,9 @@ declare OPTION_MANAGER_VERSION='manager-version'
 # Program options and function parameters default values #
 ##########################################################
 
-declare -r DEFAULT_INSTALLATION_REPOSITORY='/mnt/MySQL/Software/Oracle'
+declare -r DEFAULT_REPOSITORY_ROOT='/mnt/MySQL/Software/Oracle'
+declare -r DEFAULT_REPOSITORY_DATABASE="${DEFAULT_REPOSITORY_ROOT}/${PRODUCT_DATABASE}"
+declare -r DEFAULT_REPOSITORY_MANAGER="${DEFAULT_REPOSITORY_ROOT}/${PRODUCT_MANAGER}"
 declare -r DEFAULT_INSTALLATION_STAGE='/mnt/MySQL/Stage'
 declare -r DEFAULT_INSTALLATION_ROOT='/u01/app'
 declare -r DEFAULT_INSTALLATION_USER='oracle'
@@ -128,7 +132,7 @@ declare -r SUDOERS_FILE_NAME='/etc/sudoers.d/101-oracle-user'
 declare -r SUDOERS_FILE_PERMISSIONS='440'
 declare -r CACHE_FILE_NAME='/.swapfile_oem'
 declare -r CACHE_FILE_PERMISSIONS='600'
-declare -r CONTROL_FILE_NAME='database.sh'
+declare -r CONTROL_FILE_NAME='servicectl.sh'
 declare -r CONTROL_FILE_PERMISSIONS='740'
 declare -r SYSTEMD_NAME='dbora.service'
 declare -r SYSTEMD_FILE_NAME="/lib/systemd/system/${SYSTEMD_NAME}"
@@ -287,7 +291,9 @@ echoHelp() {
   echoHelpCommand "$COMMAND_UNINSTALL" "Uninstall the ${DESCRIPTION_PRODUCT_DATABASE} and ${DESCRIPTION_PRODUCT_MANAGER}"
   echo
   echo 'Options:'
-  echoHelpOption "$OPTION_INSTALLATION_REPOSITORY" "$DESCRIPTION_INSTALLATION_REPOSITORY" "$DEFAULT_INSTALLATION_REPOSITORY"
+  echoHelpOption "$OPTION_REPOSITORY_ROOT" "$DESCRIPTION_REPOSITORY_ROOT" "$DEFAULT_REPOSITORY_ROOT"
+#  echoHelpOption "$OPTION_REPOSITORY_DATABASE" "$DESCRIPTION_REPOSITORY_DATABASE" "$DEFAULT_REPOSITORY_DATABASE"
+#  echoHelpOption "$OPTION_REPOSITORY_MANAGER" "$DESCRIPTION_REPOSITORY_MANAGER" "$DEFAULT_REPOSITORY_MANAGER"
   echoHelpOption "$OPTION_INSTALLATION_ROOT" "$DESCRIPTION_INSTALLATION_ROOT" "$DEFAULT_INSTALLATION_ROOT"
   echoHelpOption "$OPTION_INSTALLATION_USER" "$DESCRIPTION_INSTALLATION_USER" "$DEFAULT_INSTALLATION_USER"
   echoHelpOption "$OPTION_INSTALLATION_GROUP" "$DESCRIPTION_INSTALLATION_GROUP" "$DEFAULT_INSTALLATION_GROUP"
@@ -523,7 +529,7 @@ displayOptions() {
   echoTitle 'Program options'
   echoOption "$DESCRIPTION_DATABASE_VERSION" "$DATABASE_VERSION"
   echoOption "$DESCRIPTION_MANAGER_VERSION" "$MANAGER_VERSION"
-  echoOption "$DESCRIPTION_INSTALLATION_REPOSITORY" "$INSTALLATION_REPOSITORY"
+  echoOption "$DESCRIPTION_REPOSITORY_ROOT" "$INSTALLATION_REPOSITORY"
   echoOption "$DESCRIPTION_DATABASE_REPOSITORY" "$DATABASE_REPOSITORY"
   echoOption "$DESCRIPTION_MANAGER_REPOSITORY" "$MANAGER_REPOSITORY"
   echoOption "$DESCRIPTION_INSTALLATION_BASE" "$INSTALLATION_BASE"
@@ -1174,7 +1180,7 @@ AGENT_BASE_DIR=${AgentBase}
 AGENT_REGISTRATION_PASSWORD=${AgentPassword}
 AGENT_REGISTRATION_CONFIRM_PASSWORD=${AgentPassword}
 # TLS
-Is_oneWaySSL=false
+es_oneWaySSL=false
 Is_twoWaySSL=true
 TRUSTSTORE_PASSWORD=${CryptoPassword}
 TRUSTSTORE_LOCATION=${ManagerData}/ewallet-truststore.p12
@@ -1730,30 +1736,64 @@ EOF" | sudo 'sh'
 
 # Created by ${PROGRAM} on $(date)
 
+declare -r ORIGINAL_PATH=\"\\\$PATH\"
+
 export TMPDIR='/tmp'
 export TMP='/tmp'
-export PATH=\"${DatabaseHome}/bin:/usr/local/bin:\\\${PATH}\"
-export LD_LIBRARY_PATH='${DatabaseHome}/lib:/lib:/usr/lib'
-export CLASSPATH='${DatabaseHome}/jlib:${DatabaseHome}/rdbms/jlib'
 
-controlManager() {
+controlAgent() {
+  local -r RESPONSE_FILE='${AgentBase}/agentInstall.rsp'
   local Log=''
   local -i Retcode=0
-  if [[ 0 -eq \\\$Retcode ]] ; then
-    export ORACLE_HOME='$ManagerHome'
-    if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\${ORACLE_HOME}/bin/emctl\" ]] ; then
+  if [[ -r \"\\\$RESPONSE_FILE\" ]] ; then
+    export ORACLE_HOME=\\\$(grep 'ORACLE_HOME' \"\\\$RESPONSE_FILE\" | awk -F '=' '{print \\\$2}')
+    local -r Command=\"\\\${ORACLE_HOME}/bin/emctl\"
+    if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\$Command\" ]] ; then
+      export PATH=\"\\\${ORACLE_HOME}/bin:/usr/local/bin:\\\${ORIGINAL_PATH}\"
+      export LD_LIBRARY_PATH=\"\\\${ORACLE_HOME}/lib:/lib:/usr/lib\"
+      export CLASSPATH=\"\\\${ORACLE_HOME}/jlib\"
       cd \"\\\$ORACLE_HOME\"
-      Log=\\\$(bin/emctl \\\$1 oms)
+      Log=\\\$(\"\\\$Command\" \\\$@)
       Retcode=\\\$?
     fi
   fi
-  if [[ 0 -eq \\\$Retcode ]] && [[ -r '${AgentBase}/agentInstall.rsp' ]] ; then
-    export ORACLE_HOME=\\\$(grep 'ORACLE_HOME' '${AgentBase}/agentInstall.rsp' | awk -F '=' '{print \\\$2}')
-    if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\${ORACLE_HOME}/bin/emctl\" ]] ; then
-      cd \"\\\$ORACLE_HOME\"
-      Log=\\\$(bin/emctl \\\$1 agent)
-      Retcode=\\\$?
-    fi
+  if [[ 0 -ne \\\$Retcode ]] ; then
+    echo \"\\\$Log\"
+  fi
+  return \\\$Retcode
+}
+
+controlDatabase() {
+  export ORACLE_HOME='$DatabaseHome'
+  local -r Command=\"\\\${ORACLE_HOME}/bin/\\\$1\"
+  local Log=''
+  local -i Retcode=0
+  if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\$Command\" ]] ; then
+    export PATH=\"\\\${ORACLE_HOME}/bin:/usr/local/bin:\\\${ORIGINAL_PATH}\"
+    export LD_LIBRARY_PATH=\"\\\${ORACLE_HOME}/lib:/lib:/usr/lib\"
+    export CLASSPATH=\"\\\${ORACLE_HOME}/jlib:\\\${ORACLE_HOME}/rdbms/jlib\"
+    cd \"\\\$ORACLE_HOME\"
+    Log=\\\$(\"\\\$Command\" \"\\\$ORACLE_HOME\")
+    Retcode=\\\$?
+  fi
+  if [[ 0 -ne \\\$Retcode ]] ; then
+    echo \"\\\$Log\"
+  fi
+  return \\\$Retcode
+}
+
+controlManager() {
+  export ORACLE_HOME='$ManagerHome'
+  local -r Command=\"\\\${ORACLE_HOME}/bin/emctl\"
+  local Log=''
+  local -i Retcode=0
+  if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\$Command\" ]] ; then
+    export PATH=\"\\\${ORACLE_HOME}/bin:/usr/local/bin:\\\${ORIGINAL_PATH}\"
+    export LD_LIBRARY_PATH=\"\\\${ORACLE_HOME}/lib:/lib:/usr/lib\"
+    export CLASSPATH=\"\\\${ORACLE_HOME}/jlib:\\\${ORACLE_HOME}/rdbms/jlib\"
+    cd \"\\\$ORACLE_HOME\"
+    Log=\\\$(\"\\\$Command\" \\\$@)
+    Retcode=\\\$?
   fi
   if [[ 0 -ne \\\$Retcode ]] ; then
     echo \"\\\$Log\"
@@ -1768,21 +1808,29 @@ if [[ 1 -ne \\\$# ]] ; then
   Log='Incorrect number of parameters.  Expected the parameters \"start\" or \"stop\" only.'
   Retcode=1
 elif [[ 'start' = \"\\\$1\" ]] ; then
-  if [[ 0 -eq \\\$Retcode ]] && [[ -x '${DatabaseHome}/bin/dbstart' ]] ; then
-    Log=\\\$(\"${DatabaseHome}/bin/dbstart\" '$DatabaseHome')
+  if [[ 0 -eq \\\$Retcode ]] ; then
+    Log=\\\$(controlDatabase 'dbstart')
     Retcode=\\\$?
   fi
   if [[ 0 -eq \\\$Retcode ]] ; then
-    Log=\\\$(controlManager 'start')
+    Log=\\\$(controlManager 'start' 'oms')
+    Retcode=\\\$?
+  fi
+  if [[ 0 -eq \\\$Retcode ]] ; then
+    Log=\\\$(controlAgent 'start' 'agent')
     Retcode=\\\$?
   fi
 elif [[ 'stop' = \"\\\$1\" ]] ; then
   if [[ 0 -eq \\\$Retcode ]] ; then
-    Log=\\\$(controlManager 'stop')
+    Log=\\\$(controlManager 'stop' 'oms' '-all')
     Retcode=\\\$?
   fi
-  if [[ 0 -eq \\\$Retcode ]] &&[[ -x '${DatabaseHome}/bin/dbshut' ]] ; then
-    Log=\\\$(\"${DatabaseHome}/bin/dbshut\" '$DatabaseHome')
+  if [[ 0 -eq \\\$Retcode ]] ; then
+    Log=\\\$(controlAgent 'stop' 'agent')
+    Retcode=\\\$?
+  fi
+  if [[ 0 -eq \\\$Retcode ]] ; then
+    Log=\\\$(controlDatabase 'dbshut')
     Retcode=\\\$?
   fi
 else
@@ -2086,7 +2134,7 @@ while [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$1" ]] && [[ "${1::2}" = '--
   Option=${Left:2}
   OptionValue="${1#*=}"
   case "$Option" in
-    "$OPTION_INSTALLATION_REPOSITORY")
+    "$OPTION_REPOSITORY_ROOT")
       setOption "$Option" "$OptionValue" 'INSTALLATION_REPOSITORY'
       ;;
     "$OPTION_INSTALLATION_ROOT")
@@ -2138,7 +2186,7 @@ fi
 # Use default values for any option that was not set.
 
 if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-  setOption "$OPTION_INSTALLATION_REPOSITORY" "$DEFAULT_INSTALLATION_REPOSITORY" 'INSTALLATION_REPOSITORY' $Retcode $VALUE_TRUE
+  setOption "$OPTION_REPOSITORY_ROOT" "$DEFAULT_REPOSITORY_ROOT" 'INSTALLATION_REPOSITORY' $Retcode $VALUE_TRUE
   Retcode=$?
   declare -r INSTALLATION_REPOSITORY
 
