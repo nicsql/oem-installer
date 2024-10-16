@@ -46,32 +46,33 @@ declare -r DESCRIPTION_PRODUCT_AGENT='Oracle Enterprise Manager Agent'
 ###################
 
 declare OPTION_REPOSITORY_ROOT='repository'
-declare OPTION_REPOSITORY_DATABASE='repository-database'
-declare OPTION_REPOSITORY_MANAGER='repository-manager'
 declare OPTION_INSTALLATION_ROOT='root'
+declare OPTION_INSTALLATION_STAGE='stage'
 declare OPTION_INSTALLATION_USER='user'
 declare OPTION_INSTALLATION_GROUP='group'
 declare OPTION_DATABASE_VERSION='database-version'
-declare OPTION_DATABASE_NAME='database'
+declare OPTION_DATABASE_REPOSITORY='database-repository'
+declare OPTION_DATABASE_NAME='database-name'
 declare OPTION_MANAGER_VERSION='manager-version'
+declare OPTION_MANAGER_REPOSITORY='manager-repository'
 
 ##########################################################
 # Program options and function parameters default values #
 ##########################################################
 
 declare -r DEFAULT_REPOSITORY_ROOT='/mnt/MySQL/Software/Oracle'
-declare -r DEFAULT_REPOSITORY_DATABASE="${DEFAULT_REPOSITORY_ROOT}/${PRODUCT_DATABASE}"
-declare -r DEFAULT_REPOSITORY_MANAGER="${DEFAULT_REPOSITORY_ROOT}/${PRODUCT_MANAGER}"
 declare -r DEFAULT_INSTALLATION_STAGE='/mnt/MySQL/Stage'
 declare -r DEFAULT_INSTALLATION_ROOT='/u01/app'
 declare -r DEFAULT_INSTALLATION_USER='oracle'
 declare -r DEFAULT_INSTALLATION_GROUP='oinstall'
 declare -r DEFAULT_INSTALLATION_HOSTNAME=`hostname -f`
 declare -r DEFAULT_DATABASE_VERSION='19.3.0.0.0'
+declare -r DEFAULT_DATABASE_REPOSITORY="${DEFAULT_REPOSITORY_ROOT}/${PRODUCT_DATABASE}/${DEFAULT_DATABASE_VERSION}"
 declare -r DEFAULT_DATABASE_NAME='emrep'
 declare -r DEFAULT_DATABASE_PASSWORD='Abcd_1234'
 declare -r DEFAULT_DATABASE_RESPONSE='/tmp/db_install.rsp'
 declare -r DEFAULT_MANAGER_VERSION='13.5.0.0.0'
+declare -r DEFAULT_MANAGER_REPOSITORY="${DEFAULT_REPOSITORY_ROOT}/${PRODUCT_MANAGER}/${DEFAULT_MANAGER_VERSION}"
 declare -r DEFAULT_MANAGER_RESPONSE='/tmp/em_install.rsp'
 declare -r -i DEFAULT_PORT_DATABASE=1521
 declare -r -i DEFAULT_PORT_MANAGER=7803
@@ -97,11 +98,11 @@ declare -r DESCRIPTION_DATABASE_NAME="${DESCRIPTION_PRODUCT_DATABASE} name"
 declare -r DESCRIPTION_DATABASE_DATA="${DESCRIPTION_PRODUCT_DATABASE} data directory"
 declare -r DESCRIPTION_DATABASE_RECOVERY="${DESCRIPTION_PRODUCT_DATABASE} recovery directory"
 declare -r DESCRIPTION_DATABASE_RESPONSE="${DESCRIPTION_PRODUCT_DATABASE} response file"
+declare -r DESCRIPTION_MANAGER_VERSION="${DESCRIPTION_PRODUCT_MANAGER} version"
 declare -r DESCRIPTION_MANAGER_REPOSITORY="${DESCRIPTION_PRODUCT_MANAGER} software repository directory"
 declare -r DESCRIPTION_MANAGER_BASE="${DESCRIPTION_PRODUCT_MANAGER} base directory"
 declare -r DESCRIPTION_MANAGER_HOME="${DESCRIPTION_PRODUCT_MANAGER} home directory"
 declare -r DESCRIPTION_MANAGER_INSTANCE="${DESCRIPTION_PRODUCT_MANAGER} instance home directory"
-declare -r DESCRIPTION_MANAGER_VERSION="${DESCRIPTION_PRODUCT_MANAGER} version"
 declare -r DESCRIPTION_MANAGER_RESPONSE="${DESCRIPTION_PRODUCT_MANAGER} response file"
 declare -r DESCRIPTION_AGENT_BASE="${DESCRIPTION_PRODUCT_AGENT} base directory"
 declare -r DESCRIPTION_SUDOERS_FILE="${DESCRIPTION_INSTALLATION_USER} sudoers supplementary file"
@@ -292,18 +293,18 @@ echoHelp() {
   echo
   echo 'Options:'
   echoHelpOption "$OPTION_REPOSITORY_ROOT" "$DESCRIPTION_REPOSITORY_ROOT" "$DEFAULT_REPOSITORY_ROOT"
-#  echoHelpOption "$OPTION_REPOSITORY_DATABASE" "$DESCRIPTION_REPOSITORY_DATABASE" "$DEFAULT_REPOSITORY_DATABASE"
-#  echoHelpOption "$OPTION_REPOSITORY_MANAGER" "$DESCRIPTION_REPOSITORY_MANAGER" "$DEFAULT_REPOSITORY_MANAGER"
   echoHelpOption "$OPTION_INSTALLATION_ROOT" "$DESCRIPTION_INSTALLATION_ROOT" "$DEFAULT_INSTALLATION_ROOT"
   echoHelpOption "$OPTION_INSTALLATION_USER" "$DESCRIPTION_INSTALLATION_USER" "$DEFAULT_INSTALLATION_USER"
   echoHelpOption "$OPTION_INSTALLATION_GROUP" "$DESCRIPTION_INSTALLATION_GROUP" "$DEFAULT_INSTALLATION_GROUP"
   echoHelpOption "$OPTION_DATABASE_VERSION" "$DESCRIPTION_DATABASE_VERSION" "$DEFAULT_DATABASE_VERSION"
+  echoHelpOption "$OPTION_DATABASE_REPOSITORY" "$DESCRIPTION_DATABASE_REPOSITORY" "$DEFAULT_DATABASE_REPOSITORY"
   echoHelpOption "$OPTION_DATABASE_NAME" "$DESCRIPTION_DATABASE_NAME" "$DEFAULT_DATABASE_NAME"
   echoHelpOption "$OPTION_MANAGER_VERSION" "$DESCRIPTION_MANAGER_VERSION" "$DEFAULT_MANAGER_VERSION"
+  echoHelpOption "$OPTION_MANAGER_REPOSITORY" "$DESCRIPTION_MANAGER_REPOSITORY" "$DEFAULT_MANAGER_REPOSITORY"
   echo
   if [[ 1 -eq $1 ]] ; then
     echo 'Summary:'
-    echo "This program is designed for the simplified installation and uninstallation of ${DESCRIPTION_PRODUCT_DATABASE} 19c and ${DESCRIPTION_PRODUCT_MANAGER} 13cc on Oracle Linux 8.  A new database is launched during the install process for immediate use.  The installation is standardized without many options and should not be regarded as being bullet-proof."
+    echo "This program is designed for the simplified installation and uninstallation of ${DESCRIPTION_PRODUCT_DATABASE} 19c and ${DESCRIPTION_PRODUCT_MANAGER} 13cc on Oracle Linux 8.  A new database is launched during the install process for immediate use.  The installation is standardized without many options and is not designed to be bullet-proof."
     echo
     echo 'Detailed description:'
     echo "The Oracle Database software must be separately procured and unzipped in a directory that is referred by this program as the ${DESCRIPTION_DATABASE_REPOSITORY}.  The program copies the Oracle Database software from the repository to the ${DESCRIPTION_DATABASE_HOME^}, and installs it using the ${DESCRIPTION_INSTALLATION_USER} and the ${DESCRIPTION_INSTALLATION_GROUP}.  If these do not already exist on the system, the program automatically creates them.  The ${DESCRIPTION_INSTALLATION_USER} is also automatically added to the operating system list of Sudoers, if it is not already in this list.  An ${DESCRIPTION_DATABASE_RESPONSE} is generated, unless it already exists, but it is not removed upon termination of the program to allow for diagnosis.  Note that a default database password is hard-coded in cleartext in the response file.  The ${DESCRIPTION_INSTALLATION_BASE^}, as well as the ${DESCRIPTION_INSTALLATION_INVENTORY^}, are determined by the program by using the ${DESCRIPTION_INSTALLATION_ROOT} and following the guidelines of the Oracle Optimal Flexible Architecture."
@@ -527,21 +528,21 @@ traceParameter() {
 ################################################################################
 displayOptions() {
   echoTitle 'Program options'
-  echoOption "$DESCRIPTION_DATABASE_VERSION" "$DATABASE_VERSION"
-  echoOption "$DESCRIPTION_MANAGER_VERSION" "$MANAGER_VERSION"
   echoOption "$DESCRIPTION_REPOSITORY_ROOT" "$INSTALLATION_REPOSITORY"
-  echoOption "$DESCRIPTION_DATABASE_REPOSITORY" "$DATABASE_REPOSITORY"
-  echoOption "$DESCRIPTION_MANAGER_REPOSITORY" "$MANAGER_REPOSITORY"
   echoOption "$DESCRIPTION_INSTALLATION_BASE" "$INSTALLATION_BASE"
   echoOption "$DESCRIPTION_INSTALLATION_INVENTORY" "$INSTALLATION_INVENTORY"
   echoOption "$DESCRIPTION_INSTALLATION_USER" "$INSTALLATION_USER"
   echoOption "$DESCRIPTION_INSTALLATION_GROUP" "$INSTALLATION_GROUP"
   echoOption "$DESCRIPTION_INSTALLATION_HOSTNAME" "$INSTALLATION_HOSTNAME"
+  echoOption "$DESCRIPTION_DATABASE_VERSION" "$DATABASE_VERSION"
+  echoOption "$DESCRIPTION_DATABASE_REPOSITORY" "$DATABASE_REPOSITORY"
   echoOption "$DESCRIPTION_DATABASE_BASE" "$DATABASE_BASE"
   echoOption "$DESCRIPTION_DATABASE_HOME" "$DATABASE_HOME"
   echoOption "$DESCRIPTION_DATABASE_NAME" "$DATABASE_NAME"
   echoOption "$DESCRIPTION_DATABASE_DATA" "$DATABASE_DATA"
   echoOption "$DESCRIPTION_DATABASE_RECOVERY" "$DATABASE_RECOVERY"
+  echoOption "$DESCRIPTION_MANAGER_VERSION" "$MANAGER_VERSION"
+  echoOption "$DESCRIPTION_MANAGER_REPOSITORY" "$MANAGER_REPOSITORY"
   echoOption "$DESCRIPTION_MANAGER_BASE" "$MANAGER_BASE"
   echoOption "$DESCRIPTION_MANAGER_HOME" "$MANAGER_HOME"
   echoOption "$DESCRIPTION_MANAGER_INSTANCE" "$MANAGER_INSTANCE"
@@ -2115,13 +2116,15 @@ if [[ 1 -gt $# ]] ; then
   exit $?
 fi
 
-declare INSTALLATION_REPOSITORY=''
+declare REPOSITORY_ROOT=''
 declare INSTALLATION_ROOT=''
 declare INSTALLATION_USER=''
 declare INSTALLATION_GROUP=''
 declare DATABASE_VERSION=''
+declare DATABASE_REPOSITORY=''
 declare DATABASE_NAME=''
 declare MANAGER_VERSION=''
+declare MANAGER_REPOSITORY=''
 
 # Read the options.
 
@@ -2135,7 +2138,7 @@ while [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$1" ]] && [[ "${1::2}" = '--
   OptionValue="${1#*=}"
   case "$Option" in
     "$OPTION_REPOSITORY_ROOT")
-      setOption "$Option" "$OptionValue" 'INSTALLATION_REPOSITORY'
+      setOption "$Option" "$OptionValue" 'REPOSITORY_ROOT'
       ;;
     "$OPTION_INSTALLATION_ROOT")
       setOption "$Option" "$OptionValue" 'INSTALLATION_ROOT'
@@ -2149,11 +2152,17 @@ while [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$1" ]] && [[ "${1::2}" = '--
     "$OPTION_DATABASE_VERSION")
       setOption "$Option" "$OptionValue" 'DATABASE_VERSION'
       ;;
+    "$OPTION_DATABASE_REPOSITORY")
+      setOption "$Option" "$OptionValue" 'DATABASE_REPOSITORY'
+      ;;
     "$OPTION_DATABASE_NAME")
       setOption "$Option" "$OptionValue" 'DATABASE_NAME'
       ;;
     "$OPTION_MANAGER_VERSION")
       setOption "$Option" "$OptionValue" 'MANAGER_VERSION'
+      ;;
+    "$OPTION_MANAGER_REPOSITORY")
+      setOption "$Option" "$OptionValue" 'MANAGER_REPOSITORY'
       ;;
     *)
       echoError $RETCODE_PARAMETER_ERROR "Unknown parameter: ${1}"
