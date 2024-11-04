@@ -31,6 +31,26 @@ declare -r PRODUCT_AGENT='emagent'
 declare -r DESCRIPTION_PRODUCT_DATABASE='Oracle Database'
 declare -r DESCRIPTION_PRODUCT_MANAGER='Oracle Enterprise Manager'
 declare -r DESCRIPTION_PRODUCT_AGENT="${DESCRIPTION_PRODUCT_MANAGER} Agent"
+declare -r -a PRODUCTS=(
+  "$PRODUCT_DATABASE"
+  "$PRODUCT_MANAGER"
+  "$PRODUCT_AGENT"
+)
+declare -i PRODUCT_MAXIMUM_LENGTH=0
+declare Option
+for Option in ${PRODUCTS[@]} ; do
+  if [[ ${#Option} -gt $PRODUCT_MAXIMUM_LENGTH ]] ; then
+    PRODUCT_MAXIMUM_LENGTH=${#Option}
+  fi
+done
+unset Option
+declare -r -i PRODUCT_MAXIMUM_LENGTH
+
+declare -r -A PRODUCT_DESCRIPTIONS=(
+  ["$PRODUCT_DATABASE"]='Oracle Database'
+  ["$PRODUCT_MANAGER"]='Oracle Enterprise Manager'
+  ["$PRODUCT_AGENT"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} agent"
+)
 
 ####################
 # Program commands #
@@ -38,11 +58,13 @@ declare -r DESCRIPTION_PRODUCT_AGENT="${DESCRIPTION_PRODUCT_MANAGER} Agent"
 
 declare -r COMMAND_HELP='help'
 declare -r COMMAND_OPTIONS='options'
+declare -r COMMAND_PREPARE='prepare'
 declare -r COMMAND_INSTALL='install'
 declare -r COMMAND_UNINSTALL='uninstall'
 declare -r -a COMMANDS=(
   "$COMMAND_HELP"
   "$COMMAND_OPTIONS"
+  "$COMMAND_PREPARE"
   "$COMMAND_INSTALL"
   "$COMMAND_UNINSTALL"
 )
@@ -58,10 +80,11 @@ unset Option
 declare -r -i COMMAND_MAXIMUM_LENGTH
 
 declare -r -A COMMAND_DESCRIPTIONS=(
-  ["$COMMAND_HELP"]='Display the program help'
-  ["$COMMAND_OPTIONS"]='Display the program parameters'
-  ["$COMMAND_INSTALL"]="Install the ${DESCRIPTION_PRODUCT_DATABASE} and ${DESCRIPTION_PRODUCT_MANAGER}"
-  ["$COMMAND_UNINSTALL"]="Uninstall the ${DESCRIPTION_PRODUCT_DATABASE} and ${DESCRIPTION_PRODUCT_MANAGER}"
+  ["$COMMAND_HELP"]='display the program help'
+  ["$COMMAND_OPTIONS"]='display the program parameters'
+  ["$COMMAND_PREPARE"]='prepare the system to install the Oracle products'
+  ["$COMMAND_INSTALL"]="prepare the system and install the Oracle products"
+  ["$COMMAND_UNINSTALL"]="uninstall the Oracle products"
 )
 
 ###################
@@ -72,6 +95,7 @@ declare -r OPTION_PREFIX='--'
 declare -r OPTION_UNKNOWN='Unknown'
 declare -r OPTION_FILE='options-file'
 declare -r OPTION_REPOSITORY_ROOT='repository'
+declare -r OPTION_REPOSITORY_ARCHIVE='archive'
 declare -r OPTION_INSTALLATION_STAGE='stage'
 declare -r OPTION_INSTALLATION_ROOT='installation-root'
 declare -r OPTION_INSTALLATION_INVENTORY='installation-inventory'
@@ -82,6 +106,9 @@ declare -r OPTION_INSTALLATION_GROUP='group'
 declare -r OPTION_INSTALLATION_HOSTNAME='hostname'
 declare -r OPTION_DATABASE_VERSION='database-version'
 declare -r OPTION_DATABASE_REPOSITORY='database-repository'
+declare -r OPTION_DATABASE_PACKAGE_FILE_NAME='database-package'
+declare -r OPTION_DATABASE_OPATCH_FILE_NAME='database-opatch'
+declare -r OPTION_DATABASE_PATCH_FILE_NAME='database-patch'
 declare -r OPTION_DATABASE_RESPONSE_FILE_NAME='database-response-file-name'
 declare -r OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS='database-response-file-permissions'
 declare -r OPTION_DATABASE_BASE='database-base'
@@ -90,6 +117,7 @@ declare -r OPTION_DATABASE_DATA='database-data'
 declare -r OPTION_DATABASE_RECOVERY='database-recovery'
 declare -r OPTION_DATABASE_NAME='database-name'
 declare -r OPTION_DATABASE_PORT='database-port'
+declare -r OPTION_DATABASE_ADMINISTRATOR_GROUP='dba-group'
 declare -r OPTION_DATABASE_PASSWORD='database-password'
 declare -r OPTION_MANAGER_VERSION='manager-version'
 declare -r OPTION_MANAGER_REPOSITORY='manager-repository'
@@ -113,6 +141,10 @@ declare -r OPTION_SUDOERS_FILE_PERMISSIONS='sudoers-file-permissions'
 declare -r OPTION_SWAP_GOAL='swap-goal'
 declare -r OPTION_SWAP_FILE_NAME='swap-file-name'
 declare -r OPTION_SWAP_FILE_PERMISSIONS='swap-file-permissions'
+declare -r OPTION_SYSCTL_FILE_NAME='sysctl-file-name'
+declare -r OPTION_SYSCTL_FILE_PERMISSIONS='sysctl-file-permissions'
+declare -r OPTION_LIMITS_FILE_NAME='limits-file-name'
+declare -r OPTION_LIMITS_FILE_PERMISSIONS='limits-file-permissions'
 declare -r OPTION_CONTROLLER_FILE_NAME='controller-file-name'
 declare -r OPTION_CONTROLLER_FILE_PERMISSIONS='controller-file-permissions'
 declare -r OPTION_SYSTEMD_SERVICE='systemd-service'
@@ -124,6 +156,7 @@ declare -r OPTION_SYSTEMD_FILE_PERMISSIONS='systemd-file-permissions'
 declare -r -a OPTIONS=(
   "$OPTION_FILE"
   "$OPTION_REPOSITORY_ROOT"
+  "$OPTION_REPOSITORY_ARCHIVE"
   "$OPTION_INSTALLATION_STAGE"
   "$OPTION_INSTALLATION_ROOT"
   "$OPTION_INSTALLATION_INVENTORY"
@@ -134,6 +167,9 @@ declare -r -a OPTIONS=(
   "$OPTION_INSTALLATION_HOSTNAME"
   "$OPTION_DATABASE_VERSION"
   "$OPTION_DATABASE_REPOSITORY"
+  "$OPTION_DATABASE_PACKAGE_FILE_NAME"
+  "$OPTION_DATABASE_OPATCH_FILE_NAME"
+  "$OPTION_DATABASE_PATCH_FILE_NAME"
   "$OPTION_DATABASE_RESPONSE_FILE_NAME"
   "$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS"
   "$OPTION_DATABASE_BASE"
@@ -142,6 +178,7 @@ declare -r -a OPTIONS=(
   "$OPTION_DATABASE_RECOVERY"
   "$OPTION_DATABASE_NAME"
   "$OPTION_DATABASE_PORT"
+  "$OPTION_DATABASE_ADMINISTRATOR_GROUP"
   "$OPTION_DATABASE_PASSWORD"
   "$OPTION_MANAGER_VERSION"
   "$OPTION_MANAGER_REPOSITORY"
@@ -165,6 +202,10 @@ declare -r -a OPTIONS=(
   "$OPTION_SWAP_GOAL"
   "$OPTION_SWAP_FILE_NAME"
   "$OPTION_SWAP_FILE_PERMISSIONS"
+  "$OPTION_SYSCTL_FILE_NAME"
+  "$OPTION_SYSCTL_FILE_PERMISSIONS"
+  "$OPTION_LIMITS_FILE_NAME"
+  "$OPTION_LIMITS_FILE_PERMISSIONS"
   "$OPTION_CONTROLLER_FILE_NAME"
   "$OPTION_CONTROLLER_FILE_PERMISSIONS"
   "$OPTION_SYSTEMD_SERVICE"
@@ -186,6 +227,9 @@ declare -i HELP_PADDING_LENGTH=$((OPTION_MAXIMUM_LENGTH + ${#OPTION_PREFIX}))
 if [[ $COMMAND_MAXIMUM_LENGTH -gt $HELP_PADDING_LENGTH ]] ; then
   HELP_PADDING_LENGTH=$COMMAND_MAXIMUM_LENGTH
 fi
+if [[ $PRODUCT_MAXIMUM_LENGTH -gt $HELP_PADDING_LENGTH ]] ; then
+  HELP_PADDING_LENGTH=$PRODUCT_MAXIMUM_LENGTH
+fi
 declare -r -i HELP_PADDING_LENGTH
 
 # Option sources
@@ -205,6 +249,7 @@ declare -r -a OPTION_SOURCE_NAMES=(
 declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_FILE"]=$OPTION_SOURCE_COMMAND
   ["$OPTION_REPOSITORY_ROOT"]=$OPTION_SOURCE_ALL
+  ["$OPTION_REPOSITORY_ARCHIVE"]=$OPTION_SOURCE_ALL
   ["$OPTION_INSTALLATION_STAGE"]=$OPTION_SOURCE_ALL
   ["$OPTION_INSTALLATION_ROOT"]=$OPTION_SOURCE_ALL
   ["$OPTION_INSTALLATION_INVENTORY"]=$OPTION_SOURCE_PROGRAM
@@ -215,6 +260,9 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_INSTALLATION_HOSTNAME"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_DATABASE_VERSION"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_REPOSITORY"]=$OPTION_SOURCE_ALL
+  ["$OPTION_DATABASE_PACKAGE_FILE_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_DATABASE_OPATCH_FILE_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_DATABASE_PATCH_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_RESPONSE_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_BASE"]=$OPTION_SOURCE_PROGRAM
@@ -223,6 +271,7 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_DATABASE_RECOVERY"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_PORT"]=$OPTION_SOURCE_ALL
+  ["$OPTION_DATABASE_ADMINISTRATOR_GROUP"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_MANAGER_VERSION"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_REPOSITORY"]=$OPTION_SOURCE_ALL
@@ -241,43 +290,48 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_AGENT_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_WEBLOGIC_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_WEBLOGIC_PASSWORD"]=$OPTION_SOURCE_FILE
-  ["$OPTION_SUDOERS_FILE_NAME"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_SUDOERS_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_SUDOERS_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
-  ["$OPTION_SWAP_GOAL"]=$OPTION_SOURCE_ALL
-  ["$OPTION_SWAP_FILE_NAME"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_SWAP_GOAL"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_SWAP_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_SWAP_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
-  ["$OPTION_CONTROLLER_FILE_NAME"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_SYSCTL_FILE_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_SYSCTL_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_LIMITS_FILE_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_LIMITS_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_CONTROLLER_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_CONTROLLER_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
-  ["$OPTION_SYSTEMD_SERVICE"]=$OPTION_SOURCE_PROGRAM
-  ["$OPTION_SYSTEMD_FILE_NAME"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_SYSTEMD_SERVICE"]=$OPTION_SOURCE_ALL
+  ["$OPTION_SYSTEMD_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_SYSTEMD_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
 )
 
 # Option default values
 
-declare -r DEFAULT_REPOSITORY_ROOT='/mnt/MySQL/Software/Oracle'
-declare -r DEFAULT_DATABASE_VERSION='19.3.0.0.0'
-declare -r DEFAULT_MANAGER_VERSION='13.5.0.0.0'
 declare -r DEFAULT_PASSWORD='Abcd_1234'
-declare -r DEFAULT_SYSTEMD_SERVICE='dbora.service'
 
 declare -r -A OPTION_DEFAULT_VALUES=(
-  ["$OPTION_REPOSITORY_ROOT"]="$DEFAULT_REPOSITORY_ROOT"
+  ["$OPTION_REPOSITORY_ROOT"]='/mnt/MySQL/Software'
+  ["$OPTION_REPOSITORY_ARCHIVE"]="${OPTION_DEFAULT_VALUES[${OPTION_REPOSITORY_ROOT}]}/archive"
   ["$OPTION_INSTALLATION_STAGE"]='/mnt/MySQL/Stage'
   ["$OPTION_INSTALLATION_ROOT"]='/u01/app'
   ["$OPTION_INSTALLATION_FILE_PERMISSIONS"]='755'
   ["$OPTION_INSTALLATION_USER"]='oracle'
   ["$OPTION_INSTALLATION_GROUP"]='oinstall'
   ["$OPTION_INSTALLATION_HOSTNAME"]=`hostname -f`
-  ["$OPTION_DATABASE_VERSION"]="$DEFAULT_DATABASE_VERSION"
-  ["$OPTION_DATABASE_REPOSITORY"]="${DEFAULT_REPOSITORY_ROOT}/${PRODUCT_DATABASE}/${DEFAULT_DATABASE_VERSION}"
+  ["$OPTION_DATABASE_VERSION"]='19.3.0.0.0'
+  ["$OPTION_DATABASE_REPOSITORY"]="${OPTION_DEFAULT_VALUES[${OPTION_REPOSITORY_ROOT}]}/Oracle/${PRODUCT_DATABASE}/${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_VERSION}]}"
+  ["$OPTION_DATABASE_PACKAGE_FILE_NAME"]='V982063-01.zip'
+  ["$OPTION_DATABASE_OPATCH_FILE_NAME"]='p6880880_190000_Linux-x86-64.zip'
+  ["$OPTION_DATABASE_PATCH_FILE_NAME"]='p35943157_190000_Linux-x86-64.zip'
   ["$OPTION_DATABASE_RESPONSE_FILE_NAME"]='/tmp/db_install.rsp'
   ["$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS"]='640'
   ["$OPTION_DATABASE_NAME"]='emrep'
   ["$OPTION_DATABASE_PORT"]='1521'
+  ["$OPTION_DATABASE_ADMINISTRATOR_GROUP"]='dba'
   ["$OPTION_DATABASE_PASSWORD"]="$DEFAULT_PASSWORD"
-  ["$OPTION_MANAGER_VERSION"]="$DEFAULT_MANAGER_VERSION"
-  ["$OPTION_MANAGER_REPOSITORY"]="${DEFAULT_REPOSITORY_ROOT}/${PRODUCT_MANAGER}/${DEFAULT_MANAGER_VERSION}"
+  ["$OPTION_MANAGER_VERSION"]='13.5.0.0.0'
+  ["$OPTION_MANAGER_REPOSITORY"]="${OPTION_DEFAULT_VALUES[${OPTION_REPOSITORY_ROOT}]}/Oracle/${PRODUCT_MANAGER}/${OPTION_DEFAULT_VALUES[${OPTION_MANAGER_VERSION}]}"
   ["$OPTION_MANAGER_RESPONSE_FILE_NAME"]='/tmp/em_install.rsp'
   ["$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS"]='640'
   ["$OPTION_MANAGER_PORT"]='7803'
@@ -292,40 +346,54 @@ declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_SWAP_GOAL"]=16
   ["$OPTION_SWAP_FILE_NAME"]='/.swapfile_oem'
   ["$OPTION_SWAP_FILE_PERMISSIONS"]='600'
+  ["$OPTION_SYSCTL_FILE_NAME"]='/etc/sysctl.d/98-oracle.conf'
+  ["$OPTION_SYSCTL_FILE_PERMISSIONS"]='644'
+  ["$OPTION_LIMITS_FILE_NAME"]='/etc/security/limits.d/oracle-database-preinstall-19c.conf'
+  ["$OPTION_LIMITS_FILE_PERMISSIONS"]='644'
   ["$OPTION_CONTROLLER_FILE_NAME"]='servicectl.sh'
   ["$OPTION_CONTROLLER_FILE_PERMISSIONS"]='740'
-  ["$OPTION_SYSTEMD_SERVICE"]="$DEFAULT_SYSTEMD_SERVICE"
-  ["$OPTION_SYSTEMD_FILE_NAME"]="/lib/systemd/system/${DEFAULT_SYSTEMD_SERVICE}"
+  ["$OPTION_SYSTEMD_SERVICE"]='dbora.service'
+  ["$OPTION_SYSTEMD_FILE_NAME"]="/lib/systemd/system/${OPTION_DEFAULT_VALUES[${OPTION_SYSTEMD_SERVICE}]}"
   ["$OPTION_SYSTEMD_FILE_PERMISSIONS"]='644'
 )
 
 # Option descriptions
 
-declare -r DESCRIPTION_DATABASE_RESPONSE_FILE="${DESCRIPTION_PRODUCT_DATABASE} installation response file"
-declare -r DESCRIPTION_MANAGER_RESPONSE_FILE="${DESCRIPTION_PRODUCT_MANAGER} installation response file"
-declare -r OPTION_MANAGER_KEYSTORE_FILE="name of the ${DESCRIPTION_PRODUCT_AGENT} key store file"
-declare -r OPTION_MANAGER_TRUSTSTORE_FILE="name of the ${DESCRIPTION_PRODUCT_AGENT} trust store file"
-declare -r DESCRIPTION_SUDOERS_FILE="installation user sudoers supplementary file"
+declare -r DESCRIPTION_SUDOERS_FILE="installation system user sudoers definition file"
 declare -r DESCRIPTION_SWAP='system swap'
 declare -r DESCRIPTION_SWAP_FILE="additional file for the ${DESCRIPTION_SWAP}"
+declare -r DESCRIPTION_SYSCTL="Systemctl settings for the ${DESCRIPTION_PRODUCT_DATABASE}"
+declare -r DESCRIPTION_SYSCTL_FILE="definition file for the ${DESCRIPTION_SYSCTL}"
+declare -r DESCRIPTION_LIMITS="system limits settings for the ${DESCRIPTION_PRODUCT_DATABASE}"
+declare -r DESCRIPTION_LIMITS_FILE="definition file for the ${DESCRIPTION_LIMITS}"
 declare -r DESCRIPTION_CONTROLLER='service controller for the Oracle products'
 declare -r DESCRIPTION_CONTROLLER_FILE="program file for ${DESCRIPTION_CONTROLLER}"
 declare -r DESCRIPTION_SYSTEMD_SERVICE='Systemd service for the Oracle products'
 declare -r DESCRIPTION_SYSTEMD_SERVICE_FILE="definition file for the ${DESCRIPTION_SYSTEMD_SERVICE}"
+declare -r DESCRIPTION_DATABASE_RESPONSE_FILE="${DESCRIPTION_PRODUCT_DATABASE} installation response file"
+declare -r DESCRIPTION_MANAGER_RESPONSE_FILE="${DESCRIPTION_PRODUCT_MANAGER} installation response file"
+declare -r DESCRIPTION_MANAGER_KEYSTORE="${DESCRIPTION_PRODUCT_MANAGER} key store"
+declare -r DESCRIPTION_MANAGER_KEYSTORE_FILE="${DESCRIPTION_MANAGER_KEYSTORE} file"
+declare -r DESCRIPTION_MANAGER_TRUSTSTORE="${DESCRIPTION_PRODUCT_MANAGER} trust store"
+declare -r DESCRIPTION_MANAGER_TRUSTSTORE_FILE="${DESCRIPTION_MANAGER_TRUSTSTORE} file"
 
 declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_FILE"]='optional file that contains options to override the default option values of this program'
   ["$OPTION_REPOSITORY_ROOT"]='Oracle software repository root directory'
+  ["$OPTION_REPOSITORY_ARCHIVE"]='directory that contains the Oracle software packages zip files'
   ["$OPTION_INSTALLATION_ROOT"]='Oracle installation root directory'
   ["$OPTION_INSTALLATION_STAGE"]='staging (de-)installation directory'
   ["$OPTION_INSTALLATION_INVENTORY"]='Oracle inventory directory'
   ["$OPTION_INSTALLATION_FILE_PERMISSIONS"]='file permissions of the Oracle installation'
   ["$OPTION_INSTALLATION_BASE"]='Oracle installation base directory'
-  ["$OPTION_INSTALLATION_USER"]='installation user'
-  ["$OPTION_INSTALLATION_GROUP"]='installation group'
+  ["$OPTION_INSTALLATION_USER"]='installation system user'
+  ["$OPTION_INSTALLATION_GROUP"]='installation system group'
   ["$OPTION_INSTALLATION_HOSTNAME"]='host name'
   ["$OPTION_DATABASE_VERSION"]="${DESCRIPTION_PRODUCT_DATABASE} version"
   ["$OPTION_DATABASE_REPOSITORY"]="${DESCRIPTION_PRODUCT_DATABASE} software repository directory"
+  ["$OPTION_DATABASE_PACKAGE_FILE_NAME"]="name of the ${DESCRIPTION_PRODUCT_DATABASE} software package zip file"
+  ["$OPTION_DATABASE_OPATCH_FILE_NAME"]="name of the ${DESCRIPTION_PRODUCT_DATABASE} OPatch utility update zip file"
+  ["$OPTION_DATABASE_PATCH_FILE_NAME"]="name of the ${DESCRIPTION_PRODUCT_DATABASE} patch update zip file to apply"
   ["$OPTION_DATABASE_RESPONSE_FILE_NAME"]="name of the ${DESCRIPTION_DATABASE_RESPONSE_FILE}"
   ["$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS"]="file permissions on the ${DESCRIPTION_DATABASE_RESPONSE_FILE}"
   ["$OPTION_DATABASE_BASE"]="${DESCRIPTION_PRODUCT_DATABASE} base directory"
@@ -334,6 +402,7 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_DATABASE_RECOVERY"]="${DESCRIPTION_PRODUCT_DATABASE} recovery directory"
   ["$OPTION_DATABASE_NAME"]="${DESCRIPTION_PRODUCT_DATABASE} name"
   ["$OPTION_DATABASE_PORT"]="${DESCRIPTION_PRODUCT_DATABASE} listener network port"
+  ["$OPTION_DATABASE_ADMINISTRATOR_GROUP"]="${DESCRIPTION_PRODUCT_DATABASE} administrator system group"
   ["$OPTION_DATABASE_PASSWORD"]="${DESCRIPTION_PRODUCT_DATABASE} sys account password"
   ["$OPTION_MANAGER_VERSION"]="${DESCRIPTION_PRODUCT_MANAGER} version"
   ["$OPTION_MANAGER_REPOSITORY"]="${DESCRIPTION_PRODUCT_MANAGER} software repository directory"
@@ -357,6 +426,10 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_SWAP_GOAL"]="desired size of the ${DESCRIPTION_SWAP}"
   ["$OPTION_SWAP_FILE_NAME"]="name of the ${DESCRIPTION_SWAP_FILE}"
   ["$OPTION_SWAP_FILE_PERMISSIONS"]="file permissions of the ${DESCRIPTION_SWAP_FILE}"
+  ["$OPTION_SYSCTL_FILE_NAME"]="name of the ${DESCRIPTION_SYSCTL_FILE}"
+  ["$OPTION_SYSCTL_FILE_PERMISSIONS"]="file permissions on the ${DESCRIPTION_SYSCTL_FILE}"
+  ["$OPTION_LIMITS_FILE_NAME"]="name of the ${DESCRIPTION_LIMITS_FILE}"
+  ["$OPTION_LIMITS_FILE_PERMISSIONS"]="file permissions on the ${DESCRIPTION_LIMITS_FILE}"
   ["$OPTION_CONTROLLER_FILE_NAME"]="name of the ${DESCRIPTION_CONTROLLER_FILE}"
   ["$OPTION_CONTROLLER_FILE_PERMISSIONS"]="file permissions on the ${DESCRIPTION_CONTROLLER_FILE}"
   ["$OPTION_SYSTEMD_SERVICE"]="name of the $DESCRIPTION_SYSTEMD_SERVICE"
@@ -451,7 +524,7 @@ echoCommandMessage() {
   local -r Parameter="${2:-}"
   if [[ -n "$Message" ]] ; then
     if [[ -n "$Parameter" ]] ; then
-      echo "...${Message^}: " "'${Parameter}'"
+      echo "...${Message^}:" "'${Parameter}'"
     else
       echo "...${Message^}"
     fi
@@ -508,60 +581,43 @@ echoError() {
 }
 
 ################################################################################
-## @fn echoHelpCommand
+## @fn echoHelpItem
 ##
-## @brief Echo the description of a program command formatted for the help
-##        command.
+## @brief Echo the description of a program help item command formatted for the
+##        help command.
 ##
-## @param[in] Command The program command.
+## @param[in] _Descriptions The array of descriptions relative to the item.
+## @param[in] Item          The program item for which to echo the help
+##                          description.
+## @param[in] Prefix        An optional prefix to use for the item.
+## @param[in] SourceName    An optional source name for the item.
+## @param[in] DefaultValue  An optional default value for the item.
 ##
 ## @return RETCODE_SUCCESS
 ################################################################################
-echoHelpCommand() {
-  local -r Command="${1:-}"
-  local -r Description="${COMMAND_DESCRIPTIONS[${Command}]}"
-  if [[ -n "$Command" ]] ; then
-    local -r -i Padding=$(($HELP_PADDING_LENGTH - ${#Command}))
+echoHelpItem() {
+  local -n _Descriptions="$1"
+  local -r Item="${2:-}"
+  local -r Description="${_Descriptions[${Item}]}"
+  local -r Prefix="${3:-}"
+  local -r SourceName="${4:-}"
+  local -r DefaultValue="${5:-}"
+  if [[ -n "$Item" ]] ; then
+    local -r -i Padding=$(($HELP_PADDING_LENGTH - ${#Item} - ${#Prefix}))
     printf ' %.0s' $(seq 1 $HELP_INDENT_LENGTH)
-    printf '%s: ' "$Command"
+    printf '%s%s: ' "$Prefix" "$Item"
     if [[ 0 -lt $Padding ]] ; then
       printf ' %.0s' $(seq 1 $Padding)
     fi
     printf '%s' "${Description^}"
-    echo
-  fi
-  return $RETCODE_SUCCESS
-}
-
-################################################################################
-## @fn echoHelpOption
-##
-## @brief Echo the description of a program option formatted for the help
-##        command.
-##
-## @param[in] Option The program option.
-##
-## @return RETCODE_SUCCESS
-################################################################################
-echoHelpOption() {
-  local -r Option="${1:-}"
-  local -r Description="${OPTION_DESCRIPTIONS[${Option}]}"
-  local -r SourceName=$(echoSourceName ${OPTION_SOURCES[${Option}]})
-  local -r Default="${OPTION_DEFAULT_VALUES[${Option}]}"
-  if [[ -n "$Option" ]] ; then
-    local -r -i Padding=$(($HELP_PADDING_LENGTH - ${#Option} - ${#OPTION_PREFIX}))
-    printf ' %.0s' $(seq 1 $HELP_INDENT_LENGTH)
-    printf '%s%s: ' "$OPTION_PREFIX" "$Option"
-    if [[ 0 -lt $Padding ]] ; then
-      printf ' %.0s' $(seq 1 $Padding)
-    fi
-    printf '%s' "${Description^}"
-    if [[ -n "$SourceName" ]] && [[ -n "$Default" ]] ; then
-      printf ' (source: %s; default=%s)' "$SourceName" "$Default"
-    elif [[ -n "$SourceName" ]] ; then
-      printf ' (source: %s)' "$SourceName"
-    elif [[ -n "$Default" ]] ; then
-      printf ' (default=%s)' "$Default"
+    if [[ -n "$SourceName" ]] || [[ -n "$Default" ]] ; then
+      if [[ -n "$SourceName" ]] && [[ -n "$Default" ]] ; then
+        printf ' (source: %s; default=%s)' "$SourceName" "$Default"
+      elif [[ -n "$SourceName" ]] ; then
+        printf ' (source: %s)' "$SourceName"
+      elif [[ -n "$Default" ]] ; then
+        printf ' (default=%s)' "$Default"
+      fi
     fi
     echo
   fi
@@ -574,26 +630,30 @@ echoHelpOption() {
 ## @brief Echo the program help.
 ##
 ## @param[in] bComplete Whether to display the complete help or only the usage
-##                      portion (0: Usage only, 1: Complete help)
+##                      portion (FALSE: Usage only, TRUE: Complete help)
 ##
 ## @return RETCODE_SUCCESS
 ################################################################################
 echoHelp() {
   local -r -i bComplete=${1:-$VALUE_FALSE}
-  echo "Usage: ${PROGRAM} [options...] < ${COMMAND_HELP} | ${COMMAND_OPTIONS} | ${COMMAND_INSTALL} | ${COMMAND_UNINSTALL} >"
+  local Item
+  echo "Usage: ${PROGRAM} [options...] < Command > [ Product ]"
   echo "A utility script to install and uninstall the ${DESCRIPTION_PRODUCT_DATABASE} and the ${DESCRIPTION_PRODUCT_MANAGER}."
   echo
   echo 'Commands:'
-  local Command
-  for Command in "${COMMANDS[@]}" ; do
-    echoHelpCommand "$Command"
+  for Item in "${COMMANDS[@]}" ; do
+    echoHelpItem 'COMMAND_DESCRIPTIONS' "$Item"
+  done
+  echo
+  echo "Products (only for the commands ${COMMAND_INSTALL} and ${COMMAND_UNINSTALL}):"
+  for Item in "${PRODUCTS[@]}" ; do
+    echoHelpItem 'PRODUCT_DESCRIPTIONS' "$Item"
   done
   echo
   echo 'Options:'
-  local Option=''
-  for Option in "${OPTIONS[@]}" ; do
-    if [[ $((OPTION_SOURCE_COMMAND & ${OPTION_SOURCES[$Option]})) -eq $OPTION_SOURCE_COMMAND ]] ; then
-      echoHelpOption "$Option"
+  for Item in "${OPTIONS[@]}" ; do
+    if [[ $((OPTION_SOURCE_COMMAND & ${OPTION_SOURCES[$Item]})) -eq $OPTION_SOURCE_COMMAND ]] ; then
+      echoHelpItem 'OPTION_DESCRIPTIONS' "$Item" "$OPTION_PREFIX" "$(echoSourceName ${OPTION_SOURCES[${Item}]})" "${OPTION_DEFAULT_VALUES[${Item}]}"
     fi
   done
   echo
@@ -739,6 +799,27 @@ echoTitle() {
 executeCommand() {
   echoCommand $@
   $@
+  return $?
+}
+
+################################################################################
+## @fn executeCommand2
+##
+## @brief Echo a shell command and its parameters, and execute it and capture
+##        its output into a provided variable.
+##
+## @param[out] Output The name of a variable in which to store the output of the
+##                    of the command.
+## @param[in] ...     The command and its parameters.
+##
+## @return The exit code of the command.
+################################################################################
+executeCommand2() {
+  local DummyOutput=''
+  local -n _Output="${1:-DummyOutput}"
+  shift
+  echoCommand $@
+  _Output="$($@)"
   return $?
 }
 
@@ -934,9 +1015,11 @@ processOptionsFile() {
 ## @param[out] Message     A message when an error has occurred during the
 ##                         function execution.
 ## @param[out] Value       The name of the variable in which to store the value
-##                         of the program option.
+##                         of the program option.  The variable is marked as
+##                         read-only when the function succeeds.
 ## @param[out] Description The optional name of the variable in which to store
-##                         the description of the program option.
+##                         the description of the program option.  The variable
+##                         is marked as read-only when the function succeeds.
 ##
 ## @return The value of the parameter Retcode if it denotes an error, or
 ##         RETCODE_INTERNAL_ERROR if the value of the parameter is empty, or
@@ -951,8 +1034,8 @@ retrieveOption() {
   local -n _RetrieveValues="$3"
   local -r Option="${4:-${OPTION_UNKNOWN}}"
   local -n _RetrieveMessage="${5:-MessageDummy}"
-  local -n Value="${6:-ValueDummy}"
-  local -n Description="${7:-DescriptionDummy}"
+  local -n _Value="${6:-ValueDummy}"
+  local -n _Description="${7:-DescriptionDummy}"
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
     return $Retcode
   elif [[ -z "$Option" ]] || [[ "$OPTION_UNKNOWN" == "$Option" ]] ; then
@@ -960,14 +1043,18 @@ retrieveOption() {
     Retcode=$?
   else
     local -i Source="${_RetrieveSources[${Option}]}"
-    Value="${_RetrieveValues[${Option}]}"
-    Description="${OPTION_DESCRIPTIONS[${Option}]}"
-    if [[ -z "$Value" ]] ; then
+    _Value="${_RetrieveValues[${Option}]}"
+    _Description="${OPTION_DESCRIPTIONS[${Option}]}"
+    if [[ -z "$_Value" ]] ; then
       _RetrieveMessage=$(echoError $RETCODE_INTERNAL_ERROR 'value not provided for option' "$Option")
       Retcode=$?
-    elif [[ $ECHO_TRACE ]] ; then
-      echoOption "$Option" "${Description^}: $Value" $Source 'TRACE'
-      Retcode=$?
+    else
+      if [[ $ECHO_TRACE ]] ; then
+        echoOption "$Option" "${_Description^}: $_Value" $Source 'TRACE'
+        Retcode=$?
+      fi
+      readonly _Value
+      readonly _Description
     fi
   fi
   return $Retcode
@@ -1007,11 +1094,11 @@ displayOptions() {
 ##
 ## @li Generation of a response file for the automated installation of the
 ##     Oracle Database.
-## @li Copy of the Oracle Database software to the Oracle Home directory.
-## @li Modification of the installation requirements to allow Oracle Linux 8
-##     and higher.
+## @li Unzip of of the Oracle Database software to the Oracle Home directory.
+## @li Unzip of of the Oracle OPatch utility update, if provided, to the Oracle
+##     Homedirectory.
 ## @li Installation of the Oracle Database by running the Oracle installer
-##     program runInstaller.
+##     program runInstaller and apply a databae update patch, if provided.
 ## @li Execution of the orainstRoot.sh and root.sh scripts.
 ## @li Configuration of the networking information by executing the Oracle
 ##     installer program runInstaller with the option -executeConfigTools.
@@ -1025,10 +1112,15 @@ displayOptions() {
 ################################################################################
 installDatabase() {
   local Message=''
+  local Archive                         DescriptionArchive
+  local InstallationStage               DescriptionInstallationStage
   local InstallationInventory           DescriptionInstallationInventory
   local User                            DescriptionUser
   local Group                           DescriptionGroup
   local DatabaseRepository              DescriptionDatabaseRepository
+  local DatabasePackageFileName         DescriptionDatabasePackageFileName
+  local DatabaseOPatchFileName          DescriptionDatabaseOPatchFileName
+  local DatabasePatchFileName           DescriptionDatabasePatchFileName
   local DatabaseResponseFileName        DescriptionDatabaseResponseFileName
   local DatabaseResponseFilePermissions DescriptionDatabaseResponseFilePermissions
   local DatabaseBase                    DescriptionDatabaseBase
@@ -1039,11 +1131,15 @@ installDatabase() {
   local DatabasePassword                DescriptionDatabasePassword
   local SystemdService                  DescriptionSystemdService
   echoTitle "Installing the ${DESCRIPTION_PRODUCT_DATABASE}"
+  retrieveOption $? "$1" "$2" "$OPTION_REPOSITORY_ARCHIVE"                 'Message' 'Archive'                         'DescriptionArchive'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGE"                 'Message' 'InstallationStage'               'DescriptionInstallationStage'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"             'Message' 'InstallationInventory'           'DescriptionInstallationInventory'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                  'Message' 'User'                            'DescriptionUser'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                 'Message' 'Group'                           'DescriptionGroup'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_REPOSITORY"                'Message' 'DatabaseRepository'              'DescriptionDatabaseRepository'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RESPONSE_FILE_NAME"        'Message' 'DatabaseResponseFileName'        'DescriptionDatabaseResponseFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PACKAGE_FILE_NAME"         'Message' 'DatabasePackageFileName'         'DescriptionDatabasePackageFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_OPATCH_FILE_NAME"          'Message' 'DatabaseOPatchFileName'          'DescriptionDatabaseOPatchFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PATCH_FILE_NAME"           'Message' 'DatabasePatchFileName'           'DescriptionDatabasePatchFileName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RESPONSE_FILE_NAME"        'Message' 'DatabaseResponseFileName'        'DescriptionDatabaseResponseFileName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS" 'Message' 'DatabaseResponseFilePermissions' 'DescriptionDatabaseResponseFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_BASE"                      'Message' 'DatabaseBase'                    'DescriptionDatabaseBase'
@@ -1054,19 +1150,17 @@ installDatabase() {
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"                  'Message' 'DatabasePassword'                'DescriptionDatabasePassword'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"                    'Message' 'SystemdService'                  'DescriptionSystemdService'
   local -i Retcode=$?
-  local -r InstallationInventory           DescriptionInstallationInventory
-  local -r User                            DescriptionUser
-  local -r Group                           DescriptionGroup
-  local -r DatabaseRepository              DescriptionDatabaseRepository
-  local -r DatabaseResponseFileName        DescriptionDatabaseResponseFileName
-  local -r DatabaseResponseFilePermissions DescriptionDatabaseResponseFilePermissions
-  local -r DatabaseBase                    DescriptionDatabaseBase
-  local -r DatabaseHome                    DescriptionDatabaseHome
-  local -r DatabaseData                    DescriptionDatabaseData
-  local -r DatabaseRecovery                DescriptionDatabaseRecovery
-  local -r DatabaseName                    DescriptionDatabaseName
-  local -r DatabasePassword                DescriptionDatabasePassword
-  local -r SystemdService                  DescriptionSystemdService
+  local -r PackageFile="${Archive}/${DatabasePackageFileName}"
+  local -r DescriptionPackageFile="${DESCRIPTION_PRODUCT_DATABASE} software package file"
+  local -r OPatchHome="${DatabaseHome}/OPatch"
+  local -r DescriptionOPatchHome="${DESCRIPTION_PRODUCT_DATABASE} OPatch update utility directory"
+  local -r OPatchFile="${Archive}/${DatabaseOPatchFileName}"
+  local -r DescriptionOPatchFile="${DESCRIPTION_PRODUCT_DATABASE} OPatch utility update file"
+  local -r PatchHome="${InstallationStage}/database-patch"
+  local -r DescriptionPatchHome="${DESCRIPTION_PRODUCT_DATABASE} patch update staging directory"
+  local -r PatchFile="${Archive}/${DatabasePatchFileName}"
+  local -r DescriptionPatchFile="${DESCRIPTION_PRODUCT_DATABASE} patch update file"
+  local -r PatchNumber=$(basename "${PatchFile}" | sed -r 's/p([0-9]*)_.*/\1/g')
   local -r InventoryInstaller="${InstallationInventory}/orainstRoot.sh"
   local -r DescriptionInventoryInstaller='Oracle Inventory root installer program'
   local -r DatabaseInstaller="${DatabaseHome}/runInstaller"
@@ -1075,30 +1169,30 @@ installDatabase() {
   local -r DescriptionDatabaseRootInstaller="${DESCRIPTION_PRODUCT_DATABASE} root installer program"
   local -r Requirements="${DatabaseHome}/cv/admin/cvu_config"
   local -r Marker1="${DatabaseHome}/INSTALLATION_MARKER_1"
+  local -r Marker1a="${DatabaseHome}/INSTALLATION_MARKER_1a"
   local -r Marker2="${DatabaseHome}/INSTALLATION_MARKER_2"
   local -r Marker3="${DatabaseHome}/INSTALLATION_MARKER_3"
   local -r Marker4="${DatabaseHome}/INSTALLATION_MARKER_4"
   local -r Marker5="${DatabaseHome}/INSTALLATION_MARKER_5"
   local -r Marker6="${DatabaseHome}/INSTALLATION_MARKER_6"
   local -r Marker7="${DatabaseHome}/INSTALLATION_MARKER_7"
-  local -i bCreated=$VALUE_FALSE
+  local -i bResponseCreated=$VALUE_FALSE
+  local -i bPatchCreated=$VALUE_FALSE
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
     echo "$Message"
     return $Retcode
   fi
 
-return $Retcode
-
-  ##
-  ## Generation of the Oracle Database automated installation response file.
-  ##
+  ###########################################################################
+  # Generation of the Oracle Database automated installation response file. #
+  ###########################################################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "Generation of the ${DESCRIPTION_DATABASE_RESPONSE_FILE}"
   fi
 
-  # Generate the response file.
+  ### Generate the response file. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$DatabaseResponseFileName"
@@ -1142,11 +1236,11 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     processCommandCode $? "the ${DESCRIPTION_DATABASE_RESPONSE_FILE} was not created" "$DatabaseResponseFileName"
     Retcode=$?
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      bCreated=$VALUE_TRUE
+      bResponseCreated=$VALUE_TRUE
     fi
   fi
 
-  # Restrict the file permissions of the response file.
+  ### Restrict the file permissions of the response file. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' 'chmod' ${DatabaseResponseFilePermissions} "$DatabaseResponseFileName"
@@ -1154,7 +1248,7 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     Retcode=$?
   fi
 
-  # Validate that the response file is accessible by the installation user.
+  ### Validate that the response file is accessible by the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$DatabaseResponseFileName"
@@ -1162,28 +1256,15 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     Retcode=$?
   fi
 
-  ##
-  ## Copy the Oracle Database software.
-  ##
+  ######################################
+  # Copy the Oracle Database software. #
+  ######################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "Copying of the ${DESCRIPTION_PRODUCT_DATABASE} software"
   fi
 
-  # Change the current working directory to the Oracle Database software repository.
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if [[ ! -d "$DatabaseRepository" ]] || [[ ! -r "$DatabaseRepository" ]] ; then
-      echoError $RETCODE_OPERATION_ERROR "the ${DescriptionDatabaseRepository} does not exist or is inaccessible" "$DatabaseRepository"
-    else
-      echoCommand 'cd' "$DatabaseRepository"
-      cd "$DatabaseRepository"
-      processCommandCode $? 'failed to change the current working directory to' "$DatabaseRepository"
-    fi
-    Retcode=$?
-  fi
-
-  # Validate that the Oracle Database home directory can be written.
+  ### Validate that the Oracle Database home directory can be written. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$DatabaseHome"
@@ -1197,37 +1278,97 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     Retcode=$?
   fi
 
-  # Copy the Oracle Database software.
+  ### Unzip the Oracle Database software package to the Oracle Database home directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker1"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} software is already copied" "$DatabaseHome"
+      echoCommandMessage "the ${DescriptionPackageFile} ('${DatabasePackageFileName}') is already unzipped" "$DatabaseHome"
       Retcode=$?
     else
-      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} software is not already copied" "$DatabaseHome"
-      echoCommand 'tar' 'cf' '-' '.' '|' "(cd ${DatabaseHome} ; sudo -u ${User} '-g' "$Group" tar xf -)"
-      tar cf - . | (cd "$DatabaseHome" ; sudo -u "$User" '-g' "$Group" tar xf -)
-      processCommandCode $? "failed to copy the ${DESCRIPTION_PRODUCT_DATABASE} files using the user '${User}:${Group}' from '${DatabaseRepository}' to '${DatabaseHome}'"
+      echoCommandMessage "the ${DescriptionPackageFile} ('${DatabasePackageFileName}') is not already unzipped" "$DatabaseHome"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$PackageFile"
+      processCommandCode $? "the ${DescriptionPackageFile} does not exist or is inaccessible" "$PackageFile"
       Retcode=$?
-      # Create indicator that the software has been copied.
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker1"
-        processCommandCode $? 'failed to create the installation marker file' "$Marker1"
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$DatabaseHome" "$PackageFile"
+        processCommandCode $? "failed to unzip the ${DescriptionPackageFile} (${PackageFile}) using the user '${User}:${Group}' to '${DatabaseHome}'"
         Retcode=$?
+        # Create indicator that the Oracle Database software has been unzipped.
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker1"
+          processCommandCode $? 'failed to create the installation marker file' "$Marker1"
+          Retcode=$?
+        fi
       fi
     fi
   fi
 
-  ##
-  ## Installation of the Oracle Database.
-  ##
+  ### Unzip the Oracle Database OPatch utility update to the Oracle Database home directory. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$DatabaseOPatchFileName" ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker1a"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DescriptionOPatchFile} ('${DatabaseOPatchFileName}') is already unzipped" "$OPatchHome"
+      Retcode=$?
+    else
+      echoCommandMessage "the ${DescriptionOPatchFile} ('${DatabaseOPatchFileName}') is not already unzipped" "$OPatchHome"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$OPatchFile"
+      processCommandCode $? "the ${DescriptionOPatchFile} does not exist or is inaccessible" "$OPatchFile"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mv' "$OPatchHome" "${OPatchHome}-original"
+        processCommandCode $? "failed to move the original ${DescriptionOPatchHome} (${OPatchHome})" "${OPatchHome}-original"
+        Retcode=$?
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$DatabaseHome" "$OPatchFile"
+          processCommandCode $? "failed to unzip the ${DescriptionOPatchFile} (${OPatchFile}) using the user '${User}:${Group}' to '${DatabaseHome}'"
+          Retcode=$?
+          # Create indicator that the OPatch utility update has been copied.
+          if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+            executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker1a"
+            processCommandCode $? 'failed to create the installation marker file' "$Marker1a"
+            Retcode=$?
+          fi
+        fi
+      fi
+    fi
+  fi
+
+  ### Unzip the Oracle Database patch update to the staging directory. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$DatabasePatchFileName" ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "${PatchHome}/${PatchNumber}/README.txt"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DescriptionPatchFile} ('${DatabasePatchFileName}') is already unzipped" "${PatchHome}/${PatchNumber}"
+      Retcode=$?
+    else
+      echoCommandMessage "the ${DescriptionPatchFile} ('${DatabasePatchFileName}') is not already unzipped" "${PatchHome}/${PatchNumber}"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$PatchFile"
+      processCommandCode $? "the ${DescriptionPatchFile} does not exist or is inaccessible" "$PatchFile"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$PatchHome" "$PatchFile"
+        processCommandCode $? "failed to unzip the ${DescriptionPatchFile} (${PatchFile}) using the user '${User}:${Group}' to '${PatchFile}'"
+        Retcode=$?
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          bPatchCreated=$VALUE_TRUE
+        fi
+      fi
+    fi
+  fi
+
+return $Retcode
+
+  ########################################
+  # Installation of the Oracle Database. #
+  ########################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "Installation of the ${DESCRIPTION_PRODUCT_DATABASE}"
   fi
 
-  # Change the current working directory to the Oracle Database home directory.
+  ### Change the current working directory to the Oracle Database home directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     if [[ ! -d "$DatabaseHome" ]] || [[ ! -x "$DatabaseHome" ]] ; then
@@ -1240,7 +1381,7 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     Retcode=$?
   fi
 
-  # Export the ORACLE_HOME environment variable.
+  ### Export the ORACLE_HOME environment variable. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoCommand 'export' "ORACLE_HOME=${DatabaseHome}"
@@ -1249,7 +1390,7 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     Retcode=$?
   fi
 
-  # Export the CV_ASSUME_DISTID environment variable to enable installing on Oracle Linux 8 and 9.
+  ### Export the CV_ASSUME_DISTID environment variable to enable installing on Oracle Linux 8 and 9. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local -r CV_ASSUME_DISTID_VALUE='OEL8'
@@ -1259,36 +1400,36 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     Retcode=$?
   fi
 
-  # Install the Oracle Database.
+  ### Install the Oracle Database. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker2"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is already installed" "$DatabaseHome"
-      Retcode=$?
-    else
-      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is not already installed" "$DatabaseHome"
-      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$DatabaseResponseFileName"
-      processCommandCode $? "an error occurred when running the ${DescriptionDatabaseInstaller}" "$DatabaseInstaller"
-      Retcode=$?
-      # Create indicator that the software has been installed.
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker2"
-        processCommandCode $? 'failed to create the installation marker file' "$Marker2"
-        Retcode=$?
-      fi
-    fi
-  fi
+#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+#    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker2"
+#    if [[ 0 -eq $? ]] ; then
+#      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is already installed" "$DatabaseHome"
+#      Retcode=$?
+#    else
+#      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is not already installed" "$DatabaseHome"
+#      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$DatabaseResponseFileName"
+#      processCommandCode $? "an error occurred when running the ${DescriptionDatabaseInstaller}" "$DatabaseInstaller"
+#      Retcode=$?
+#      # Create indicator that the software has been installed.
+#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+#        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker2"
+#        processCommandCode $? 'failed to create the installation marker file' "$Marker2"
+#        Retcode=$?
+#      fi
+#    fi
+#  fi
 
-  ##
-  ## Perform the post-installation steps
-  ##
+  #######################################
+  # Perform the post-installation steps #
+  #######################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "Post-installation steps"
   fi
 
-  # Run the Oracle inventory root installer program, if it exists, using the installation user.
+  ### Run the Oracle inventory root installer program, if it exists, using the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker3"
@@ -1317,7 +1458,7 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     fi
   fi
 
-  # Run the Oracle Database root installer program using the installation user.
+  ### Run the Oracle Database root installer program using the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker4"
@@ -1343,30 +1484,30 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     fi
   fi
 
-  # Configure the Oracle Database network settings using the installation user.
+  ### Configure the Oracle Database network settings using the installation user. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker5"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the network information of the ${DESCRIPTION_PRODUCT_DATABASE} is already configured"
-      Retcode=$?
-    else
-      echoCommandMessage "the network information of the ${DESCRIPTION_PRODUCT_DATABASE} is not configured"
-      executeCommand 'sudo' '-E' '-u' "$User" "$DatabaseInstaller" '-executeConfigTools' '-silent' '-responseFile' "$DatabaseResponseFileName"
-      processCommandCode $? "an error occurred when running the ${DescriptionDatabaseInstaller}" "${DatabaseInstaller} -executeConfigTools"
-      Retcode=$?
-      # Create indicator that the network information of the Oracle Database has been configured.
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker5"
-        processCommandCode $? 'failed to create the installation marker file' "$Marker5"
-        Retcode=$?
-      fi
-    fi
-  fi
+#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+#    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker5"
+#    if [[ 0 -eq $? ]] ; then
+#      echoCommandMessage "the network information of the ${DESCRIPTION_PRODUCT_DATABASE} is already configured"
+#      Retcode=$?
+#    else
+#      echoCommandMessage "the network information of the ${DESCRIPTION_PRODUCT_DATABASE} is not configured"
+#      executeCommand 'sudo' '-E' '-u' "$User" "$DatabaseInstaller" '-executeConfigTools' '-silent' '-responseFile' "$DatabaseResponseFileName"
+#      processCommandCode $? "an error occurred when running the ${DescriptionDatabaseInstaller}" "${DatabaseInstaller} -executeConfigTools"
+#      Retcode=$?
+#      # Create indicator that the network information of the Oracle Database has been configured.
+#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+#        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker5"
+#        processCommandCode $? 'failed to create the installation marker file' "$Marker5"
+#        Retcode=$?
+#      fi
+#    fi
+#  fi
 
-  # Delete the Oracle Database automated installation response file.
+  ### Delete the Oracle Database automated installation response file. ###
 
-  if [[ $VALUE_TRUE -eq $bCreated ]] ; then
+  if [[ $VALUE_TRUE -eq $bResponseCreated ]] ; then
     executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-f' "$DatabaseResponseFileName"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${DESCRIPTION_DATABASE_RESPONSE_FILE} will be deleted" "$DatabaseResponseFileName"
@@ -1377,7 +1518,20 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     fi
   fi
 
-  # Modify the oratab file to enable the automatic start and shutdown of the database with dbstart and sbshut.
+  ### Delete the Oracle Database patch update staging directory. ###
+
+  if [[ $VALUE_TRUE -eq $bPatchCreated ]] ; then
+    executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-d' "$PatchHome"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DescriptionPatchHome} will be deleted" "$PatchHome"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'rm' '-rf' "$PatchHome"
+      processCommandCode $? "failed to the delete the ${DescriptionPatchHome}" "$PatchHome"
+    else
+      echoCommandMessage "the ${DescriptionPatchHome} does not exist" "$PatchHome"
+    fi
+  fi
+
+  ### Modify the oratab file to enable the automatic start and shutdown of the database with dbstart and dbshut. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker6"
@@ -1404,6 +1558,8 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
       fi
     fi
   fi
+
+return $Retcode
 
   ##
   ## Configuration of the Oracle Database.
@@ -1838,7 +1994,9 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
 ## @li Creation of the installation operating system group and user.
 ## @li Addition of the installation user to the list of the system sudoers.
 ## @li Installation of the system libraries.
-## @li Adjustment of the system memory cache.
+## @li Adjustment of the system swap.
+## @li Configuration of Systctl.
+## @li Configuration of the system limits.
 ## @li Creation of the Oracle products installation directories. 
 ## @li Creation of the Systemd service for the Oracle Database.
 ##
@@ -1846,20 +2004,26 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
 ################################################################################
 prepareInstallation() {
   local Message=''
+  local Capture=''
   local InstallationInventory     DescriptionInstallationInventory
   local InstallationBase          DescriptionInstallationBase
   local InstallationPermissions   DescriptionInstallationPermissions
+  local User                      DescriptionUser
+  local Group                     DescriptionGroup
   local DatabaseHome              DescriptionDatabaseHome
+  local DBAGroup                  DescriptionDBAGroup
   local ManagerHome               DescriptionManagerHome
   local ManagerInstance           DescriptionManagerInstance
   local AgentBase                 DescriptionAgentBase
-  local User                      DescriptionUser
-  local Group                     DescriptionGroup
   local SudoersFileName           DescriptionSudoersFileName
   local SudoersFilePermissions    DescriptionSudoersFilePermissions
   local SwapGoal                  DescriptionSwapGoal
   local SwapFileName              DescriptionSwapFileName
   local SwapFilePermissions       DescriptionSwapFilePermissions
+  local SysctlFileName            DescriptionSysctlFileName
+  local SysctlFilePermissions     DescriptionSysctlFilePermissions
+  local LimitsFileName            DescriptionLimitsFileName
+  local LimitsFilePermissions     DescriptionLimitsFilePermissions
   local ControlLerFileName        DescriptionControllerFileName
   local ControlLerFilePermissions DescriptionControllerFilePermissions
   local SystemdService            DescriptionSystemdService
@@ -1869,99 +2033,122 @@ prepareInstallation() {
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"        'Message' 'InstallationInventory'     'DescriptionInstallationInventory'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_BASE"             'Message' 'InstallationBase'          'DescriptionInstallationBase'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_FILE_PERMISSIONS" 'Message' 'InstallationPermissions'   'DescriptionInstallationPermissions'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"             'Message' 'User'                      'DescriptionUser'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"            'Message' 'Group'                     'DescriptionGroup'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"                 'Message' 'DatabaseHome'              'DescriptionDatabaseHome'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP"  'Message' 'DBAGroup'                  'DescriptionDBAGroup'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"                  'Message' 'ManagerHome'               'DescriptionManagerHome'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE"              'Message' 'ManagerInstance'           'DescriptionManagerInstance'
   retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"                    'Message' 'AgentBase'                 'DescriptionAgentBase'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"             'Message' 'User'                      'DescriptionUser'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"            'Message' 'Group'                     'DescriptionGroup'
   retrieveOption $? "$1" "$2" "$OPTION_SUDOERS_FILE_NAME"             'Message' 'SudoersFileName'           'DescriptionSudoersFileName'
   retrieveOption $? "$1" "$2" "$OPTION_SUDOERS_FILE_PERMISSIONS"      'Message' 'SudoersFilePermissions'    'DescriptionSudoersFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_SWAP_GOAL"                     'Message' 'SwapGoal'                  'DescriptionSwapGoal'
   retrieveOption $? "$1" "$2" "$OPTION_SWAP_FILE_NAME"                'Message' 'SwapFileName'              'DescriptionSwapFileName'
   retrieveOption $? "$1" "$2" "$OPTION_SWAP_FILE_PERMISSIONS"         'Message' 'SwapFilePermissions'       'DescriptionSwapFilePermissions'
+  retrieveOption $? "$1" "$2" "$OPTION_SYSCTL_FILE_NAME"              'Message' 'SysctlFileName'            'DescriptionSysctlFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_SYSCTL_FILE_PERMISSIONS"       'Message' 'SysctlFilePermissions'     'DescriptionSysctlFilePermissions'
+  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_FILE_NAME"              'Message' 'LimitsFileName'            'DescriptionLimitsFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_FILE_PERMISSIONS"       'Message' 'LimitsFilePermissions'     'DescriptionLimitsFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_CONTROLLER_FILE_NAME"          'Message' 'ControllerFileName'        'DescriptionControllerFileName'
   retrieveOption $? "$1" "$2" "$OPTION_CONTROLLER_FILE_PERMISSIONS"   'Message' 'ControllerFilePermissions' 'DescriptionControllerFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"               'Message' 'SystemdService'            'DescriptionSystemdService'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_FILE_NAME"             'Message' 'SystemdFileName'           'DescriptionSystemdFileName'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_FILE_PERMISSIONS"      'Message' 'SystemdFilePermissions'    'DescriptionSystemdFilePermissions'
   local -i Retcode=$?
-  local -r InstallationInventory     DescriptionInstallationInventory
-  local -r InstallationBase          DescriptionInstallationBase
-  local -r InstallationPermissions   DescriptionInstallationPermissions
-  local -r DatabaseHome              DescriptionDatabaseHome
-  local -r ManagerHome               DescriptionManagerHome
-  local -r ManagerInstance           DescriptionManagerInstance
-  local -r AgentBase                 DescriptionAgentBase
-  local -r User                      DescriptionUser
-  local -r Group                     DescriptionGroup
-  local -r SudoersFileName           DescriptionSudoersFileName
-  local -r SudoersFilePermissions    DescriptionSudoersFilePermissions
-  local -r SwapGoal                  DescriptionSwapGoal
-  local -r SwapFileName              DescriptionSwapFileName
-  local -r SwapFilePermissions       DescriptionSwapFilePermissions
-  local -r ControllerFileName        DescriptionControllerFileName
-  local -r ControllerFilePermissions DescriptionControllerFilePermissions
-  local -r SystemdService            DescriptionSystemdService
-  local -r SystemdFileName           DescriptionSystemdFileName
-  local -r SystemdFilePermissions    DescriptionSystemdFilePermissions
 
-return $Retcode
-
-  ##
-  ## Creation of the operating system user and group.
-  ##
+  #####################################################
+  # Creation of the operating system user and groups. #
+  #####################################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "Creation of the operating system user and group: ${User}:${Group}"
   fi
 
-  # Create the installation group.
+  ### Create the installation group. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'getent' 'group' "$Group"
+    executeCommand2 'Capture' 'sudo' 'getent' 'group' "$Group"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionGroup} already exists" "$Group"
+      echoCommandMessage "the ${DescriptionGroup} already exists" "$Group" "$Capture"
     else
-      echoCommandMessage "the ${DescriptionGroup} does not exist" "$Group"
-      executeCommand 'sudo' '/usr/sbin/groupadd' "$Group"
-      processCommandCode $? "failed to create the ${DescriptionGroup}" "$Group"
+      echoCommandMessage "the ${DescriptionGroup} does not exist" "$Group" "$Capture"
+      executeCommand2 'Capture' 'sudo' '/usr/sbin/groupadd' '-g' '54321' "$Group"
+      processCommandCode $? "failed to create the ${DescriptionGroup}" "$Group" "$Capture"
     fi
     Retcode=$?
   fi
 
-  # Create the installation user.
+  ### Create the database administrator group. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand2 'Capture' 'sudo' 'getent' 'group' "$DBAGroup"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DescriptionDBAGroup} already exists" "$DBAGroup" "$Capture"
+    else
+      echoCommandMessage "the ${DescriptionDBAGroup} does not exist" "$DBAGroup" "$Capture"
+      executeCommand2 'Capture' 'sudo' '/usr/sbin/groupadd' '-g' '54322' "$DBAGroup"
+      processCommandCode $? "failed to create the ${DescriptionDBAGroup}" "$DBAGroup" "$Capture"
+    fi
+    Retcode=$?
+  fi
+
+  ### Create the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local Output1=''
     local Output2=''
     echoCommand 'id' "$User"
-    Output1=`id "$User"`
-    Retcode=$?
-    echoCommandMessage "returned ${Retcode}"
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      echoInfo "the ${DescriptionUser} already exists" "$User"
+    Output1=$(id "$User")
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DescriptionUser} already exists" "$User"
       echoCommand 'echo' "$Output1" '|' 'awk' "-F ' ' '{ print \$2 }'" '|' 'awk' "-F '(' '{ print \$2 }'" '|' 'tr' "-d' ')'"
       Output2=$(echo "$Output1" | awk -F ' ' '{ print $2 }' | awk -F '(' '{ print $2 }' | tr -d ')')
-      processCommandCode $? "failed to validate group membership of ${DescriptionUser}" "$User"
+      processCommandCode $? "failed to validate group membership of the ${DescriptionUser}" "$User"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         if [[ "$Group" == "$Output2" ]] ; then
-          echoInfo "Group of ${DescriptionUser} is the ${DescriptionGroup}" "${User}:${Group}"
+          echoInfo "the primary group of the ${DescriptionUser} '${User}' is the ${DescriptionGroup}" "$Group"
         else
-          echoError $RETCODE_OPERATION_ERROR "Group of ${DescriptionUser} is not ${DescriptionGroup}" "${User}:${Group}"
+          echoError $RETCODE_OPERATION_ERROR "the primary group of the ${DescriptionUser} '${User}' is not the ${DescriptionGroup}" "$Group" "$Output2"
         fi
         Retcode=$?
       fi
     else
       echoCommandMessage "the ${DescriptionUser} does not exist" "$User"
-      executeCommand 'sudo' '/usr/sbin/useradd' '-g' "$Group" '–s' '/usr/sbin/nologin' "$User"
-      processCommandCode $? "failed to create the ${DescriptionUser}" "${User}:${Group}"
+      executeCommand2 'Capture' 'sudo' '/usr/sbin/useradd' '-u' '54321' '-g' "$Group" '–s' '/usr/sbin/nologin' "$User"
+      processCommandCode $? "failed to create the ${DescriptionUser}" "${User}:${Group}" "$Capture"
       Retcode=$?
     fi
   fi
 
-  # Retrieve the home directory of the installation user.
+  ### Confirm that the installation user is member of the database administrator group. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    local Output3=''
+    local Output4=''
+    echoCommand 'sudo' 'getent' 'group' "$DBAGroup"
+    Output3=$(sudo getent 'group' "$DBAGroup")
+    processCommandCode $? "the ${DescriptionDBAGroup} does not exist" "$DBAGroup"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      echoCommand 'echo' "$Output3" '|' 'awk' '-F' ':' '{ print $4}'
+      Output4=$(echo "$Output3" | awk -F ':' '{ print $4}')
+      if [[ 0 -eq $? ]] || [[ "$DBAGroup" == "$Output4" ]] ; then
+        echoCommandMessage "the ${DescriptionUser} '${User}' is already a member of the ${DescriptionDBAGroup}" "$DBAGroup"
+      else
+        echoCommandMessage "the ${DescriptionUser} '${User}' is not a member of the ${DescriptionDBAGroup}" "$DBAGroup" "$Output4"
+        executeCommand2 'Capture' 'sudo' 'usermod' '-a' '-G' "$DBAGroup" "$User"
+        if [[ 0 -eq $? ]] ; then
+          echoSuccess
+        else
+          echoInfo "failed to add the ${DescriptionUser} '${User}' to the ${DescriptionDBAGroup}" "$DBAGroup" "$Capture"
+        fi
+      fi
+      Retcode=$?
+    fi
+  fi
+
+  ### Retrieve the home directory of the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local -r UserHome="$(getent 'passwd' ${User} | cut '-d:' '-f6')"
@@ -1969,21 +2156,21 @@ return $Retcode
       echoError $RETCODE_PARAMETER_ERROR "failed to determine the home directory of the ${DescriptionUser}" "$User"
       Retcode=$?
     else
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$UserHome"
+      executeCommand2 'Capture' 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$UserHome"
       processCommandCode $? "failed to access the home directory of the ${DescriptionUser} (${User})" "$UserHome"
       Retcode=$?
     fi
   fi
 
-  # Add the installation user to the operating systems's list of sudoers.
+  ### Add the installation user to the operating systems's list of sudoers. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'test' '-r' "$SudoersFileName"
+    executeCommand2 'Capture' 'sudo' 'test' '-r' "$SudoersFileName"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_SUDOERS_FILE} already exists" "$SudoersFileName"
+      echoCommandMessage "the ${DESCRIPTION_SUDOERS_FILE} already exists" "$SudoersFileName" "$Capture"
       Retcode=$?
     else
-      echoCommandMessage "the ${DESCRIPTION_SUDOERS_FILE} does not exist" "$SudoersFileName"
+      echoCommandMessage "the ${DESCRIPTION_SUDOERS_FILE} does not exist" "$SudoersFileName" "$Capture"
       echoCommand 'sudo' "cat > ${SudoersFileName} <<EOF ... EOF"
       echo "cat > '${SudoersFileName}' <<EOF
 # Created by ${PROGRAM} on $(date)
@@ -2001,7 +2188,7 @@ EOF" | sudo 'sh'
     fi
   fi
 
-  # Validate that the installation user sudoers supplementary file exists.
+  ### Validate that the installation user sudoers supplementary file exists. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' 'test' '-f' "$SudoersFileName"
@@ -2009,15 +2196,15 @@ EOF" | sudo 'sh'
     Retcode=$?
   fi
 
-  ##
-  ## Installation of the required system libraries.
-  ##
+  ##################################################
+  # Installation of the required system libraries. #
+  ##################################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection 'Installation of the required system libraries'
   fi
 
-  # Install pre-requisite system libraries.
+  ### Install pre-requisite system libraries. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' 'yum' '-y' 'install' 'libnsl'
@@ -2025,13 +2212,15 @@ EOF" | sudo 'sh'
     Retcode=$?
   fi
 
-  ##
-  ## Adjustment of the system swap to have at least 16GB.
-  ##
+  #D######################################################
+  # Adjustment of the system swap to have at least 16GB. #
+  ########################################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "Adjustment of the ${DESCRIPTION_SWAP} for at least ${SwapGoal}GB"
   fi
+
+  ### Add an extra system swap file, if needed. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local SwapString=''
@@ -2099,15 +2288,102 @@ EOF" | sudo 'sh'
     fi
   fi
 
-  ##
-  ## Creation of the installation directories for the Oracle products.
-  ##
+  #################################################################
+  # Configuration of the Sysctl settings for the Oracle Database. #
+  #################################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "Configuration of the ${DESCRIPTION_SYSCTL}"
+  fi
+
+  ### Create and activate the Systctl settings for the Oracle Database. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' 'root' '-g' 'root' 'test' '-f' "$SysctlFileName"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DESCRIPTION_SYSCTL_FILE} already exists" "$SysctlFileName"
+    else
+      echoCommandMessage "the ${DESCRIPTION_SYSCTL_FILE} does not exist" "$SysctlFileName"
+      echoCommand 'sudo' '-u' 'root' '-g' 'root' "cat > '${SysctlFileName}' <<EOF ... EOF"
+      echo "cat > '${SysctlFileName}' <<EOF
+# Created by ${PROGRAM} on $(date)
+fs.file-max = 6815744
+kernel.sem = 250 32000 100 128
+kernel.shmmni = 4096
+kernel.shmall = 1073741824
+kernel.shmmax = 4398046511104
+kernel.panic_on_oops = 1
+net.core.rmem_default = 262144
+net.core.rmem_max = 4194304
+net.core.wmem_default = 262144
+net.core.wmem_max = 1048576
+net.ipv4.conf.all.rp_filter = 2
+net.ipv4.conf.default.rp_filter = 2
+fs.aio-max-nr = 1048576
+net.ipv4.ip_local_port_range = 9000 65500
+EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
+      processCommandCode $? "failed to create the ${DESCRIPTION_SYSCTL_FILE}" "$SysctlFileName"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' 'chmod' "$SysctlFilePermissions" "$SysctlFileName"
+        processCommandCode $? "failed to restrict the ${DescriptionSysctlFilePermissions} to '${SysctlFilePermissions}'" "$SysctlFileName"
+        Retcode=$?
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand2 'Capture' 'sudo' '/sbin/sysctl' '-p' "$SysctlFileName"
+          processCommandCode $? "failed to activate ${DESCRIPTION_SYSCT_FILE}" "$SysctlFileName" "$Capture"
+          Retcode=$?
+        fi
+      fi
+    fi
+  fi
+
+  ##########################################################################################
+  # Configuration of the limits settings for the installation user of the Oracle Database. #
+  ##########################################################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "Configuration of the ${DESCRIPTION_LIMITS}"
+  fi
+
+  ### Create the limits settings for the installation user of the Oracle Database. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' 'root' '-g' 'root' 'test' '-f' "$LimitsFileName"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DESCRIPTION_LIMITS_FILE} already exists" "$LimitsFileName"
+    else
+      echoCommandMessage "the ${DESCRIPTION_LIMITS_FILE} does not exist" "$LimitsFileName"
+      echoCommand 'sudo' '-u' 'root' '-g' 'root' "cat > '${LimitsFileName}' <<EOF ... EOF"
+      echo "cat > '${LimitsFileName}' <<EOF
+# Created by ${PROGRAM} on $(date)
+${User} soft nofile  1024
+${User} hard nofile  65536
+${User} soft nproc   16384
+${User} hard nproc   16384
+${User} soft stack   10240
+${User} hard stack   32768
+${User} hard memlock 134217728
+${User} soft memlock 134217728
+EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
+      processCommandCode $? "failed to create the ${DESCRIPTION_LIMITS_FILE}" "$LimitsFileName"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' 'chmod' "$LimitsFilePermissions" "$LimitsFileName"
+        processCommandCode $? "failed to restrict the ${DescriptionLimitsFilePermissions} to '${LimitsFilePermissions}'" "$LimitsFileName"
+        Retcode=$?
+      fi
+    fi
+  fi
+
+  #####################################################################
+  # Creation of the installation directories for the Oracle products. #
+  #####################################################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection 'Creation of the installation directories for the Oracle products'
   fi
 
-  # Create the installation inventory directory.
+  ### Create the installation inventory directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$InstallationInventory"
@@ -2127,7 +2403,7 @@ EOF" | sudo 'sh'
     fi
   fi
 
-  # Create the installation base directory.
+  ### Create the installation base directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$InstallationBase"
@@ -2147,7 +2423,7 @@ EOF" | sudo 'sh'
     fi
   fi
 
-  # Create the Oracle Database home directory.
+  ### Create the Oracle Database home directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$DatabaseHome"
@@ -2161,7 +2437,7 @@ EOF" | sudo 'sh'
     Retcode=$?
   fi
 
-  # Create the Oracle Enterprise Manager home directory.
+  ### Create the Oracle Enterprise Manager home directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$ManagerHome"
@@ -2175,7 +2451,7 @@ EOF" | sudo 'sh'
     Retcode=$?
   fi
 
-  # Create the Oracle Enterprise Manager instance home directory.
+  ### Create the Oracle Enterprise Manager instance home directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$ManagerInstance"
@@ -2189,7 +2465,7 @@ EOF" | sudo 'sh'
     Retcode=$?
   fi
 
-  # Create the Oracle Enterprise Manager agent base directory.
+  ### Create the Oracle Enterprise Manager agent base directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$AgentBase"
@@ -2203,15 +2479,15 @@ EOF" | sudo 'sh'
     Retcode=$?
   fi
 
-  ##
-  ## Create the Systemd service for the Oracle Database.
-  ##
+  #######################################################
+  # Create the Systemd service for the Oracle Database. #
+  #######################################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "Creation of the ${DESCRIPTION_SYSTEMD_SERVICE}"
   fi
 
-  # Create the Oracle Database service control program.
+  ### Create the Oracle Database service control program. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local -r ControllerFile="${UserHome}/${ControllerFileName}"
@@ -2219,7 +2495,7 @@ EOF" | sudo 'sh'
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${DESCRIPTION_CONTROLLER_FILE} already exists and will be overwritten" "$ControllerFile"
     else
-      echoCommandMessage "the ${DESCRIPTION_CONTROLLER_FILE} already exists" "$ControllerFile"
+      echoCommandMessage "the ${DESCRIPTION_CONTROLLER_FILE} does not exist or is inaccessible" "$ControllerFile"
     fi
     echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat > '${ControllerFile}' <<EOF ... EOF"
     echo '-e' "cat > '${ControllerFile}' <<EOF
@@ -2344,7 +2620,7 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     fi
   fi
 
-  # Create the Systemd service file for Oracle Database.
+  ### Create the Systemd service file for Oracle Database. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' 'root' '-g' 'root' 'test' '-f' "$SystemdFileName"
@@ -2429,7 +2705,15 @@ uninstallDatabase() {
   local DatabaseResponseFileName=''
   local -r DescriptionDatabaseResponseFileName="${DESCRIPTION_PRODUCT_DATABASE} de-installation response file"
 
-  # Validate that the Oracle Database is installed in the provided home directory. #
+  ###########################################################
+  # Preparation for de-installation of the Oracle Database. #
+  ###########################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "Preparation for de-installation of the ${DESCRIPTION_PRODUCT_DATABASE}"
+  fi
+
+  ### Validate that the Oracle Database is installed in the provided home directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' 'test' '-d' "$DatabaseHome"
@@ -2442,7 +2726,7 @@ uninstallDatabase() {
     fi
   fi
 
-  # Validate that the Oracle Database de-installer is present and usable by the installation user. #
+  ### Validate that the Oracle Database de-installer is present and usable by the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-x' "$DatabaseDeinstaller"
@@ -2450,7 +2734,7 @@ uninstallDatabase() {
     Retcode=$?
   fi
 
-  # Export the CV_ASSUME_DISTID environment variable to enable de-installation of the Oracle databse. #
+  ### Export the CV_ASSUME_DISTID environment variable to enable de-installation of the Oracle databse. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local -r CV_ASSUME_DISTID_VALUE='OL7'
@@ -2460,7 +2744,7 @@ uninstallDatabase() {
     Retcode=$?
   fi
 
-  # Generate the automated uninstallation response file. #
+  ### Generate the automated uninstallation response file. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local Line=''
@@ -2491,7 +2775,7 @@ uninstallDatabase() {
     Retcode=$?
   fi
 
-  # Validate that the automated uninstallation response file is present and accessible to the installation user. #
+  ### Validate that the automated uninstallation response file is present and accessible to the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'test' '-r' "$DatabaseResponseFileName"
@@ -2499,9 +2783,15 @@ uninstallDatabase() {
     Retcode=$?
   fi
 
-return $Retcode
+  ###########################################
+  # De-installation of the Oracle Database. #
+  ###########################################
 
-  # Uninstall the Oracle Database software. #
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "De-installation of the ${DESCRIPTION_PRODUCT_DATABASE}"
+  fi
+
+  ### Uninstall the Oracle Database software. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$DatabaseDeinstaller" '-silent' '-paramfile' "$DatabaseResponseFileName"
@@ -2653,7 +2943,11 @@ done
 
 if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
   if [[ 1 -le $# ]] ; then
-    if [[ "$COMMAND_HELP" == "$1" ]] ||  [[ "$COMMAND_OPTIONS" == "$1" ]] || [[ "$COMMAND_INSTALL" == "$1" ]] || [[ "$COMMAND_UNINSTALL" == "$1" ]] ; then
+    if [[ "$COMMAND_HELP" == "$1" ]] || \
+       [[ "$COMMAND_OPTIONS" == "$1" ]] || \
+       [[ "$COMMAND_PREPARE" == "$1" ]] || \
+       [[ "$COMMAND_INSTALL" == "$1" ]] || \
+       [[ "$COMMAND_UNINSTALL" == "$1" ]] ; then
       declare -r COMMAND="$1"
       shift
     else
@@ -2661,19 +2955,25 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       Retcode=$?
     fi
   fi
-  if [[ 1 -le $# ]] && [[ "$COMMAND_UNINSTALL" == "$COMMAND" ]] ; then
-    if [[ "$PRODUCT_DATABASE" == "$1" ]] ||  [[ "$PRODUCT_MANAGER" == "$1" ]] ; then
-      declare -r COMMAND_TARGET="$1"
-      shift
-    else
-      declare -r COMMAND_TARGET=''
+  if [[ 1 -le $# ]] ; then
+    if [[ "$COMMAND_INSTALL" == "$COMMAND" ]] || [[ "$COMMAND_UNINSTALL" == "$COMMAND" ]] ; then
+      if [[ "$PRODUCT_DATABASE" == "$1" ]] || [[ "$PRODUCT_MANAGER" == "$1" ]] || [[ "$PRODUCT_AGENT" == "$1" ]] ; then
+        declare -r COMMAND_TARGET="$1"
+        shift
+      else
+        echoError $RETCODE_PARAMETER_ERROR "Unknown target for command '${COMMAND}'" "$1"
+        Retcode=$?
+      fi
     fi
-  else
-    declare -r COMMAND_TARGET=''
   fi
+fi
+
+if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
   if [[ 0 -ne $# ]] ; then
-    echoError $RETCODE_PARAMETER_ERROR 'Incorrect command paramaters'
+    echoError $RETCODE_PARAMETER_ERROR 'incorrect command paramaters'
     Retcode=$?
+  elif [[ -z "${COMMAND_TARGET+'x'}" ]] ; then
+    declare -r COMMAND_TARGET=''
   fi
 fi
 
@@ -2684,6 +2984,7 @@ processOptionsFile $Retcode 'Message' 'OptionSources' 'OptionValues'
 # Process the determined options.
 
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_REPOSITORY_ROOT"              "${OPTION_DEFAULT_VALUES[${OPTION_REPOSITORY_ROOT}]}"
+setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_REPOSITORY_ARCHIVE"           "${OptionValues[${OPTION_REPOSITORY_ROOT}]}/archive"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_INSTALLATION_ROOT"            "${OPTION_DEFAULT_VALUES[${OPTION_INSTALLATION_ROOT}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_INSTALLATION_USER"            "${OPTION_DEFAULT_VALUES[${OPTION_INSTALLATION_USER}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_INSTALLATION_BASE"            "${OptionValues[${OPTION_INSTALLATION_ROOT}]}/${OptionValues[${OPTION_INSTALLATION_USER}]}"
@@ -2715,7 +3016,7 @@ done
 unset Option
 
 #if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#  for Option in "${!OptionValues[@]}" ; do
+#  for Option in "${OPTIONS[@]}" ; do
 #    echo "${Option}: ${OptionValues[${Option}]} (${OPTION_SOURCE_NAMES[${OptionSources[${Option}]}]})"
 #  done
 #fi
@@ -2730,27 +3031,24 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       displayOptions 'OptionSources' 'OptionValues'
       Retcode=$?
       ;;
-    "$COMMAND_INSTALL")
+    "$COMMAND_PREPARE"|"$COMMAND_INSTALL")
       displayOptions 'OptionSources' 'OptionValues'
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         prepareInstallation 'OptionSources' 'OptionValues'
         Retcode=$?
       fi
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        installDatabase 'OptionSources' 'OptionValues'
-        Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ "$COMMAND_INSTALL" == "$COMMAND" ]]; then
+        if [[ -z "$COMMAND_TARGET" ]] || [[ "$PRODUCT_DATABASE" == "$COMMAND_TARGET" ]] ; then
+          installDatabase 'OptionSources' 'OptionValues'
+          Retcode=$?
+        fi
       fi
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        installManager 'OptionSources' 'OptionValues'
-        Retcode=$?
-      fi
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        echo 'Installation successful'
-        echo "ORACLE_BASE=${OptionValues[${OPTION_DATABASE_BASE}]}"
-        echo "ORACLE_HOME=${OptionValues[${OPTION_DATABASE_HOME}]}"
-      else
-        echo 'Installation failed'
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ "$COMMAND_INSTALL" == "$COMMAND" ]]; then
+        if [[ -z "$COMMAND_TARGET" ]] || [[ "$PRODUCT_MANAGER" == "$COMMAND_TARGET" ]] ; then
+          installManager 'OptionSources' 'OptionValues'
+          Retcode=$?
+        fi
       fi
       ;;
     "$COMMAND_UNINSTALL")
@@ -2768,19 +3066,50 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           Retcode=$?
         fi
       fi
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        echo 'Uninstallation successful'
-      else
-        echo 'Uninstallation failed'
-      fi
       ;;
     *)
-      echoError $RETCODE_INTERNAL_ERROR "Command not implemented yet or supported" "$COMMAND"
+      echoError $RETCODE_INTERNAL_ERROR 'command not yet implemented or supported' "$COMMAND"
       Retcode=$?
       ;;
   esac
 else
   echo "$Message"
 fi
+
+case "$COMMAND" in
+  "$COMMAND_PREPARE")
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      echo 'System preparation successful'
+    else
+      echo 'System preparation failed: ${Retcode}'
+    fi
+    ;;
+  "$COMMAND_INSTALL")
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      echo 'Installation successful'
+      if [[ -z "$COMMAND_TARGET" ]] || [[ "$PRODUCT_DATABASE" == "$COMMAND_TARGET" ]] ; then
+        echo "Environment variables for the ${DESCRIPTION_PRODUCT_DATABASE}"
+        echo "ORACLE_BASE=${OptionValues[${OPTION_DATABASE_BASE}]}"
+        echo "ORACLE_HOME=${OptionValues[${OPTION_DATABASE_HOME}]}"
+      fi
+      if [[ -z "$COMMAND_TARGET" ]] || [[ "$PRODUCT_MANAGER" == "$COMMAND_TARGET" ]] ; then
+        echo "Environment variables for the ${DESCRIPTION_PRODUCT_MANAGER}"
+        echo "ORACLE_BASE=${OptionValues[${OPTION_MANAGER_BASE}]}"
+        echo "ORACLE_HOME=${OptionValues[${OPTION_MANAGER_HOME}]}"
+      fi
+    else
+      echo 'Installation failed: ${Retcode}'
+    fi
+    ;;
+  "$COMMAND_UNINSTALL")
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      echo 'Uninstallation successful'
+    else
+      echo 'Uninstallation failed: ${Retcode}'
+    fi
+    ;;
+  *)
+    ;;
+esac
 
 exit $Retcode
