@@ -105,7 +105,6 @@ declare -r OPTION_INSTALLATION_USER='user'
 declare -r OPTION_INSTALLATION_GROUP='group'
 declare -r OPTION_INSTALLATION_HOSTNAME='hostname'
 declare -r OPTION_DATABASE_VERSION='database-version'
-declare -r OPTION_DATABASE_REPOSITORY='database-repository'
 declare -r OPTION_DATABASE_PACKAGE_FILE_NAME='database-package'
 declare -r OPTION_DATABASE_OPATCH_FILE_NAME='database-opatch'
 declare -r OPTION_DATABASE_PATCH_FILE_NAME='database-patch'
@@ -166,7 +165,6 @@ declare -r -a OPTIONS=(
   "$OPTION_INSTALLATION_GROUP"
   "$OPTION_INSTALLATION_HOSTNAME"
   "$OPTION_DATABASE_VERSION"
-  "$OPTION_DATABASE_REPOSITORY"
   "$OPTION_DATABASE_PACKAGE_FILE_NAME"
   "$OPTION_DATABASE_OPATCH_FILE_NAME"
   "$OPTION_DATABASE_PATCH_FILE_NAME"
@@ -259,7 +257,6 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_INSTALLATION_GROUP"]=$OPTION_SOURCE_ALL
   ["$OPTION_INSTALLATION_HOSTNAME"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_DATABASE_VERSION"]=$OPTION_SOURCE_ALL
-  ["$OPTION_DATABASE_REPOSITORY"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_PACKAGE_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_OPATCH_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_PATCH_FILE_NAME"]=$OPTION_SOURCE_ALL
@@ -308,6 +305,7 @@ declare -r -A -i OPTION_SOURCES=(
 
 # Option default values
 
+declare -r DEFAULT_SYSTEMD_SERVICE_NAME='dbora.service'
 declare -r DEFAULT_PASSWORD='Abcd_1234'
 declare -r DEFAULT_DATABASE_PACKAGE_FILE_NAME='V982063-01.zip'
 declare -r DEFAULT_DATABASE_OPATCH_FILE_NAME='p6880880_190000_Linux-x86-64.zip'
@@ -323,7 +321,6 @@ declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_INSTALLATION_GROUP"]='oinstall'
   ["$OPTION_INSTALLATION_HOSTNAME"]=`hostname -f`
   ["$OPTION_DATABASE_VERSION"]='19.3.0.0.0'
-  ["$OPTION_DATABASE_REPOSITORY"]="${OPTION_DEFAULT_VALUES[${OPTION_REPOSITORY_ROOT}]}/Oracle/${PRODUCT_DATABASE}/${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_VERSION}]}"
   ["$OPTION_DATABASE_PACKAGE_FILE_NAME"]="${OPTION_DEFAULT_VALUES[${OPTION_REPOSITORY_ARCHIVE}]}/${DEFAULT_DATABASE_PACKAGE_FILE_NAME}"
   ["$OPTION_DATABASE_OPATCH_FILE_NAME"]="${OPTION_DEFAULT_VALUES[${OPTION_REPOSITORY_ARCHIVE}]}/${DEFAULT_DATABASE_OPATCH_FILE_NAME}"
   ["$OPTION_DATABASE_PATCH_FILE_NAME"]="${OPTION_DEFAULT_VALUES[${OPTION_REPOSITORY_ARCHIVE}]}/${DEFAULT_DATABASE_PATCH_FILE_NAME}"
@@ -355,8 +352,8 @@ declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_LIMITS_FILE_PERMISSIONS"]='644'
   ["$OPTION_CONTROLLER_FILE_NAME"]='servicectl.sh'
   ["$OPTION_CONTROLLER_FILE_PERMISSIONS"]='740'
-  ["$OPTION_SYSTEMD_SERVICE"]='dbora.service'
-  ["$OPTION_SYSTEMD_FILE_NAME"]="/lib/systemd/system/${OPTION_DEFAULT_VALUES[${OPTION_SYSTEMD_SERVICE}]}"
+  ["$OPTION_SYSTEMD_SERVICE"]="$DEFAULT_SYSTEMD_SERVICE_NAME"
+  ["$OPTION_SYSTEMD_FILE_NAME"]="/lib/systemd/system/${DEFAULT_SYSTEMD_SERVICE_NAME}"
   ["$OPTION_SYSTEMD_FILE_PERMISSIONS"]='644'
 )
 
@@ -375,6 +372,7 @@ declare -r DESCRIPTION_SYSTEMD_SERVICE='Systemd service for the Oracle products'
 declare -r DESCRIPTION_SYSTEMD_SERVICE_FILE="definition file for the ${DESCRIPTION_SYSTEMD_SERVICE}"
 declare -r DESCRIPTION_DATABASE_PACKAGE_FILE="${DESCRIPTION_PRODUCT_DATABASE} software package zip file"
 declare -r DESCRIPTION_DATABASE_OPATCH="${DESCRIPTION_PRODUCT_DATABASE} OPatch utility"
+declare -r DESCRIPTION_DATABASE_OPATCH_HOME="home of the ${DESCRIPTION_DATABASE_OPATCH}"
 declare -r DESCRIPTION_DATABASE_OPATCH_FILE="${DESCRIPTION_DATABASE_OPATCH} update zip file"
 declare -r DESCRIPTION_DATABASE_PATCH="${DESCRIPTION_PRODUCT_DATABASE} version patch update"
 declare -r DESCRIPTION_DATABASE_PATCH_FILE="${DESCRIPTION_DATABASE_PATCH} zip file"
@@ -398,7 +396,6 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_INSTALLATION_GROUP"]='installation system group'
   ["$OPTION_INSTALLATION_HOSTNAME"]='host name'
   ["$OPTION_DATABASE_VERSION"]="${DESCRIPTION_PRODUCT_DATABASE} version"
-  ["$OPTION_DATABASE_REPOSITORY"]="${DESCRIPTION_PRODUCT_DATABASE} software repository directory"
   ["$OPTION_DATABASE_PACKAGE_FILE_NAME"]="name of the ${DESCRIPTION_DATABASE_PACKAGE_FILE}"
   ["$OPTION_DATABASE_OPATCH_FILE_NAME"]="name of the ${DESCRIPTION_DATABASE_OPATCH_FILE}"
   ["$OPTION_DATABASE_PATCH_FILE_NAME"]="name of the ${DESCRIPTION_DATABASE_PATCH_FILE}"
@@ -1127,7 +1124,6 @@ installDatabase() {
   local InstallationInventory           DescriptionInstallationInventory
   local User                            DescriptionUser
   local Group                           DescriptionGroup
-  local DatabaseRepository              DescriptionDatabaseRepository
   local DatabasePackageFileName         DescriptionDatabasePackageFileName
   local DatabaseOPatchFileName          DescriptionDatabaseOPatchFileName
   local DatabasePatchFileName           DescriptionDatabasePatchFileName
@@ -1135,6 +1131,7 @@ installDatabase() {
   local DatabaseResponseFilePermissions DescriptionDatabaseResponseFilePermissions
   local DatabaseBase                    DescriptionDatabaseBase
   local DatabaseHome                    DescriptionDatabaseHome
+  local DBAGroup                        DescriptionDBAGroup
   local DatabaseData                    DescriptionDatabaseData
   local DatabaseRecovery                DescriptionDatabaseRecovery
   local DatabaseName                    DescriptionDatabaseName
@@ -1145,7 +1142,6 @@ installDatabase() {
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"             'Message' 'InstallationInventory'           'DescriptionInstallationInventory'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                  'Message' 'User'                            'DescriptionUser'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                 'Message' 'Group'                           'DescriptionGroup'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_REPOSITORY"                'Message' 'DatabaseRepository'              'DescriptionDatabaseRepository'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PACKAGE_FILE_NAME"         'Message' 'DatabasePackageFileName'         'DescriptionDatabasePackageFileName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_OPATCH_FILE_NAME"          'Message' 'DatabaseOPatchFileName'          'DescriptionDatabaseOPatchFileName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PATCH_FILE_NAME"           'Message' 'DatabasePatchFileName'           'DescriptionDatabasePatchFileName'
@@ -1153,6 +1149,7 @@ installDatabase() {
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS" 'Message' 'DatabaseResponseFilePermissions' 'DescriptionDatabaseResponseFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_BASE"                      'Message' 'DatabaseBase'                    'DescriptionDatabaseBase'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"                      'Message' 'DatabaseHome'                    'DescriptionDatabaseHome'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP"       'Message' 'DBAGroup'                        'DescriptionDBAGroup'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_DATA"                      'Message' 'DatabaseData'                    'DescriptionDatabaseData'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RECOVERY"                  'Message' 'DatabaseRecovery'                'DescriptionDatabaseRecovery'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                      'Message' 'DatabaseName'                    'DescriptionDatabaseName'
@@ -1162,8 +1159,6 @@ installDatabase() {
   local -r OPatchHome="${DatabaseHome}/OPatch"
   local -r PatchHome="${InstallationStage}/database-patch"
   local -r DescriptionPatchHome="${DESCRIPTION_PRODUCT_DATABASE} patch update staging directory"
-  local -r PatchFile="${Archive}/${DatabasePatchFileName}"
-  local -r DescriptionPatchFile="${DESCRIPTION_PRODUCT_DATABASE} patch update file"
   local -r PatchNumber=$(basename "${DatabasePatchFileName}" | sed -r 's/p([0-9]*)_.*/\1/g')
   local -r InventoryInstaller="${InstallationInventory}/orainstRoot.sh"
   local -r DescriptionInventoryInstaller='Oracle Inventory root installer program'
@@ -1181,7 +1176,6 @@ installDatabase() {
   local -r Marker6="${DatabaseHome}/INSTALLATION_MARKER_6"
   local -r Marker7="${DatabaseHome}/INSTALLATION_MARKER_7"
   local -i bResponseCreated=$VALUE_FALSE
-  local -i bPatchCreated=$VALUE_FALSE
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
     echo "$Message"
@@ -1214,11 +1208,11 @@ INVENTORY_LOCATION=${InstallationInventory}
 ORACLE_HOME=${DatabaseHome}
 ORACLE_BASE=${DatabaseBase}
 oracle.install.db.InstallEdition=EE
-oracle.install.db.OSDBA_GROUP=${Group}
-oracle.install.db.OSBACKUPDBA_GROUP=${Group}
-oracle.install.db.OSDGDBA_GROUP=${Group}
-oracle.install.db.OSKMDBA_GROUP=${Group}
-oracle.install.db.OSRACDBA_GROUP=${Group}
+oracle.install.db.OSDBA_GROUP=${DBAGroup}
+oracle.install.db.OSBACKUPDBA_GROUP=${DBAGroup}
+oracle.install.db.OSDGDBA_GROUP=${DBAGroup}
+oracle.install.db.OSKMDBA_GROUP=${DBAGroup}
+oracle.install.db.OSRACDBA_GROUP=${DBAGroup}
 oracle.install.db.rootconfig.executeRootScript=false
 oracle.install.db.rootconfig.configMethod=SUDO
 oracle.install.db.rootconfig.sudoPath=`which sudo`
@@ -1291,13 +1285,18 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
       Retcode=$?
     else
       echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} ('${DatabasePackageFileName}') is not unzipped" "$DatabaseHome"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$DatabasePackageFileName"
+      executeCommand 'sudo' 'test' '-r' "$DatabasePackageFileName"
       processCommandCode $? "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} does not exist or is inaccessible" "$DatabasePackageFileName"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$DatabaseHome" "$DatabasePackageFileName"
+        executeCommand 'sudo' 'unzip' '-d' "$DatabaseHome" "$DatabasePackageFileName"
         processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_PACKAGE_FILE} (${DatabasePackageFileName}) using the user '${User}:${Group}' to '${DatabaseHome}'"
         Retcode=$?
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' 'chown' "${User}:${Group}" "$DatabaseHome"
+          processCommandCode $? "failed to set the ownership of the ${DescriptionDatabaseHome} to '${User}:${Group}'" "$DatabaseHome"
+          Retcode=$?
+        fi
         # Create indicator that the Oracle Database software has been unzipped.
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker1"
@@ -1317,17 +1316,22 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
       Retcode=$?
     else
       echoCommandMessage "the ${DESCRIPTION_DATABASE_OPATCH_FILE} ('${DatabaseOPatchFileName}') is not already unzipped" "$OPatchHome"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$DatabaseOPatchFileName"
+      executeCommand 'sudo' 'test' '-r' "$DatabaseOPatchFileName"
       processCommandCode $? "the ${DESCRIPTION_DATABASE_OPATCH_FILE} does not exist or is inaccessible" "$DatabaseOPatchFileName"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mv' "$OPatchHome" "${OPatchHome}-original"
-        processCommandCode $? "failed to move the original home of the ${DESCRIPTION_DATABASE_OPATCH} (${OPatchHome})" "${OPatchHome}-original"
+        processCommandCode $? "failed to move the original ${DESCRIPTION_DATABASE_OPATCH_HOME} (${OPatchHome})" "${OPatchHome}-original"
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$DatabaseHome" "$DatabaseOPatchFileName"
+          executeCommand 'sudo' 'unzip' '-d' "$DatabaseHome" "$DatabaseOPatchFileName"
           processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_OPATCH_FILE} (${DatabaseOPatchFileName}) using the user '${User}:${Group}' to '${DatabaseHome}'"
           Retcode=$?
+          if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+            executeCommand 'sudo' 'chown' "${User}:${Group}" "$OPatchHome"
+            processCommandCode $? "failed to set the ownership of the ${DESCRIPTION_DATABASE_OPATCH_HOME} to '${User}:${Group}'" "$OPatchHome"
+            Retcode=$?
+          fi
           # Create indicator that the OPatch utility update has been copied.
           if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
             executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker1a"
@@ -1348,15 +1352,17 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
       Retcode=$?
     else
       echoCommandMessage "the ${DESCRIPTION_DATABASE_PATCH_FILE} ('${DatabasePatchFileName}') is not already unzipped" "${PatchHome}/${PatchNumber}"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$DatabasePatchFileName"
+      executeCommand 'sudo' 'test' '-r' "$DatabasePatchFileName"
       processCommandCode $? "the ${DESCRIPTION_DATABASE_PATCH_FILE} does not exist or is inaccessible" "$DatabasePatchFileName"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$PatchHome" "$DatabasePatchFileName"
+        executeCommand 'sudo' 'unzip' '-d' "$PatchHome" "$DatabasePatchFileName"
         processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_PATCH_FILE} (${DatabasePatchFileName}) using the user '${User}:${Group}' to '${PatchHome}'"
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          bPatchCreated=$VALUE_TRUE
+          executeCommand 'sudo' 'chown' "${User}:${Group}" "$PatchHome"
+          processCommandCode $? "failed to set the ownership of the ${DESCRIPTION_DATABASE_PATCH} directory to '${User}:${Group}'" "$PatchHome"
+          Retcode=$?
         fi
       fi
     fi
@@ -1519,19 +1525,6 @@ return $Retcode
       processCommandCode $? "failed to the delete the ${DESCRIPTION_DATABASE_RESPONSE_FILE}" "$DatabaseResponseFileName"
     else
       echoCommandMessage "the ${DESCRIPTION_DATABASE_RESPONSE_FILE} does not exist" "$DatabaseResponseFileName"
-    fi
-  fi
-
-  ### Delete the Oracle Database patch update staging directory. ###
-
-  if [[ $VALUE_TRUE -eq $bPatchCreated ]] ; then
-    executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-d' "$PatchHome"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionPatchHome} will be deleted" "$PatchHome"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'rm' '-rf' "$PatchHome"
-      processCommandCode $? "failed to the delete the ${DescriptionPatchHome}" "$PatchHome"
-    else
-      echoCommandMessage "the ${DescriptionPatchHome} does not exist" "$PatchHome"
     fi
   fi
 
@@ -2076,8 +2069,8 @@ prepareInstallation() {
       echoCommandMessage "the ${DescriptionGroup} already exists" "$Group" "$Capture"
     else
       echoCommandMessage "the ${DescriptionGroup} does not exist" "$Group" "$Capture"
-      executeCommand2 'Capture' 'sudo' '/usr/sbin/groupadd' '-g' '54321' "$Group"
-      processCommandCode $? "failed to create the ${DescriptionGroup}" "$Group" "$Capture"
+      executeCommand 'sudo' '/usr/sbin/groupadd' '-g' '54321' "$Group"
+      processCommandCode $? "failed to create the ${DescriptionGroup}" "$Group"
     fi
     Retcode=$?
   fi
@@ -2090,8 +2083,8 @@ prepareInstallation() {
       echoCommandMessage "the ${DescriptionDBAGroup} already exists" "$DBAGroup" "$Capture"
     else
       echoCommandMessage "the ${DescriptionDBAGroup} does not exist" "$DBAGroup" "$Capture"
-      executeCommand2 'Capture' 'sudo' '/usr/sbin/groupadd' '-g' '54322' "$DBAGroup"
-      processCommandCode $? "failed to create the ${DescriptionDBAGroup}" "$DBAGroup" "$Capture"
+      executeCommand 'sudo' '/usr/sbin/groupadd' '-g' '54322' "$DBAGroup"
+      processCommandCode $? "failed to create the ${DescriptionDBAGroup}" "$DBAGroup"
     fi
     Retcode=$?
   fi
@@ -2119,8 +2112,8 @@ prepareInstallation() {
       fi
     else
       echoCommandMessage "the ${DescriptionUser} does not exist" "$User"
-      executeCommand2 'Capture' 'sudo' '/usr/sbin/useradd' '-u' '54321' '-g' "$Group" '–s' '/usr/sbin/nologin' "$User"
-      processCommandCode $? "failed to create the ${DescriptionUser}" "${User}:${Group}" "$Capture"
+      executeCommand 'sudo' '/usr/sbin/useradd' '--uid' '54321' '--gid' "$Group" '--shell' '/usr/sbin/nologin' '--create-home' "$User"
+      processCommandCode $? "failed to create the ${DescriptionUser}" "${User}:${Group}"
       Retcode=$?
     fi
   fi
@@ -2137,16 +2130,13 @@ prepareInstallation() {
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       echoCommand 'echo' "$Output3" '|' 'awk' '-F' ':' '{ print $4}'
       Output4=$(echo "$Output3" | awk -F ':' '{ print $4}')
-      if [[ 0 -eq $? ]] || [[ "$DBAGroup" == "$Output4" ]] ; then
+      if [[ 0 -eq $? ]] && [[ "$User" == "$Output4" ]] ; then
         echoCommandMessage "the ${DescriptionUser} '${User}' is already a member of the ${DescriptionDBAGroup}" "$DBAGroup"
       else
         echoCommandMessage "the ${DescriptionUser} '${User}' is not a member of the ${DescriptionDBAGroup}" "$DBAGroup" "$Output4"
-        executeCommand2 'Capture' 'sudo' 'usermod' '-a' '-G' "$DBAGroup" "$User"
-        if [[ 0 -eq $? ]] ; then
-          echoSuccess
-        else
-          echoInfo "failed to add the ${DescriptionUser} '${User}' to the ${DescriptionDBAGroup}" "$DBAGroup" "$Capture"
-        fi
+        executeCommand 'sudo' 'usermod' '-a' '-G' "$DBAGroup" "$User"
+	processCommandCode $? "failed to add the ${DescriptionUser} '${User}' to the ${DescriptionDBAGroup}" "$DBAGroup"
+        Retcode=$?
       fi
       Retcode=$?
     fi
@@ -2155,26 +2145,35 @@ prepareInstallation() {
   ### Retrieve the home directory of the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    local -r UserHome="$(getent 'passwd' ${User} | cut '-d:' '-f6')"
-    if [[ -z "$UserHome" ]] ; then
-      echoError $RETCODE_PARAMETER_ERROR "failed to determine the home directory of the ${DescriptionUser}" "$User"
+    local Output5=''
+    echoCommand 'sudo' 'getent' 'passwd' "$User" '|' 'cut' '-d:' '-f6'
+    Output5="$(getent 'passwd' ${User} | cut '-d:' '-f6')"
+    local ExitCode=$?
+    if [[ 0 -eq $ExitCode ]] && [[ -z "$Output5" ]] ; then
+      ExitCode=2
+    fi
+    processCommandCode $ExitCode "failed to determine the home directory of the ${DescriptionUser}" "$User"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      echoInfo "the home directory of the ${DescriptionUser} '${User}'" "$Output5"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$Output5"
+      processCommandCode $? "failed to access the home directory of the ${DescriptionUser} (${User})" "$Output5"
       Retcode=$?
-    else
-      executeCommand2 'Capture' 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$UserHome"
-      processCommandCode $? "failed to access the home directory of the ${DescriptionUser} (${User})" "$UserHome"
-      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        local -r UserHome="$Output5"
+      fi
     fi
   fi
 
   ### Add the installation user to the operating systems's list of sudoers. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand2 'Capture' 'sudo' 'test' '-r' "$SudoersFileName"
+    executeCommand 'sudo' 'test' '-r' "$SudoersFileName"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_SUDOERS_FILE} already exists" "$SudoersFileName" "$Capture"
+      echoCommandMessage "the ${DESCRIPTION_SUDOERS_FILE} already exists" "$SudoersFileName"
       Retcode=$?
     else
-      echoCommandMessage "the ${DESCRIPTION_SUDOERS_FILE} does not exist" "$SudoersFileName" "$Capture"
+      echoCommandMessage "the ${DESCRIPTION_SUDOERS_FILE} does not exist" "$SudoersFileName"
       echoCommand 'sudo' "cat > ${SudoersFileName} <<EOF ... EOF"
       echo "cat > '${SudoersFileName}' <<EOF
 # Created by ${PROGRAM} on $(date)
@@ -2210,11 +2209,11 @@ EOF" | sudo 'sh'
 
   ### Install pre-requisite system libraries. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'yum' '-y' 'install' 'libnsl'
-    processCommandCode $? 'failed to install the pre-requisite system library' 'libnsl'
-    Retcode=$?
-  fi
+#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+#    executeCommand 'sudo' 'yum' '-y' 'install' 'libnsl'
+#    processCommandCode $? 'failed to install the pre-requisite system library' 'libnsl'
+#    Retcode=$?
+#  fi
 
   #D######################################################
   # Adjustment of the system swap to have at least 16GB. #
@@ -2333,8 +2332,8 @@ EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
         processCommandCode $? "failed to restrict the ${DescriptionSysctlFilePermissions} to '${SysctlFilePermissions}'" "$SysctlFileName"
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand2 'Capture' 'sudo' '/sbin/sysctl' '-p' "$SysctlFileName"
-          processCommandCode $? "failed to activate ${DESCRIPTION_SYSCT_FILE}" "$SysctlFileName" "$Capture"
+          executeCommand 'sudo' '/sbin/sysctl' '-p' "$SysctlFileName"
+          processCommandCode $? "failed to activate ${DESCRIPTION_SYSCT_FILE}" "$SysctlFileName"
           Retcode=$?
         fi
       fi
@@ -2995,7 +2994,6 @@ setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$O
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_INSTALLATION_INVENTORY"       "${OptionValues[${OPTION_INSTALLATION_ROOT}]}/oraInventory"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_VERSION"             "${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_VERSION}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_NAME"                "${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_NAME}]}"
-setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_REPOSITORY"          "${OptionValues[${OPTION_REPOSITORY_ROOT}]}/${PRODUCT_DATABASE}/${OptionValues[${OPTION_DATABASE_VERSION}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_PACKAGE_FILE_NAME"   "${OptionValues[${OPTION_REPOSITORY_ARCHIVE}]}/${DEFAULT_DATABASE_PACKAGE_FILE_NAME}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_OPATCH_FILE_NAME"    "${OptionValues[${OPTION_REPOSITORY_ARCHIVE}]}/${DEFAULT_DATABASE_OPATCH_FILE_NAME}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_PATCH_FILE_NAME"     "${OptionValues[${OPTION_REPOSITORY_ARCHIVE}]}/${DEFAULT_DATABASE_PATCH_FILE_NAME}"
@@ -3051,12 +3049,12 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           Retcode=$?
         fi
       fi
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ "$COMMAND_INSTALL" == "$COMMAND" ]]; then
-        if [[ -z "$COMMAND_TARGET" ]] || [[ "$PRODUCT_MANAGER" == "$COMMAND_TARGET" ]] ; then
-          installManager 'OptionSources' 'OptionValues'
-          Retcode=$?
-        fi
-      fi
+#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ "$COMMAND_INSTALL" == "$COMMAND" ]]; then
+#        if [[ -z "$COMMAND_TARGET" ]] || [[ "$PRODUCT_MANAGER" == "$COMMAND_TARGET" ]] ; then
+#          installManager 'OptionSources' 'OptionValues'
+#          Retcode=$?
+#        fi
+#      fi
       ;;
     "$COMMAND_UNINSTALL")
       displayOptions 'OptionSources' 'OptionValues'
@@ -3088,7 +3086,7 @@ case "$COMMAND" in
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       echo 'System preparation successful'
     else
-      echo 'System preparation failed: ${Retcode}'
+      echo "System preparation failed: ${Retcode}"
     fi
     ;;
   "$COMMAND_INSTALL")
@@ -3105,14 +3103,14 @@ case "$COMMAND" in
         echo "ORACLE_HOME=${OptionValues[${OPTION_MANAGER_HOME}]}"
       fi
     else
-      echo 'Installation failed: ${Retcode}'
+      echo "Installation failed: ${Retcode}"
     fi
     ;;
   "$COMMAND_UNINSTALL")
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       echo 'Uninstallation successful'
     else
-      echo 'Uninstallation failed: ${Retcode}'
+      echo "Uninstallation failed: ${Retcode}"
     fi
     ;;
   *)
