@@ -309,6 +309,9 @@ declare -r -A -i OPTION_SOURCES=(
 # Option default values
 
 declare -r DEFAULT_PASSWORD='Abcd_1234'
+declare -r DEFAULT_DATABASE_PACKAGE_FILE_NAME='V982063-01.zip'
+declare -r DEFAULT_DATABASE_OPATCH_FILE_NAME='p6880880_190000_Linux-x86-64.zip'
+declare -r DEFAULT_DATABASE_PATCH_FILE_NAME='p35943157_190000_Linux-x86-64.zip'
 
 declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_REPOSITORY_ROOT"]='/mnt/MySQL/Software'
@@ -321,9 +324,9 @@ declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_INSTALLATION_HOSTNAME"]=`hostname -f`
   ["$OPTION_DATABASE_VERSION"]='19.3.0.0.0'
   ["$OPTION_DATABASE_REPOSITORY"]="${OPTION_DEFAULT_VALUES[${OPTION_REPOSITORY_ROOT}]}/Oracle/${PRODUCT_DATABASE}/${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_VERSION}]}"
-  ["$OPTION_DATABASE_PACKAGE_FILE_NAME"]='V982063-01.zip'
-  ["$OPTION_DATABASE_OPATCH_FILE_NAME"]='p6880880_190000_Linux-x86-64.zip'
-  ["$OPTION_DATABASE_PATCH_FILE_NAME"]='p35943157_190000_Linux-x86-64.zip'
+  ["$OPTION_DATABASE_PACKAGE_FILE_NAME"]="${OPTION_DEFAULT_VALUES[${OPTION_REPOSITORY_ARCHIVE}]}/${DEFAULT_DATABASE_PACKAGE_FILE_NAME}"
+  ["$OPTION_DATABASE_OPATCH_FILE_NAME"]="${OPTION_DEFAULT_VALUES[${OPTION_REPOSITORY_ARCHIVE}]}/${DEFAULT_DATABASE_OPATCH_FILE_NAME}"
+  ["$OPTION_DATABASE_PATCH_FILE_NAME"]="${OPTION_DEFAULT_VALUES[${OPTION_REPOSITORY_ARCHIVE}]}/${DEFAULT_DATABASE_PATCH_FILE_NAME}"
   ["$OPTION_DATABASE_RESPONSE_FILE_NAME"]='/tmp/db_install.rsp'
   ["$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS"]='640'
   ["$OPTION_DATABASE_NAME"]='emrep'
@@ -370,6 +373,11 @@ declare -r DESCRIPTION_CONTROLLER='service controller for the Oracle products'
 declare -r DESCRIPTION_CONTROLLER_FILE="program file for ${DESCRIPTION_CONTROLLER}"
 declare -r DESCRIPTION_SYSTEMD_SERVICE='Systemd service for the Oracle products'
 declare -r DESCRIPTION_SYSTEMD_SERVICE_FILE="definition file for the ${DESCRIPTION_SYSTEMD_SERVICE}"
+declare -r DESCRIPTION_DATABASE_PACKAGE_FILE="${DESCRIPTION_PRODUCT_DATABASE} software package zip file"
+declare -r DESCRIPTION_DATABASE_OPATCH="${DESCRIPTION_PRODUCT_DATABASE} OPatch utility"
+declare -r DESCRIPTION_DATABASE_OPATCH_FILE="${DESCRIPTION_DATABASE_OPATCH} update zip file"
+declare -r DESCRIPTION_DATABASE_PATCH="${DESCRIPTION_PRODUCT_DATABASE} version patch update"
+declare -r DESCRIPTION_DATABASE_PATCH_FILE="${DESCRIPTION_DATABASE_PATCH} zip file"
 declare -r DESCRIPTION_DATABASE_RESPONSE_FILE="${DESCRIPTION_PRODUCT_DATABASE} installation response file"
 declare -r DESCRIPTION_MANAGER_RESPONSE_FILE="${DESCRIPTION_PRODUCT_MANAGER} installation response file"
 declare -r DESCRIPTION_MANAGER_KEYSTORE="${DESCRIPTION_PRODUCT_MANAGER} key store"
@@ -391,9 +399,9 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_INSTALLATION_HOSTNAME"]='host name'
   ["$OPTION_DATABASE_VERSION"]="${DESCRIPTION_PRODUCT_DATABASE} version"
   ["$OPTION_DATABASE_REPOSITORY"]="${DESCRIPTION_PRODUCT_DATABASE} software repository directory"
-  ["$OPTION_DATABASE_PACKAGE_FILE_NAME"]="name of the ${DESCRIPTION_PRODUCT_DATABASE} software package zip file"
-  ["$OPTION_DATABASE_OPATCH_FILE_NAME"]="name of the ${DESCRIPTION_PRODUCT_DATABASE} OPatch utility update zip file"
-  ["$OPTION_DATABASE_PATCH_FILE_NAME"]="name of the ${DESCRIPTION_PRODUCT_DATABASE} patch update zip file to apply"
+  ["$OPTION_DATABASE_PACKAGE_FILE_NAME"]="name of the ${DESCRIPTION_DATABASE_PACKAGE_FILE}"
+  ["$OPTION_DATABASE_OPATCH_FILE_NAME"]="name of the ${DESCRIPTION_DATABASE_OPATCH_FILE}"
+  ["$OPTION_DATABASE_PATCH_FILE_NAME"]="name of the ${DESCRIPTION_DATABASE_PATCH_FILE}"
   ["$OPTION_DATABASE_RESPONSE_FILE_NAME"]="name of the ${DESCRIPTION_DATABASE_RESPONSE_FILE}"
   ["$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS"]="file permissions on the ${DESCRIPTION_DATABASE_RESPONSE_FILE}"
   ["$OPTION_DATABASE_BASE"]="${DESCRIPTION_PRODUCT_DATABASE} base directory"
@@ -662,14 +670,15 @@ echoHelp() {
     echo "This program is designed for the simplified installation and uninstallation of ${DESCRIPTION_PRODUCT_DATABASE} 19c and ${DESCRIPTION_PRODUCT_MANAGER} 13cc on Oracle Linux 8.  A new Oracle Database instance is launched during the install process for immediate use by ${DESCRIPTION_PRODUCT_MANAGER}.  The installation is standardized without many options and is not designed to be bullet-proof."
     echo
     echo 'Detailed description:'
-    echo "The Oracle software must be procured and unzipped in directories referred by this program as the ${OPTION_DESCRIPTIONS[${OPTION_DATABASE_REPOSITORY}]} and the ${OPTION_DESCRIPTIONS[${OPTION_MANAGER_REPOSITORY}]}.  The program installs the Oracle products in their respective home directories using the ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_USER}]} and the ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_GROUP}]}.  If these ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_USER}]} and ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_GROUP}]} do not already exist on the system, the program automatically creates them.  The ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_USER}]} is also automatically added to the operating system list of Sudoers, if it is not already in this list.  The ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_BASE}]}, as well as the ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_INVENTORY}]}, are determined by the program by using the ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_ROOT}]} and following the guidelines of the Oracle Optimal Flexible Architecture.  The installation process is fully automated by use of an automated response file for each product installed."
+    echo "The Oracle software must be procured and provided to his program, by aid of the various program options, as zip files downloaded from Oracle eDelivery or My Oracle Support.  The program installs the Oracle products in their respective home directorie, the structure of which follows the guidelines of the Oracle Optimal Flexible Architecture (OFA) standard.  The installation of the software is performed using the ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_USER}]} and the ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_GROUP}]}.  If these ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_USER}]} and ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_GROUP}]} do not already exist on the system, the program automatically creates them.  The ${OPTION_DESCRIPTIONS[${OPTION_INSTALLATION_USER}]} is also automatically added to the operating system list of Sudoers, if it is not already in this list.  Many system settings are automatically adjusted as required by the ${DESCRIPTION_PRODUCT_DATABASE}.  The installation process is fully automated by use of the silent installer option of the Oracle software."
     echo
     echo 'Installation steps:'
     echo '1- Configure a machine that meets the minimum requirements listed below.'
-    echo "2- Download the ${DESCRIPTION_PRODUCT_DATABASE} 19c package from https://edelivery.oracle.com or from https://support.oracle.com.  The package should consist of one zip file.  Unzip the package file into a directory that will be used by this program as the ${OPTION_DESCRIPTIONS[${OPTION_DATABASE_REPOSITORY}]}."
-    echo "3- Download the ${DESCRIPTION_PRODUCT_MANAGER} 13cc package from https://edelivery.oracle.com or from https://support.oracle.com.  The package should consist of five zip files.  Unzip the package files into a directory that will be used by this program as the ${OPTION_DESCRIPTIONS[${OPTION_MANAGER_REPOSITORY}]}.  The directory should contain a file with the name em13500_linux64.bin or one similar."
-    echo '4- Run this program with the 'install' command and provide the two repository directory as options.  For example:'
-    echo "     ./${PROGRAM} ${OPTION_PREFIX}${OPTION_DATABASE_REPOSITORY}='/myoracle/database/repo' ${OPTION_PREFIX}${OPTION_MANAGER_REPOSITORY}='/myoracle/manager/repo' install"
+    echo "2- Download the ${DESCRIPTION_PRODUCT_DATABASE} 19c package from https://edelivery.oracle.com or from https://support.oracle.com.  The package should consist of one zip file."
+    echo "3- Download the latest ${DESCRIPTION_DATABASE_OPATCH} and ${DESCRIPTION_DATABASE_PATCH}."
+    echo "4- Download the ${DESCRIPTION_PRODUCT_MANAGER} 13cc package from https://edelivery.oracle.com or from https://support.oracle.com.  The package should consist of five zip files.  Unzip the package files into a directory that will be used by this program as the ${OPTION_DESCRIPTIONS[${OPTION_MANAGER_REPOSITORY}]}.  The directory should contain a file with the name em13500_linux64.bin or one similar."
+    echo '5- Run this program with the 'install' command and provide the two repository directory as options.  For example:'
+    echo "     ./${PROGRAM} ${OPTION_PREFIX}${OPTION_DATABASE_PACKAGE_FILE_NAME}='/myoracle/software/repository/${DEFAULT_DATABASE_PACKAGE_FILE_NAME}' install"
     echo
     echo 'Minimum machine requirements:'
     echo '- CPUs: 2'
@@ -1095,11 +1104,13 @@ displayOptions() {
 ## @li Generation of a response file for the automated installation of the
 ##     Oracle Database.
 ## @li Unzip of of the Oracle Database software to the Oracle Home directory.
-## @li Unzip of of the Oracle OPatch utility update, if provided, to the Oracle
-##     Homedirectory.
+## @li Unzip of of the Oracle OPatch utility update, if provided, to the
+##     sub-directory OPatch in the Oracle Home directory.
 ## @li Installation of the Oracle Database by running the Oracle installer
-##     program runInstaller and apply a databae update patch, if provided.
-## @li Execution of the orainstRoot.sh and root.sh scripts.
+##     program runInstaller and apply a databae update patch upon installation,
+##     if provided.
+## @li Execution of the Oracle post-installation scripts orainstRoot.sh and
+##     root.sh.
 ## @li Configuration of the networking information by executing the Oracle
 ##     installer program runInstaller with the option -executeConfigTools.
 ## @li Deletion of the automated installation response file.
@@ -1112,7 +1123,6 @@ displayOptions() {
 ################################################################################
 installDatabase() {
   local Message=''
-  local Archive                         DescriptionArchive
   local InstallationStage               DescriptionInstallationStage
   local InstallationInventory           DescriptionInstallationInventory
   local User                            DescriptionUser
@@ -1131,7 +1141,6 @@ installDatabase() {
   local DatabasePassword                DescriptionDatabasePassword
   local SystemdService                  DescriptionSystemdService
   echoTitle "Installing the ${DESCRIPTION_PRODUCT_DATABASE}"
-  retrieveOption $? "$1" "$2" "$OPTION_REPOSITORY_ARCHIVE"                 'Message' 'Archive'                         'DescriptionArchive'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGE"                 'Message' 'InstallationStage'               'DescriptionInstallationStage'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"             'Message' 'InstallationInventory'           'DescriptionInstallationInventory'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                  'Message' 'User'                            'DescriptionUser'
@@ -1150,17 +1159,12 @@ installDatabase() {
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"                  'Message' 'DatabasePassword'                'DescriptionDatabasePassword'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"                    'Message' 'SystemdService'                  'DescriptionSystemdService'
   local -i Retcode=$?
-  local -r PackageFile="${Archive}/${DatabasePackageFileName}"
-  local -r DescriptionPackageFile="${DESCRIPTION_PRODUCT_DATABASE} software package file"
   local -r OPatchHome="${DatabaseHome}/OPatch"
-  local -r DescriptionOPatchHome="${DESCRIPTION_PRODUCT_DATABASE} OPatch update utility directory"
-  local -r OPatchFile="${Archive}/${DatabaseOPatchFileName}"
-  local -r DescriptionOPatchFile="${DESCRIPTION_PRODUCT_DATABASE} OPatch utility update file"
   local -r PatchHome="${InstallationStage}/database-patch"
   local -r DescriptionPatchHome="${DESCRIPTION_PRODUCT_DATABASE} patch update staging directory"
   local -r PatchFile="${Archive}/${DatabasePatchFileName}"
   local -r DescriptionPatchFile="${DESCRIPTION_PRODUCT_DATABASE} patch update file"
-  local -r PatchNumber=$(basename "${PatchFile}" | sed -r 's/p([0-9]*)_.*/\1/g')
+  local -r PatchNumber=$(basename "${DatabasePatchFileName}" | sed -r 's/p([0-9]*)_.*/\1/g')
   local -r InventoryInstaller="${InstallationInventory}/orainstRoot.sh"
   local -r DescriptionInventoryInstaller='Oracle Inventory root installer program'
   local -r DatabaseInstaller="${DatabaseHome}/runInstaller"
@@ -1283,16 +1287,16 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker1"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionPackageFile} ('${DatabasePackageFileName}') is already unzipped" "$DatabaseHome"
+      echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} ('${DatabasePackageFileName}') is already unzipped" "$DatabaseHome"
       Retcode=$?
     else
-      echoCommandMessage "the ${DescriptionPackageFile} ('${DatabasePackageFileName}') is not already unzipped" "$DatabaseHome"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$PackageFile"
-      processCommandCode $? "the ${DescriptionPackageFile} does not exist or is inaccessible" "$PackageFile"
+      echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} ('${DatabasePackageFileName}') is not unzipped" "$DatabaseHome"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$DatabasePackageFileName"
+      processCommandCode $? "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} does not exist or is inaccessible" "$DatabasePackageFileName"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$DatabaseHome" "$PackageFile"
-        processCommandCode $? "failed to unzip the ${DescriptionPackageFile} (${PackageFile}) using the user '${User}:${Group}' to '${DatabaseHome}'"
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$DatabaseHome" "$DatabasePackageFileName"
+        processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_PACKAGE_FILE} (${DatabasePackageFileName}) using the user '${User}:${Group}' to '${DatabaseHome}'"
         Retcode=$?
         # Create indicator that the Oracle Database software has been unzipped.
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -1309,20 +1313,20 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$DatabaseOPatchFileName" ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker1a"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionOPatchFile} ('${DatabaseOPatchFileName}') is already unzipped" "$OPatchHome"
+      echoCommandMessage "the ${DESCRIPTION_DATABASE_OPATCH_FILE} ('${DatabaseOPatchFileName}') is already unzipped" "$OPatchHome"
       Retcode=$?
     else
-      echoCommandMessage "the ${DescriptionOPatchFile} ('${DatabaseOPatchFileName}') is not already unzipped" "$OPatchHome"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$OPatchFile"
-      processCommandCode $? "the ${DescriptionOPatchFile} does not exist or is inaccessible" "$OPatchFile"
+      echoCommandMessage "the ${DESCRIPTION_DATABASE_OPATCH_FILE} ('${DatabaseOPatchFileName}') is not already unzipped" "$OPatchHome"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$DatabaseOPatchFileName"
+      processCommandCode $? "the ${DESCRIPTION_DATABASE_OPATCH_FILE} does not exist or is inaccessible" "$DatabaseOPatchFileName"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mv' "$OPatchHome" "${OPatchHome}-original"
-        processCommandCode $? "failed to move the original ${DescriptionOPatchHome} (${OPatchHome})" "${OPatchHome}-original"
+        processCommandCode $? "failed to move the original home of the ${DESCRIPTION_DATABASE_OPATCH} (${OPatchHome})" "${OPatchHome}-original"
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$DatabaseHome" "$OPatchFile"
-          processCommandCode $? "failed to unzip the ${DescriptionOPatchFile} (${OPatchFile}) using the user '${User}:${Group}' to '${DatabaseHome}'"
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$DatabaseHome" "$DatabaseOPatchFileName"
+          processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_OPATCH_FILE} (${DatabaseOPatchFileName}) using the user '${User}:${Group}' to '${DatabaseHome}'"
           Retcode=$?
           # Create indicator that the OPatch utility update has been copied.
           if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -1340,16 +1344,16 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$DatabasePatchFileName" ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "${PatchHome}/${PatchNumber}/README.txt"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionPatchFile} ('${DatabasePatchFileName}') is already unzipped" "${PatchHome}/${PatchNumber}"
+      echoCommandMessage "the ${DESCRIPTION_DATABASE_PATCH_FILE} ('${DatabasePatchFileName}') is already unzipped" "${PatchHome}/${PatchNumber}"
       Retcode=$?
     else
-      echoCommandMessage "the ${DescriptionPatchFile} ('${DatabasePatchFileName}') is not already unzipped" "${PatchHome}/${PatchNumber}"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$PatchFile"
-      processCommandCode $? "the ${DescriptionPatchFile} does not exist or is inaccessible" "$PatchFile"
+      echoCommandMessage "the ${DESCRIPTION_DATABASE_PATCH_FILE} ('${DatabasePatchFileName}') is not already unzipped" "${PatchHome}/${PatchNumber}"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$DatabasePatchFileName"
+      processCommandCode $? "the ${DESCRIPTION_DATABASE_PATCH_FILE} does not exist or is inaccessible" "$DatabasePatchFileName"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$PatchHome" "$PatchFile"
-        processCommandCode $? "failed to unzip the ${DescriptionPatchFile} (${PatchFile}) using the user '${User}:${Group}' to '${PatchFile}'"
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$PatchHome" "$DatabasePatchFileName"
+        processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_PATCH_FILE} (${DatabasePatchFileName}) using the user '${User}:${Group}' to '${PatchHome}'"
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           bPatchCreated=$VALUE_TRUE
@@ -2992,6 +2996,9 @@ setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$O
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_VERSION"             "${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_VERSION}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_NAME"                "${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_NAME}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_REPOSITORY"          "${OptionValues[${OPTION_REPOSITORY_ROOT}]}/${PRODUCT_DATABASE}/${OptionValues[${OPTION_DATABASE_VERSION}]}"
+setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_PACKAGE_FILE_NAME"   "${OptionValues[${OPTION_REPOSITORY_ARCHIVE}]}/${DEFAULT_DATABASE_PACKAGE_FILE_NAME}"
+setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_OPATCH_FILE_NAME"    "${OptionValues[${OPTION_REPOSITORY_ARCHIVE}]}/${DEFAULT_DATABASE_OPATCH_FILE_NAME}"
+setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_PATCH_FILE_NAME"     "${OptionValues[${OPTION_REPOSITORY_ARCHIVE}]}/${DEFAULT_DATABASE_PATCH_FILE_NAME}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_BASE"                "${OptionValues[${OPTION_INSTALLATION_BASE}]}/${PRODUCT_DATABASE}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_HOME"                "${OptionValues[${OPTION_DATABASE_BASE}]}/product/${OptionValues[${OPTION_DATABASE_VERSION}]}/dbhome_1"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_DATA"                "${OptionValues[${OPTION_DATABASE_BASE}]}/oradata/${OptionValues[${OPTION_DATABASE_NAME}]}"
