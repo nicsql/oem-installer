@@ -1122,6 +1122,7 @@ installDatabase() {
   local Message=''
   local InstallationStage               DescriptionInstallationStage
   local InstallationInventory           DescriptionInstallationInventory
+  local InstallationPermissions         DescriptionInstallationPermissions
   local User                            DescriptionUser
   local Group                           DescriptionGroup
   local DatabasePackageFileName         DescriptionDatabasePackageFileName
@@ -1140,6 +1141,7 @@ installDatabase() {
   echoTitle "Installing the ${DESCRIPTION_PRODUCT_DATABASE}"
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGE"                 'Message' 'InstallationStage'               'DescriptionInstallationStage'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"             'Message' 'InstallationInventory'           'DescriptionInstallationInventory'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_FILE_PERMISSIONS"      'Message' 'InstallationPermissions'         'DescriptionInstallationPermissions'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                  'Message' 'User'                            'DescriptionUser'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                 'Message' 'Group'                           'DescriptionGroup'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PACKAGE_FILE_NAME"         'Message' 'DatabasePackageFileName'         'DescriptionDatabasePackageFileName'
@@ -1157,9 +1159,10 @@ installDatabase() {
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"                    'Message' 'SystemdService'                  'DescriptionSystemdService'
   local -i Retcode=$?
   local -r OPatchHome="${DatabaseHome}/OPatch"
-  local -r PatchHome="${InstallationStage}/database-patch"
-  local -r DescriptionPatchHome="${DESCRIPTION_PRODUCT_DATABASE} patch update staging directory"
+  local -r PatchBase="${InstallationStage}/database-patch"
+  local -r DescriptionPatchBase="${DESCRIPTION_PRODUCT_DATABASE} patch update staging directory"
   local -r PatchNumber=$(basename "${DatabasePatchFileName}" | sed -r 's/p([0-9]*)_.*/\1/g')
+  local -r PatchHome="${PatchBase}/${PatchNumber}"
   local -r InventoryInstaller="${InstallationInventory}/orainstRoot.sh"
   local -r DescriptionInventoryInstaller='Oracle Inventory root installer program'
   local -r DatabaseInstaller="${DatabaseHome}/runInstaller"
@@ -1167,14 +1170,14 @@ installDatabase() {
   local -r DatabaseRootInstaller="${DatabaseHome}/root.sh"
   local -r DescriptionDatabaseRootInstaller="${DESCRIPTION_PRODUCT_DATABASE} root installer program"
   local -r Requirements="${DatabaseHome}/cv/admin/cvu_config"
-  local -r Marker1="${DatabaseHome}/INSTALLATION_MARKER_1"
-  local -r Marker1a="${DatabaseHome}/INSTALLATION_MARKER_1a"
-  local -r Marker2="${DatabaseHome}/INSTALLATION_MARKER_2"
-  local -r Marker3="${DatabaseHome}/INSTALLATION_MARKER_3"
-  local -r Marker4="${DatabaseHome}/INSTALLATION_MARKER_4"
-  local -r Marker5="${DatabaseHome}/INSTALLATION_MARKER_5"
-  local -r Marker6="${DatabaseHome}/INSTALLATION_MARKER_6"
-  local -r Marker7="${DatabaseHome}/INSTALLATION_MARKER_7"
+  local -r MarkerDatabaseUnzipped="${DatabaseHome}/INSTALLATION_STEP_DATABASE_UNZIPPED"
+  local -r MarkerOPatchUnzipped="${DatabaseHome}/INSTALLATION_STEP_OPATCH_UNZIPPED"
+  local -r MarkerDatabaseInstalled="${DatabaseHome}/INSTALLATION_STEP_DATABASE_INSTALLED"
+  local -r MarkerInventoryConfigured="${DatabaseHome}/INSTALLATION_STEP_INVENTORY_CONFIGURED"
+  local -r MarkerRootConfigured="${DatabaseHome}/INSTALLATION_STEP_ROOT_CONFIGURED"
+  local -r MarkerDatabaseConfigured="${DatabaseHome}/INSTALLATION_STEP_DATABASE_CONFIGURED"
+  local -r MarkerOratabModified="${DatabaseHome}/INSTALLATION_STEP_ORATAB_MODIFIED"
+  local -r MarkerDatabasePrepared="${DatabaseHome}/INSTALLATION_STEP_DATABASE_PREPARED"
   local -i bResponseCreated=$VALUE_FALSE
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
@@ -1218,8 +1221,8 @@ oracle.install.db.rootconfig.configMethod=SUDO
 oracle.install.db.rootconfig.sudoPath=`which sudo`
 oracle.install.db.rootconfig.sudoUserName=${User}
 oracle.install.db.config.starterdb.type=GENERAL_PURPOSE
-oracle.install.db.config.starterdb.globalDBName=${Name}
-oracle.install.db.config.starterdb.SID=${Name}
+oracle.install.db.config.starterdb.globalDBName=${DatabaseName}
+oracle.install.db.config.starterdb.SID=${DatabaseName}
 oracle.install.db.config.starterdb.characterSet=AL32UTF8
 oracle.install.db.config.starterdb.memoryOption=false
 oracle.install.db.config.starterdb.memoryLimit=2048
@@ -1279,29 +1282,37 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
   ### Unzip the Oracle Database software package to the Oracle Database home directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker1"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseInstalled"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} ('${DatabasePackageFileName}') is already unzipped" "$DatabaseHome"
+      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is already installed" "$DatabaseHome"
+      echoInfo "Skipping unzipping the ${DESCRIPTION_DATABASE_PACKAGE_FILE}" "$DatabaseHome"
       Retcode=$?
     else
-      echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} ('${DatabasePackageFileName}') is not unzipped" "$DatabaseHome"
-      executeCommand 'sudo' 'test' '-r' "$DatabasePackageFileName"
-      processCommandCode $? "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} does not exist or is inaccessible" "$DatabasePackageFileName"
-      Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'unzip' '-d' "$DatabaseHome" "$DatabasePackageFileName"
-        processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_PACKAGE_FILE} (${DatabasePackageFileName}) using the user '${User}:${Group}' to '${DatabaseHome}'"
+      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is not installed" "$DatabaseHome"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseUnzipped"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} ('${DatabasePackageFileName}') is already unzipped" "$DatabaseHome"
+        Retcode=$?
+      else
+        echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} ('${DatabasePackageFileName}') is not unzipped" "$DatabaseHome"
+        executeCommand 'sudo' 'test' '-r' "$DatabasePackageFileName"
+        processCommandCode $? "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} does not exist or is inaccessible" "$DatabasePackageFileName"
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' 'chown' "${User}:${Group}" "$DatabaseHome"
-          processCommandCode $? "failed to set the ownership of the ${DescriptionDatabaseHome} to '${User}:${Group}'" "$DatabaseHome"
+          executeCommand 'sudo' 'unzip' '-d' "$DatabaseHome" "$DatabasePackageFileName"
+          processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_PACKAGE_FILE} (${DatabasePackageFileName}) using the user '${User}:${Group}' to '${DatabaseHome}'"
           Retcode=$?
-        fi
-        # Create indicator that the Oracle Database software has been unzipped.
-        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker1"
-          processCommandCode $? 'failed to create the installation marker file' "$Marker1"
-          Retcode=$?
+          if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+            executeCommand 'sudo' 'chown' '-R' "${User}:${Group}" "$DatabaseHome"
+            processCommandCode $? "failed to set the ownership of the ${DescriptionDatabaseHome} to '${User}:${Group}'" "$DatabaseHome"
+            Retcode=$?
+          fi
+          # Create indicator that the Oracle Database software has been unzipped.
+          if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+            executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$MarkerDatabaseUnzipped"
+            processCommandCode $? 'failed to create the installation marker file' "$MarkerDatabaseUnzipped"
+            Retcode=$?
+          fi
         fi
       fi
     fi
@@ -1310,33 +1321,41 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
   ### Unzip the Oracle Database OPatch utility update to the Oracle Database home directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$DatabaseOPatchFileName" ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker1a"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseInstalled"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_DATABASE_OPATCH_FILE} ('${DatabaseOPatchFileName}') is already unzipped" "$OPatchHome"
+      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is already installed" "$DatabaseHome"
+      echoInfo "Skipping unzipping the ${DESCRIPTION_DATABASE_OPATCH_FILE}" "$DatabaseOPatchFileName"
       Retcode=$?
     else
-      echoCommandMessage "the ${DESCRIPTION_DATABASE_OPATCH_FILE} ('${DatabaseOPatchFileName}') is not already unzipped" "$OPatchHome"
-      executeCommand 'sudo' 'test' '-r' "$DatabaseOPatchFileName"
-      processCommandCode $? "the ${DESCRIPTION_DATABASE_OPATCH_FILE} does not exist or is inaccessible" "$DatabaseOPatchFileName"
-      Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mv' "$OPatchHome" "${OPatchHome}-original"
-        processCommandCode $? "failed to move the original ${DESCRIPTION_DATABASE_OPATCH_HOME} (${OPatchHome})" "${OPatchHome}-original"
+      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is not installed" "$DatabaseHome"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerOPatchUnzipped"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandMessage "the ${DESCRIPTION_DATABASE_OPATCH_FILE} ('${DatabaseOPatchFileName}') is already unzipped" "$OPatchHome"
+        Retcode=$?
+      else
+        echoCommandMessage "the ${DESCRIPTION_DATABASE_OPATCH_FILE} ('${DatabaseOPatchFileName}') is not unzipped" "$OPatchHome"
+        executeCommand 'sudo' 'test' '-r' "$DatabaseOPatchFileName"
+        processCommandCode $? "the ${DESCRIPTION_DATABASE_OPATCH_FILE} does not exist or is inaccessible" "$DatabaseOPatchFileName"
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' 'unzip' '-d' "$DatabaseHome" "$DatabaseOPatchFileName"
-          processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_OPATCH_FILE} (${DatabaseOPatchFileName}) using the user '${User}:${Group}' to '${DatabaseHome}'"
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mv' "$OPatchHome" "${OPatchHome}-original"
+          processCommandCode $? "failed to move the original ${DESCRIPTION_DATABASE_OPATCH_HOME} (${OPatchHome})" "${OPatchHome}-original"
           Retcode=$?
           if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-            executeCommand 'sudo' 'chown' "${User}:${Group}" "$OPatchHome"
-            processCommandCode $? "failed to set the ownership of the ${DESCRIPTION_DATABASE_OPATCH_HOME} to '${User}:${Group}'" "$OPatchHome"
+            executeCommand 'sudo' 'unzip' '-d' "$DatabaseHome" "$DatabaseOPatchFileName"
+            processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_OPATCH_FILE} (${DatabaseOPatchFileName}) using the user '${User}:${Group}' to '${DatabaseHome}'"
             Retcode=$?
-          fi
-          # Create indicator that the OPatch utility update has been copied.
-          if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-            executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker1a"
-            processCommandCode $? 'failed to create the installation marker file' "$Marker1a"
-            Retcode=$?
+            if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+              executeCommand 'sudo' 'chown' '-R' "${User}:${Group}" "$OPatchHome"
+              processCommandCode $? "failed to set the ownership of the ${DESCRIPTION_DATABASE_OPATCH_HOME} to '${User}:${Group}'" "$OPatchHome"
+              Retcode=$?
+            fi
+            # Create indicator that the OPatch utility update has been copied.
+            if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+              executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$MarkerOPatchUnzipped"
+              processCommandCode $? 'failed to create the installation marker file' "$MarkerOPatchUnzipped"
+              Retcode=$?
+            fi
           fi
         fi
       fi
@@ -1346,29 +1365,52 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
   ### Unzip the Oracle Database patch update to the staging directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$DatabasePatchFileName" ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "${PatchHome}/${PatchNumber}/README.txt"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseInstalled"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_DATABASE_PATCH_FILE} ('${DatabasePatchFileName}') is already unzipped" "${PatchHome}/${PatchNumber}"
+      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is already installed" "$DatabaseHome"
+      echoInfo "Skipping unzipping the ${DESCRIPTION_DATABASE_PATCH_FILE}" "$DatabasePatchFileName"
       Retcode=$?
     else
-      echoCommandMessage "the ${DESCRIPTION_DATABASE_PATCH_FILE} ('${DatabasePatchFileName}') is not already unzipped" "${PatchHome}/${PatchNumber}"
-      executeCommand 'sudo' 'test' '-r' "$DatabasePatchFileName"
-      processCommandCode $? "the ${DESCRIPTION_DATABASE_PATCH_FILE} does not exist or is inaccessible" "$DatabasePatchFileName"
-      Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'unzip' '-d' "$PatchHome" "$DatabasePatchFileName"
-        processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_PATCH_FILE} (${DatabasePatchFileName}) using the user '${User}:${Group}' to '${PatchHome}'"
+      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is not installed" "$DatabaseHome"
+      executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$PatchBase"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandMessage "the ${DescriptionPatchBase} already exists" "$PatchBase"
+        Retcode=$?
+      else
+        echoCommandMessage "the ${DescriptionPatchBase} does not exist" "$PatchBase"
+        executeCommand 'sudo' 'mkdir' '-m' "$InstallationPermissions" '-p' "$PatchBase"
+        processCommandCode $? "failed to create the ${DescriptionPatchBase}" "$PatchBase"
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' 'chown' "${User}:${Group}" "$PatchHome"
-          processCommandCode $? "failed to set the ownership of the ${DESCRIPTION_DATABASE_PATCH} directory to '${User}:${Group}'" "$PatchHome"
+          executeCommand 'sudo' 'chown' "${User}:${Group}" "$PatchBase"
+          processCommandCode $? "failed to set the ownership of the ${DescriptionPatchBase} to '${User}:${Group}'" "$PatchBase"
           Retcode=$?
+        fi
+      fi
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "${PatchHome}/README.txt"
+        if [[ 0 -eq $? ]] ; then
+          echoCommandMessage "the ${DESCRIPTION_DATABASE_PATCH_FILE} ('${DatabasePatchFileName}') is already unzipped" "${PatchHome}"
+          Retcode=$?
+        else
+          echoCommandMessage "the ${DESCRIPTION_DATABASE_PATCH_FILE} ('${DatabasePatchFileName}') is not unzipped" "${PatchHome}"
+          executeCommand 'sudo' 'test' '-r' "$DatabasePatchFileName"
+          processCommandCode $? "the ${DESCRIPTION_DATABASE_PATCH_FILE} does not exist or is inaccessible" "$DatabasePatchFileName"
+          Retcode=$?
+          if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+            executeCommand 'sudo' 'unzip' '-d' "$PatchBase" "$DatabasePatchFileName"
+            processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_PATCH_FILE} (${DatabasePatchFileName}) using the user '${User}:${Group}' to '${PatchBase}'"
+            Retcode=$?
+            if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+              executeCommand 'sudo' 'chown' '-R' "${User}:${Group}" "$PatchHome"
+              processCommandCode $? "failed to set the ownership of the ${DESCRIPTION_DATABASE_PATCH} directory to '${User}:${Group}'" "$PatchHome"
+              Retcode=$?
+            fi
+          fi
         fi
       fi
     fi
   fi
-
-return $Retcode
 
   ########################################
   # Installation of the Oracle Database. #
@@ -1412,24 +1454,35 @@ return $Retcode
 
   ### Install the Oracle Database. ###
 
-#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker2"
-#    if [[ 0 -eq $? ]] ; then
-#      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is already installed" "$DatabaseHome"
-#      Retcode=$?
-#    else
-#      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is not already installed" "$DatabaseHome"
-#      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$DatabaseResponseFileName"
-#      processCommandCode $? "an error occurred when running the ${DescriptionDatabaseInstaller}" "$DatabaseInstaller"
-#      Retcode=$?
-#      # Create indicator that the software has been installed.
-#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker2"
-#        processCommandCode $? 'failed to create the installation marker file' "$Marker2"
-#        Retcode=$?
-#      fi
-#    fi
-#  fi
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseInstalled"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is already installed" "$DatabaseHome"
+      Retcode=$?
+    else
+      local -a InstallationCommand=('sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$DatabaseResponseFileName")
+      echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is not installed" "$DatabaseHome"
+      if [[ -n "$DatabasePatchFileName" ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$PatchHome"
+        processCommandCode $? "the ${DescriptionPatchHome} does not exist or is inaccessible" "$PatchHome"
+        Retcode=$?
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          InstallationCommand+=('-applyRU')
+          InstallationCommand+=("$PatchHome")
+        fi
+      fi
+      echoInfo "installing the ${DESCRIPTION_PRODUCT_DATABASE} with a ${DESCRIPTION_DATABASE_RESPONSE_FILE}" "$DatabaseResponseFileName"
+      executeCommand ${InstallationCommand[@]}
+      processCommandCode $? "an error occurred when running the ${DescriptionDatabaseInstaller}" "$DatabaseInstaller"
+      Retcode=$?
+      # Create indicator that the software has been installed.
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$MarkerDatabaseInstalled"
+        processCommandCode $? 'failed to create the installation marker file' "$MarkerDatabaseInstalled"
+        Retcode=$?
+      fi
+    fi
+  fi
 
   #######################################
   # Perform the post-installation steps #
@@ -1442,12 +1495,12 @@ return $Retcode
   ### Run the Oracle inventory root installer program, if it exists, using the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker3"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInventoryConfigured"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${DescriptionInventoryInstaller} has already been run" "$InventoryInstaller"
       Retcode=$?
     else
-      echoCommandMessage "the ${DescriptionInventoryInstaller} has not already been run" "$InventoryInstaller"
+      echoCommandMessage "the ${DescriptionInventoryInstaller} has not been run" "$InventoryInstaller"
       executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$InventoryInstaller"
       if [[ 0 -eq $? ]] ; then
         echoCommandSuccess
@@ -1456,8 +1509,8 @@ return $Retcode
         Retcode=$?
         # Create indicator that the Oracle Inventory root installer has been run.
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker3"
-          processCommandCode $? 'failed to create the installation marker file' "$Marker3"
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$MarkerInventoryConfigured"
+          processCommandCode $? 'failed to create the installation marker file' "$MarkerInventoryConfigured"
           Retcode=$?
         fi
       else
@@ -1471,12 +1524,12 @@ return $Retcode
   ### Run the Oracle Database root installer program using the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker4"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerRootConfigured"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${DescriptionDatabaseRootInstaller} has already been run" "$DatabaseRootInstaller"
       Retcode=$?
     else
-      echoCommandMessage "the ${DescriptionDatabaseRootInstaller} has not already been run" "$DatabaseRootInstaller"
+      echoCommandMessage "the ${DescriptionDatabaseRootInstaller} has not been run" "$DatabaseRootInstaller"
       executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$DatabaseRootInstaller"
       processCommandCode $? "the ${DescriptionDatabaseRootInstaller} does not exist or is inaccessible" "$DatabaseRootInstaller"
       Retcode=$?
@@ -1486,8 +1539,8 @@ return $Retcode
         Retcode=$?
         # Create indicator that the Oracle Database root installer has been run.
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker4"
-          processCommandCode $? 'failed to create the installation marker file' "$Marker4"
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$MarkerRootConfigured"
+          processCommandCode $? 'failed to create the installation marker file' "$MarkerRootConfigured"
           Retcode=$?
         fi
       fi
@@ -1496,24 +1549,24 @@ return $Retcode
 
   ### Configure the Oracle Database network settings using the installation user. ###
 
-#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker5"
-#    if [[ 0 -eq $? ]] ; then
-#      echoCommandMessage "the network information of the ${DESCRIPTION_PRODUCT_DATABASE} is already configured"
-#      Retcode=$?
-#    else
-#      echoCommandMessage "the network information of the ${DESCRIPTION_PRODUCT_DATABASE} is not configured"
-#      executeCommand 'sudo' '-E' '-u' "$User" "$DatabaseInstaller" '-executeConfigTools' '-silent' '-responseFile' "$DatabaseResponseFileName"
-#      processCommandCode $? "an error occurred when running the ${DescriptionDatabaseInstaller}" "${DatabaseInstaller} -executeConfigTools"
-#      Retcode=$?
-#      # Create indicator that the network information of the Oracle Database has been configured.
-#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker5"
-#        processCommandCode $? 'failed to create the installation marker file' "$Marker5"
-#        Retcode=$?
-#      fi
-#    fi
-#  fi
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseConfigured"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the network information of the ${DESCRIPTION_PRODUCT_DATABASE} is already configured"
+      Retcode=$?
+    else
+      echoCommandMessage "the network information of the ${DESCRIPTION_PRODUCT_DATABASE} is not configured"
+      executeCommand 'sudo' '-E' '-u' "$User" "$DatabaseInstaller" '-executeConfigTools' '-silent' '-responseFile' "$DatabaseResponseFileName"
+      processCommandCode $? "an error occurred when running the ${DescriptionDatabaseInstaller}" "${DatabaseInstaller} -executeConfigTools"
+      Retcode=$?
+      # Create indicator that the network information of the Oracle Database has been configured.
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$MarkerDatabaseConfigured"
+        processCommandCode $? 'failed to create the installation marker file' "$MarkerDatabaseConfigured"
+        Retcode=$?
+      fi
+    fi
+  fi
 
   ### Delete the Oracle Database automated installation response file. ###
 
@@ -1531,7 +1584,7 @@ return $Retcode
   ### Modify the oratab file to enable the automatic start and shutdown of the database with dbstart and dbshut. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker6"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerOratabModified"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the automatic start of the ${DESCRIPTION_PRODUCT_DATABASE} is already enabled"
       Retcode=$?
@@ -1545,8 +1598,8 @@ return $Retcode
         Retcode=$?
         # Create indicator that the automatic start of the Oracle Database has been enabled.
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker6"
-          processCommandCode $? 'failed to create the installation marker file' "$Marker6"
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$MarkerOratabModified"
+          processCommandCode $? 'failed to create the installation marker file' "$MarkerOratabModified"
           Retcode=$?
         fi
       else
@@ -1555,8 +1608,6 @@ return $Retcode
       fi
     fi
   fi
-
-return $Retcode
 
   ##
   ## Configuration of the Oracle Database.
@@ -1567,7 +1618,7 @@ return $Retcode
   fi
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker7"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabasePrepared"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${DESCRIPTION_PRODUCT_DATABASE} is already configured" "$DatabaseName"
       Retcode=$?
@@ -1618,8 +1669,8 @@ EOF
       # Create indicator that the Oracle Database has been configured.
 
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker7"
-        processCommandCode $? 'failed to create the installation marker file' "$Marker7"
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$MarkerDatabasePrepared"
+        processCommandCode $? 'failed to create the installation marker file' "$MarkerDatabasePrepared"
         Retcode=$?
       fi
     fi
@@ -2002,6 +2053,7 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
 prepareInstallation() {
   local Message=''
   local Capture=''
+  local InstallationStage         DescriptionInstallationStage
   local InstallationInventory     DescriptionInstallationInventory
   local InstallationBase          DescriptionInstallationBase
   local InstallationPermissions   DescriptionInstallationPermissions
@@ -2027,6 +2079,7 @@ prepareInstallation() {
   local SystemdFileName           DescriptionSystemdFileName
   local SystemdFilePermissions    DescriptionSystemdFilePermissions
   echoTitle 'Preparing for installation of the Oracle products'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGE"            'Message' 'InstallationStage'         'DescriptionInstallationStage'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"        'Message' 'InstallationInventory'     'DescriptionInstallationInventory'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_BASE"             'Message' 'InstallationBase'          'DescriptionInstallationBase'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_FILE_PERMISSIONS" 'Message' 'InstallationPermissions'   'DescriptionInstallationPermissions'
@@ -2135,7 +2188,7 @@ prepareInstallation() {
       else
         echoCommandMessage "the ${DescriptionUser} '${User}' is not a member of the ${DescriptionDBAGroup}" "$DBAGroup" "$Output4"
         executeCommand 'sudo' 'usermod' '-a' '-G' "$DBAGroup" "$User"
-	processCommandCode $? "failed to add the ${DescriptionUser} '${User}' to the ${DescriptionDBAGroup}" "$DBAGroup"
+  processCommandCode $? "failed to add the ${DescriptionUser} '${User}' to the ${DescriptionDBAGroup}" "$DBAGroup"
         Retcode=$?
       fi
       Retcode=$?
@@ -2209,11 +2262,13 @@ EOF" | sudo 'sh'
 
   ### Install pre-requisite system libraries. ###
 
-#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#    executeCommand 'sudo' 'yum' '-y' 'install' 'libnsl'
-#    processCommandCode $? 'failed to install the pre-requisite system library' 'libnsl'
-#    Retcode=$?
-#  fi
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    if ! [[ -f '/usr/lib64/libnsl.so.1' ]] ; then
+      executeCommand 'sudo' 'yum' '-y' 'install' 'libnsl'
+      processCommandCode $? 'failed to install the pre-requisite system library' 'libnsl'
+      Retcode=$?
+    fi
+  fi
 
   #D######################################################
   # Adjustment of the system swap to have at least 16GB. #
@@ -2384,6 +2439,26 @@ EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection 'Creation of the installation directories for the Oracle products'
+  fi
+
+  ### Create the installation staging directory. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$InstallationStage"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DescriptionInstallationStage} already exists" "$InstallationStage"
+      Retcode=$?
+    else
+      echoCommandMessage "the ${DescriptionInstallationStage} does not exist" "$InstallationStage"
+      executeCommand 'sudo' 'mkdir' '-m' "$InstallationPermissions" '-p' "$InstallationStage"
+      processCommandCode $? "failed to create the ${DescriptionInstallationStage}" "$InstallationStage"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' 'chown' "${User}:${Group}" "$InstallationStage"
+        processCommandCode $? "failed to set the ownership of the ${DescriptionInstallationStage} to '${User}:${Group}'" "$InstallationStage"
+        Retcode=$?
+      fi
+    fi
   fi
 
   ### Create the installation inventory directory. ###
