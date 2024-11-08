@@ -384,6 +384,7 @@ declare -r DESCRIPTION_DATABASE_OPATCH_FILE="${DESCRIPTION_DATABASE_OPATCH} upda
 declare -r DESCRIPTION_DATABASE_PATCH="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} version patch update"
 declare -r DESCRIPTION_DATABASE_PATCH_FILE="${DESCRIPTION_DATABASE_PATCH} zip file"
 declare -r DESCRIPTION_DATABASE_RESPONSE_FILE="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} installation response file"
+declare -r DESCRIPTION_MANAGER_FILE="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} installation zip file"
 declare -r DESCRIPTION_MANAGER_FILES="installation zip files for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
 declare -r DESCRIPTION_MANAGER_RESPONSE_FILE="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} installation response file"
 declare -r DESCRIPTION_MANAGER_KEYSTORE="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} key store"
@@ -476,6 +477,7 @@ declare -r -i RETCODE_INTERNAL_ERROR=100
 
 declare -r CHARACTER_SINGLE_QUOTE="'"
 declare -r CHARACTER_DOUBLE_QUOTE="\""
+declare -r CHARACTER_BACKSLASH='\'
 declare -r -i VALUE_TRUE=0
 declare -r -i VALUE_FALSE=1
 declare -r -i HELP_INDENT_LENGTH=2
@@ -684,10 +686,10 @@ echoHelp() {
     echo "3- Download the latest ${DESCRIPTION_DATABASE_OPATCH_FILE} and ${DESCRIPTION_DATABASE_PATCH_FILE}, and provide them to the program with the options '${OPTION_DATABASE_OPATCH_FILE_NAME}' and '${OPTION_DATABASE_PATCH_FILE_NAME}', respectively."
     echo "4- Download the ${DESCRIPTION_MANAGER_FILES} from https://edelivery.oracle.com or from https://support.oracle.com.  There should be five zip files, which must be provided to the program as a comma-separated list with the parameter '${OPTION_MANAGER_FILE_NAMES}'."
     echo "5- Run this program with the '${COMMAND_INSTALL}' command with the necessary program parameters.  For example, to install the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}:"
-    echo "       ${PROGRAM} \\"
-    echo "           ${OPTION_PREFIX}${OPTION_DATABASE_PACKAGE_FILE_NAME}=${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_PACKAGE_FILE_NAME}]} \\"
-    echo "           ${OPTION_PREFIX}${OPTION_DATABASE_OPATCH_FILE_NAME}=${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_OPATCH_FILE_NAME}]} \\"
-    echo "           ${OPTION_PREFIX}${OPTION_DATABASE_PATCH_FILE_NAME}=${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_PATCH_FILE_NAME}]} \\"
+    echo "       ${PROGRAM} ${CHARACTER_BACKSLASH}"
+    echo "           ${OPTION_PREFIX}${OPTION_DATABASE_PACKAGE_FILE_NAME}=${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_PACKAGE_FILE_NAME}]} ${CHARACTER_BACKSLASH}"
+    echo "           ${OPTION_PREFIX}${OPTION_DATABASE_OPATCH_FILE_NAME}=${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_OPATCH_FILE_NAME}]} ${CHARACTER_BACKSLASH}"
+    echo "           ${OPTION_PREFIX}${OPTION_DATABASE_PATCH_FILE_NAME}=${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_PATCH_FILE_NAME}]} ${CHARACTER_BACKSLASH}"
     echo "           ${COMMAND_INSTALL} ${PRODUCT_DATABASE}"
     echo
     echo 'Minimum machine requirements:'
@@ -1621,9 +1623,9 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     fi
   fi
 
-  ##
-  ## Configuration of the Oracle Database.
-  ##
+  #########################################
+  # Configuration of the Oracle Database. #
+  #########################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "Configuration of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
@@ -1717,6 +1719,7 @@ installManager() {
   local Message=''
   local InstallationStage
   local InstallationInventory
+  local InstallationStageDescription
   local User
   local Group
   local Hostname
@@ -1724,7 +1727,8 @@ installManager() {
   local DatabaseName
   local DatabasePort
   local DatabasePassword
-  local ManagerRepository               DescriptionManagerRepository
+  local ManagerVersion
+  local ManagerFileNames
   local ManagerResponseFileName
   local ManagerResponseFilePermissions  
   local ManagerResponseFilePermissionsDescription
@@ -1745,7 +1749,7 @@ installManager() {
   local WeblogicPassword
   local SystemdService
   echoTitle "Installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGE"                'Message' 'InstallationStage'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGE"                'Message' 'InstallationStage' 'InstallationStageDescription'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"            'Message' 'InstallationInventory'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                 'Message' 'User'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                'Message' 'Group'
@@ -1754,7 +1758,8 @@ installManager() {
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                     'Message' 'DatabaseName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PORT"                     'Message' 'DatabasePort'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"                 'Message' 'DatabasePassword'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_REPOSITORY"                'Message' 'ManagerRepository'              'DescriptionManagerRepository'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                   'Message' 'ManagerVersion'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_FILE_NAMES"                'Message' 'ManagerFileNames'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_NAME"        'Message' 'ManagerResponseFileName'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS" 'Message' 'ManagerResponseFilePermissions' 'ManagerResponseFilePermissionsDescription'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_BASE"                      'Message' 'ManagerBase'
@@ -1772,37 +1777,143 @@ installManager() {
   retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PASSWORD"                 'Message' 'WeblogicPassword'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"                   'Message' 'SystemdService'
   local -i Retcode=$?
-  local -r Marker1="${ManagerHome}/INSTALLATION_MARKER_1"
-  local -r Marker2="${ManagerHome}/INSTALLATION_MARKER_2"
-  local -r Marker3="${ManagerHome}/INSTALLATION_MARKER_3"
+  local -r MarkerManagerInstalled="${ManagerHome}/INSTALLATION_STEP_MANAGER_INSTALLED"
+  local -r MarkerRootConfigured="${ManagerHome}/INSTALLATION_STEP_ROOT_CONFIGURED"
+  local -r MarkerFirewalldConfigured="${ManagerHome}/INSTALLATION_STEP_FIREWALLD_CONFIGURED"
+  local -r ManagerRepository="${InstallationStage}/manager-${ManagerVersion}"
+  local -r ManagerRepositoryDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} installation repository directory"
   local -r ManagerInstaller="${ManagerRepository}/em13500_linux64.bin"
-  local -r DescriptionManagerInstaller="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} installer program"
+  local -r ManagerInstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} installer program"
   local -r ManagerRootInstaller="${ManagerHome}/allroot.sh"
-  local -r DescriptionDatabaseRootInstaller="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} root installer program"
+  local -r ManagerRootInstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} root installer program"
   local -r ManagerData="${ManagerBase}/oradata"
-  local -i bCreated=$VALUE_FALSE
+  local -i bRepositoryCreated=$VALUE_FALSE
+  local -i bResponseCreated=$VALUE_FALSE
 
 return $Retcode
 
-  ##
-  ## Generation of the Oracle Enterprise Manager automated installation response file.
-  ##
+  ########################################
+  # Extraction of the package zip files. #
+  ########################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "Generation of the ${DESCRIPTION_MANAGER_RESPONSE_FILE}"
   fi
 
-  # Generate the response file.
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerManagerInstalled"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} is already installed"
+    else
+      local -a Files
+      local File=''
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} is not installed"
+
+      ### Validate that the staging directory is accessible. ###
+
+      if [[ 0 -eq $Retcode ]] ; then
+        executeCommand 'sudo' 'test' '-d' "$InstallationStage" '-a' '-w' "$InstallationStage"
+        processCommandCode $? "the ${InstallationStageDescription} does not exist or is inaccessible" "$InstallationStage"
+        Retcode=$?
+      fi
+
+      ### (Re-)create the manager repository directory. ###
+
+      if [[ 0 -eq $Retcode ]] ; then
+        executeCommand 'sudo' 'test' '-d' "$ManagerRepository"
+        if [[ 0 -eq $? ]] ; then
+          echoCommandMessage "the ${ManagerInstallerDescription} already exists and will be re-created"
+          executeCommand 'sudo' 'rm' '-rf' "$ManagerRepository"
+          processCommandCode $? "failed to delete the ${ManagerRepositoryDescription}" "$ManagerRepository"
+        else
+          echoCommandMessage "the ${ManagerInstallerDescription} does not exists"
+        fi
+        Retcode=$?
+        if [[ 0 -eq $Retcode ]] ; then
+          executeCommand 'sudo' 'mkdir' "$ManagerRepository"
+          processCommandCode $? "failed to create the ${ManagerRepositoryDescription}" "$ManagerRepository"
+          Retcode=$?
+          if [[ 0 -eq $Retcode ]] ; then
+            bResponseCreated=$VALUE_TRUE
+          fi
+        fi
+      fi
+
+      ### Read the names of the the manager pacakage zip files. ###
+
+      if [[ 0 -eq $Retcode ]] ; then
+        echoCommand "IFS=',' read -ra <<< ${ManagerFileNames}"
+        IFS=',' read -ra FileNames <<< "$ManagerFileNames"
+        processCommandCode $? 'failed to read program option' "$OPTION_MANAGER_FILE_NAMES"
+        Retcode=$?
+      fi
+
+      ### Validate that the manager pacakage zip files are accessible. ###
+
+      if [[ 0 -eq $Retcode ]] ; then
+        for File in ${FileNames[@]} ; do
+          executeCommand 'sudo' 'test' '-f' "$File" '-a' '-r' "$File"
+          processCommandCode $? "the ${DESCRIPTION_MANAGER_FILE} does not exist or is inaccessible" "$File"
+          Retcode=$?
+          if [[ 0 -eq $Retcode ]] ; then
+            break
+          fi
+        done
+      fi
+
+      ### Unzip the manager package zip files to the manager repository directory. ###
+
+      if [[ 0 -eq $Retcode ]] ; then
+        for File in ${FileNames[@]} ; do
+          executeCommand 'sudo' unzip -d "$ManagerRepository" "$File"
+          processCommandCode $? "failed to unzip the ${DESCRIPTION_MANAGER_FILE} to the ${ManagerRepositoryDescription}" "$File"
+          Retcode=$?
+          if [[ 0 -ne $Retcode ]] ; then
+            break
+          fi
+        done
+      fi
+
+      ### Change the file ownership and permissions of the manager repository directory. ###
+
+      if [[ 0 -eq $Retcode ]] ; then
+        executeCommand 'sudo' 'chown' '-R' "${User}:${Group}" "$ManagerRepository"
+        processCommandCode $? "failed to change ownership of the ${ManagerRepositoryDescription}" "$ManagerRepository"
+        Retcode=$?
+        if [[ 0 -eq $Retcode ]] ; then
+          executeCommand 'sudo' 'chmod' '-R' '644' "$ManagerRepository"
+          processCommandCode $? "failed to change the file permissios on the ${ManagerRepositoryDescription}" "$ManagerRepository"
+          Retcode=$?
+        fi
+      fi
+    fi
+  fi
+
+  #####################################################################################
+  # Generation of the Oracle Enterprise Manager automated installation response file. #
+  #####################################################################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-r' "$ManagerResponseFileName"
+    echoSection "Generation of the ${DESCRIPTION_MANAGER_RESPONSE_FILE}"
+  fi
+
+  ### Generate the response file. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerManagerInstalled"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "The ${DESCRIPTION_MANAGER_RESPONSE_FILE} already exists and will be overwritten" "$ManagerResponseFileName"
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} is already installed and configured"
     else
-      echoCommandMessage "The ${DESCRIPTION_MANAGER_RESPONSE_FILE} does not exist" "$ManagerResponseFileName"
-    fi
-    echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat > '${ManagerResponseFileName}' <<EOF ... EOF"
-    echo "cat > '${ManagerResponseFileName}' <<EOF
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} is not installed or is not configured"
+      echoInfo "a ${DESCRIPTION_MANAGER_RESPONSE_FILE} will be generated" "$ManagerResponseFileName"
+      executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-r' "$ManagerResponseFileName"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandMessage "The ${DESCRIPTION_MANAGER_RESPONSE_FILE} already exists and will be overwritten" "$ManagerResponseFileName"
+      else
+        echoCommandMessage "The ${DESCRIPTION_MANAGER_RESPONSE_FILE} does not exist" "$ManagerResponseFileName"
+      fi
+      echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat > '${ManagerResponseFileName}' <<EOF ... EOF"
+      echo "cat > '${ManagerResponseFileName}' <<EOF
 RESPONSEFILE_VERSION=2.2.1.0.0
 UNIX_GROUP_NAME=${Group}
 # Installation
@@ -1845,51 +1956,48 @@ TRUSTSTORE_LOCATION=${ManagerTruststoreFileName}
 KEYSTORE_PASSWORD=${ManagerKeystorePassword}
 KEYSTORE_LOCATION=${ManagerKeystoreFileName}
 EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
-    processCommandCode $? "The ${DESCRIPTION_MANAGER_RESPONSE_FILE} was not created" "$ManagerResponseFileName"
-    Retcode=$?
+      processCommandCode $? "The ${DESCRIPTION_MANAGER_RESPONSE_FILE} was not created" "$ManagerResponseFileName"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        bResponseCreated=$VALUE_TRUE
+      fi
+    fi
+    ### Restrict the file permissions of the response file. ###
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      bCreated=$VALUE_TRUE
+      executeCommand 'sudo' 'chmod' ${ManagerResponseFilePermissions} "$ManagerResponseFileName"
+      processCommandCode $? "Failed to restrict the file permissions to ${ManagerResponseFilePermissionsDescription} on the ${DESCRIPTION_MANAGER_RESPONSE_FILE}" "$ManagerResponseFileName"
+      Retcode=$?
+    fi
+    ### Validate that the response file is accessible by the installation user. ###
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$ManagerResponseFileName"
+      processCommandCode $? "the ${DESCRIPTION_MANAGER_RESPONSE_FILE} is inaccessible" "$ManagerResponseFileName"
+      Retcode=$?
     fi
   fi
 
-  # Restrict the file permissions of the response file.
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'chmod' ${ManagerResponseFilePermissions} "$ManagerResponseFileName"
-    processCommandCode $? "Failed to restrict the file permissions to ${ManagerResponseFilePermissionsDescription} on the ${DESCRIPTION_MANAGER_RESPONSE_FILE}" "$ManagerResponseFileName"
-    Retcode=$?
-  fi
-
-  # Validate that the response file is accessible by the installation user.
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$ManagerResponseFileName"
-    processCommandCode $? "the ${DESCRIPTION_MANAGER_RESPONSE_FILE} is inaccessible" "$ManagerResponseFileName"
-    Retcode=$?
-  fi
-
-  ##
-  ## Installation of the Oracle Enterprise Manager.
-  ##
+  ##################################################
+  # Installation of the Oracle Enterprise Manager. #
+  ##################################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "Installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
   fi
 
-  # Change the current working directory to the Oracle Enterprise Manager software repository.
+  ### Change the current working directory to the Oracle Enterprise Manager software repository. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     if [[ ! -d "$ManagerRepository" ]] || [[ ! -x "$ManagerRepository" ]] ; then
-      echoError $RETCODE_OPERATION_ERROR "the ${DescriptionManagerRepository} does not exist or is inaccessible" "$ManagerRepository"
+      echoError $RETCODE_OPERATION_ERROR "the ${ManagerRepositoryDescription} does not exist or is inaccessible" "$ManagerRepository"
     else
       echoCommand 'cd' "$ManagerRepository"
       cd "$ManagerRepository"
-      processCommandCode $? "failed to change the current working directory to the ${DescriptionManagerRepository}" "$ManagerRepository"
+      processCommandCode $? "failed to change the current working directory to the ${ManagerRepositoryDescription}" "$ManagerRepository"
     fi
     Retcode=$?
   fi
 
-  # Export the ORACLE_HOME environment variable.
+  ### Export the ORACLE_HOME environment variable. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoCommand 'export' "ORACLE_HOME=${ManagerHome}"
@@ -1898,7 +2006,7 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     Retcode=$?
   fi
 
-  # Export the OMS_INSTANCE_HOME environment variable.
+  ### Export the OMS_INSTANCE_HOME environment variable. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoCommand 'export' "OMS_INSTANCE_HOME=${ManagerInstance}"
@@ -1907,38 +2015,38 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     Retcode=$?
   fi
 
-  # Run the Oracle Enterprise Manager installer program using the installation user.
+  ### Run the Oracle Enterprise Manager installer program using the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker1"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerManagerInstalled"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software is already installed" "$ManagerHome"
       Retcode=$?
     else
       echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software is not already installed" "$ManagerHome"
       executeCommand sudo '-E' '-u' "$User" '-g' "$Group" "$ManagerInstaller" '-silent' '-responseFile' "$ManagerResponseFileName" "-J-Djava.io.tmpdir=${InstallationStage}"
-      processCommandCode $? "an error occurred when running the ${DescriptionManagerInstaller}" "$ManagerInstaller"
+      processCommandCode $? "an error occurred when running the ${ManagerInstallerDescription}" "$ManagerInstaller"
       Retcode=$?
-      # Create indicator that the Oracle Enterprise Manager has been installed.
+      ### Create indicator that the Oracle Enterprise Manager has been installed. ###
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker1"
-        processCommandCode $? 'failed to create the installation marker file' "$Marker1"
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$MarkerManagerInstalled"
+        processCommandCode $? 'failed to create the installation marker file' "$MarkerManagerInstalled"
         Retcode=$?
       fi
     fi
   fi
 
-  ##
-  ## Perform the post-installation steps
-  ##
+  ########################################
+  # Perform the post-installation steps. #
+  ########################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "Post-installation steps"
   fi
 
-  # Delete the Oracle Enterprise Manager automated installation response file.
+  ### Delete the Oracle Enterprise Manager automated installation response file. ###
 
-  if [[ $VALUE_TRUE -eq $bCreated ]] ; then
+  if [[ $VALUE_TRUE -eq $bResponseCreated ]] ; then
     executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-f' "$ManagerResponseFileName"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${DESCRIPTION_MANAGER_RESPONSE_FILE} will be deleted" "$ManagerResponseFileName"
@@ -1949,36 +2057,36 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     fi
   fi
 
-  # Run the Oracle Enterprise Manager root installer program using the root user.
+  ### Run the Oracle Enterprise Manager root installer program using the root user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker2"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerRootConfigured"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionManagerRootInstaller} has already been run" "$ManagerRootInstaller"
+      echoCommandMessage "the ${ManagerRootInstallerDescription} has already been run" "$ManagerRootInstaller"
       Retcode=$?
     else
-      echoCommandMessage "the ${DescriptionManagerRootInstaller} has not already been run" "$ManagerRootInstaller"
+      echoCommandMessage "the ${ManagerRootInstallerDescription} has not already been run" "$ManagerRootInstaller"
       executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$ManagerRootInstaller"
-      processCommandCode $? "the ${DescriptionManagerRootInstaller} does not exist or is inaccessible" "$ManagerRootInstaller"
+      processCommandCode $? "the ${ManagerRootInstallerDescription} does not exist or is inaccessible" "$ManagerRootInstaller"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' '-E' "$ManagerRootInstaller"
-        processCommandCode $? "an error occurred when running the ${DescriptionManagerRootInstaller}" "$ManagerRootInstaller"
+        processCommandCode $? "an error occurred when running the ${ManagerRootInstallerDescription}" "$ManagerRootInstaller"
         Retcode=$?
-        # Create indicator that the Oracle Enterprise Manager root installer program has been run.
+        ### Create indicator that the Oracle Enterprise Manager root installer program has been run. ###
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker2"
-          processCommandCode $? "failed to create the installation marker file" "$Marker2"
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$MarkerRootConfigured"
+          processCommandCode $? "failed to create the installation marker file" "$MarkerRootConfigured"
           Retcode=$?
         fi
       fi
     fi
   fi
 
-  # Configure firewalld to allow network access to the Oracle Enterprise Manager.
+  ### Configure firewalld to allow network access to the Oracle Enterprise Manager. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker3"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerFirewalldConfigured"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "Firewalld has already been configured for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
       Retcode=$?
@@ -1999,10 +2107,10 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
           executeCommand 'sudo' 'firewall-cmd' '--reload'
           processCommandCode $? 'failed to reload firewalld'
           Retcode=$?
-          # Create indicator that Firewalld has been configured for the Oracle Enterprise Manager.
+          ### Create indicator that Firewalld has been configured for the Oracle Enterprise Manager. ###
           if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-            executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$Marker3"
-            processCommandCode $? "failed to create the installation marker file" "$Marker3"
+            executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$MarkerFirewalldConfigured"
+            processCommandCode $? "failed to create the installation marker file" "$MarkerFirewalldConfigured"
             Retcode=$?
           fi
         fi
