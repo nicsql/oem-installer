@@ -247,8 +247,8 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_FILE_NAME"]=$OPTION_SOURCE_COMMAND
   ["$OPTION_INSTALLATION_STAGE"]=$OPTION_SOURCE_ALL
   ["$OPTION_INSTALLATION_ROOT"]=$OPTION_SOURCE_ALL
-  ["$OPTION_INSTALLATION_INVENTORY"]=$OPTION_SOURCE_PROGRAM
-  ["$OPTION_INSTALLATION_BASE"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_INSTALLATION_INVENTORY"]=$OPTION_SOURCE_ALL
+  ["$OPTION_INSTALLATION_BASE"]=$OPTION_SOURCE_ALL
   ["$OPTION_INSTALLATION_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_INSTALLATION_USER"]=$OPTION_SOURCE_ALL
   ["$OPTION_INSTALLATION_GROUP"]=$OPTION_SOURCE_ALL
@@ -259,8 +259,8 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_RESPONSE_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS"]=$OPTION_SOURCE_ALL
-  ["$OPTION_DATABASE_BASE"]=$OPTION_SOURCE_PROGRAM
-  ["$OPTION_DATABASE_HOME"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_DATABASE_BASE"]=$OPTION_SOURCE_ALL
+  ["$OPTION_DATABASE_HOME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_DATA"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_RECOVERY"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_NAME"]=$OPTION_SOURCE_ALL
@@ -275,16 +275,16 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_MANAGER_PATCHES_FILE_NAMES"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_RESPONSE_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS"]=$OPTION_SOURCE_ALL
-  ["$OPTION_MANAGER_BASE"]=$OPTION_SOURCE_PROGRAM
-  ["$OPTION_MANAGER_HOME"]=$OPTION_SOURCE_PROGRAM
-  ["$OPTION_MANAGER_INSTANCE"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_MANAGER_BASE"]=$OPTION_SOURCE_ALL
+  ["$OPTION_MANAGER_HOME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_MANAGER_INSTANCE"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_MANAGER_KEYSTORE_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]=$OPTION_SOURCE_FILE
-  ["$OPTION_AGENT_BASE"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_AGENT_BASE"]=$OPTION_SOURCE_ALL
   ["$OPTION_AGENT_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_WEBLOGIC_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_WEBLOGIC_PASSWORD"]=$OPTION_SOURCE_FILE
@@ -1185,13 +1185,16 @@ setDirectoryOwnership() {
   local -r Group="${3:-root}"
   local -r DirectoryDescription="${4:-directory}"
   local -r DirectoryName="${5:-}"
+
+echo "CHOWN ${DirectoryName} ${User}:${Group}"
+
   if [[ $RETCODE_SUCCES -eq $Retcode ]] ; then
     executeCommand 'sudo' 'test' '-d' "$DirectoryName"
     processCommandCode $? "the ${DirectoryDescription} does not exist or is inaccessible" "$DirectoryName"
     Retcode=$?
   fi
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'chown' "${User}:${Group}" "$DirectoryName"
+    executeCommand 'sudo' 'chown' '-R' "${User}:${Group}" "$DirectoryName"
     processCommandCode $? "failed to set the ownership of the ${DirectoryDescription}" "$DirectoryName" "${User}:${Group}"
     Retcode=$?
   fi
@@ -1840,18 +1843,17 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     fi
   fi
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    updatePatcher \
-      "$User" \
-      "$Group" \
-      "$DESCRIPTION_DATABASE_OPATCH" \
-      "$DESCRIPTION_DATABASE_OPATCH_FILE" \
-      "$OPatchFileName" \
-      "$DESCRIPTION_DATABASE_OPATCH_HOME" \
-      "${HomeDirectory}/OPatch" \
-      "$MarkerOPatchUpdated"
-    Retcode=$?
-  fi
+  updatePatcher \
+    $Retcode \
+    "$User" \
+    "$Group" \
+    "$DESCRIPTION_DATABASE_OPATCH" \
+    "$DESCRIPTION_DATABASE_OPATCH_FILE" \
+    "$OPatchFileName" \
+    "$DESCRIPTION_DATABASE_OPATCH_HOME" \
+    "${HomeDirectory}/OPatch" \
+    "$MarkerOPatchUpdated"
+  Retcode=$?
 
   local PatchHome=''
   local PatchMarker=''
@@ -2767,7 +2769,7 @@ prepareInstallation() {
       fi
     else
       echoCommandMessage "the ${DescriptionUser} does not exist" "$User"
-      executeCommand 'sudo' '/usr/sbin/useradd' '--uid' '54321' '--gid' "$Group" '--comment' "$DescriptionUser" '--shell' '/bin/bash' '--create-home' "$User"
+      executeCommand 'sudo' '/usr/sbin/useradd' '-u' '54321' '-g' "$Group" '-s' '/bin/bash' '-m' "$User"
       processCommandCode $? "failed to create the ${DescriptionUser}" "${User}:${Group}"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -2848,7 +2850,6 @@ prepareInstallation() {
 # Created by ${PROGRAM} on $(date)
 # Grant sudo privileges to the Oracle installation user
 ${User} ALL=(ALL) NOPASSWD:ALL
-Defaults    secure_path = /sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin
 EOF" | sudo 'sh'
       processCommandCode $? "failed to create the ${DESCRIPTION_SUDOERS_FILE}" "$SudoersFileName"
       Retcode=$?
@@ -3060,119 +3061,38 @@ EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
 
   ### Create the installation staging directory. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$InstallationStage"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionInstallationStage} already exists" "$InstallationStage"
-      Retcode=$?
-    else
-      echoCommandMessage "the ${DescriptionInstallationStage} does not exist" "$InstallationStage"
-      executeCommand 'sudo' 'mkdir' '-m' "$InstallationPermissions" '-p' "$InstallationStage"
-      processCommandCode $? "failed to create the ${DescriptionInstallationStage}" "$InstallationStage"
-      Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'chown' "${User}:${Group}" "$InstallationStage"
-        processCommandCode $? "failed to set the ownership of the ${DescriptionInstallationStage} to '${User}:${Group}'" "$InstallationStage"
-        Retcode=$?
-      fi
-    fi
-  fi
-
-  ### Create the installation inventory directory. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-d' "$InstallationInventory"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionInstallationInventory} already exists" "$InstallationInventory"
-      Retcode=$?
-    else
-      echoCommandMessage "the ${DescriptionInstallationInventory} does not exist" "$InstallationInventory"
-      executeCommand 'sudo' 'mkdir' '-m' "$InstallationPermissions" '-p' "$InstallationInventory"
-      processCommandCode $? "failed to create the ${DescriptionInstallationInventory}" "$InstallationInventory"
-      Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'chown' "${User}:${Group}" "$InstallationInventory"
-        processCommandCode $? "failed to set the ownership of the ${DescriptionInstallationInventory} to '${User}:${Group}'" "$InstallationInventory"
-        Retcode=$?
-      fi
-    fi
-  fi
+  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionInstallationStage" "$InstallationStage"
+  Retcode=$?
 
   ### Create the installation base directory. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$InstallationBase"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionInstallationBase} already exists" "$InstallationBase"
-      Retcode=$?
-    else
-      echoCommandMessage "the ${DescriptionInstallationBase} does not exist" "$InstallationBase"
-      executeCommand 'sudo' 'mkdir' '-m' "$InstallationPermissions" '-p' "$InstallationBase"
-      processCommandCode $? "failed to create the ${DescriptionInstallationBase}" "$InstallationBase"
-      Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'chown' "${User}:${Group}" "$InstallationBase"
-        processCommandCode $? "failed to set the ownership of the ${DescriptionInstallationBase} to '${User}:${Group}'" "$InstallationBase"
-        Retcode=$?
-      fi
-    fi
-  fi
+  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionInstallationBase" "$InstallationBase"
+  Retcode=$?
+
+  ### Create the installation inventory directory. ###
+
+  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionInstallationInventory" "$InstallationInventory" "$DescriptionInstallationBase" "$InstallationBase"
+  Retcode=$?
 
   ### Create the Oracle Database home directory. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$DatabaseHome"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionDatabaseHome} already exists" "$DatabaseHome"
-    else
-      echoCommandMessage "the ${DescriptionDatabaseHome} does not exist" "$DatabaseHome"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mkdir' '-m' "$InstallationPermissions" '-p' "$DatabaseHome"
-      processCommandCode $? "failed to create the ${DescriptionDatabaseHome}" "$DatabaseHome"
-    fi
-    Retcode=$?
-  fi
+  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionDatabaseHome" "$DatabaseHome" "$DescriptionInstallationBase" "$InstallationBase"
+  Retcode=$?
 
   ### Create the Oracle Enterprise Manager home directory. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$ManagerHome"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionManagerHome} already exists" "$ManagerHome"
-    else
-      echoCommandMessage "the ${DescriptionManagerHome} does not exist" "$ManagerHome"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mkdir' '-m' "$InstallationPermissions" '-p' "$ManagerHome"
-      processCommandCode $? "failed to create the ${DescriptionManagerHome}" "$ManagerHome"
-    fi
-    Retcode=$?
-  fi
+  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionManagerHome" "$ManagerHome" "$DescriptionInstallationBase" "$InstallationBase"
+  Retcode=$?
 
   ### Create the Oracle Enterprise Manager instance home directory. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$ManagerInstance"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionManagerInstance} already exists" "$ManagerInstance"
-    else
-      echoCommandMessage "the ${DescriptionManagerInstance} does not exist" "$ManagerInstance"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mkdir' '-m' "$InstallationPermissions" '-p' "$ManagerInstance"
-      processCommandCode $? "failed to create the ${DescriptionManagerInstance}" "$ManagerInstance"
-    fi
-    Retcode=$?
-  fi
+  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionManagerInstance" "$ManagerInstance" "$DescriptionInstallationBase" "$InstallationBase"
+  Retcode=$?
 
   ### Create the Oracle Enterprise Manager agent base directory. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$AgentBase"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionAgentBase} already exists" "$AgentBase"
-    else
-      echoCommandMessage "the ${DescriptionAgentBase} does not exist" "$AgentBase"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'mkdir' '-m' "$InstallationPermissions" '-p' "$AgentBase"
-      processCommandCode $? "failed to create the ${DescriptionAgentBase}" "$AgentBase"
-    fi
-    Retcode=$?
-  fi
+  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionAgentBase" "$AgentBase" "$DescriptionInstallationBase" "$InstallationBase"
+  Retcode=$?
 
   #######################################################
   # Create the Systemd service for the Oracle Database. #
