@@ -1351,7 +1351,7 @@ extractFile() {
   ### Extract the source file into the destination directory. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$FileName" ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-d' "$DirectoryName" "$FileName"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'unzip' '-o' '-d' "$DirectoryName" "$FileName"
     processCommandCode $? "failed to unzip the ${FileDescription}" "$FileName" "$DirectoryName"
     Retcode=$?
   fi
@@ -1364,7 +1364,9 @@ extractFile() {
 ##
 ## @brief Extract an Oracle patch package zip file.
 ##
-## @param[out] PatchHome            The directory of the extracted patch.
+## @param[out] PatchHome            The directory of the extracted patch.  If
+##                                  the patch has already been applied, the
+##                                  value of this variable will be empty.
 ## @param[out] PatchNumber          The patch number.
 ## @param[out] PatchMarker          The name of a file that denotes whether the
 ##                                  patch has been applied.  This function
@@ -1464,7 +1466,7 @@ extractPatch() {
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
       local -r PatchHomeDescription="home directory for ${Description} '${_PatchNumber}'"
       _PatchHome="${DirectoryName}/${_PatchNumber}"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$_PatchHome" '-a' '-f' "${_PatchHome}/README.txt"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "${_PatchHome}/README.txt" '-o' '-f' "${_PatchHome}/README.html"
       if [[ 0 -eq $? ]] ; then
         echoCommandMessage "the ${FileDescription} is already unzipped" "$FileName" "$_PatchHome"
         Retcode=$?
@@ -2467,12 +2469,13 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     "$MarkerOMSPatcherUpdated"
   Retcode=$?
 
-  ### Extract the patch packages files. ###
+  ### Extract and install the patches. ###
+
+  local PatchHome=''
+  local PatchNumber=''
+  local PatchMarker=''
 
   if [[ -n "$PatchesFileNames" ]] ; then
-    local PatchHome=''
-    local PatchNumber=''
-    local PatchMarker=''
     FileNames=()
     if [[ 0 -eq $Retcode ]] ; then
       echoCommand "IFS=',' read -ra <<< ${PatchesFileNames}"
@@ -2496,21 +2499,45 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
         "${StageDirectory}/${PRODUCT_MANAGER}-patches" \
         "$MarkerPatchApplied"
       Retcode=$?
-echo "Patch:   ${FileName}"
-echo "Number:  ${PatchNumber}"
-echo "Home:    ${PatchHome}"
-echo "Marker:  ${PatchMarker}"
-echo "Retcode: ${Retcode}"
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchHome" ]] ; then
         export ORACLE_HOME="$HomeDirectory"
-        cd ${PatchHome}
-        sudo '-E' '-u' "$User" '-g' "$Group" "${ORACLE_HOME}/OPatch/opatch"
+        cd "$PatchHome"
+        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${ORACLE_HOME}/OPatch/opatch" 'apply' '-silent'
+        processCommandCode $? "failed to apply ${DESCRIPTION_MANAGER_PATCH}"  "$PatchNumber"
+        createMarker $? "$User" "$Group" "$PatchMarker"
         Retcode=$?
+      fi
+      if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
+        break
       fi
     done
   fi
 
-return $Retcode
+  ### Upgrade the Oracle Enteprise Manager. ###
+
+  if [[ -n "$UpgradePatchFileName" ]] ; then
+    extractPatch \
+      'PatchHome' \
+      'PatchNumber' \
+      'PatchMarker' \
+      "$User" \
+      "$Group" \
+      '755' \
+      "$DESCRIPTION_MANAGER_UPGRADE_PATCH" \
+      "$DESCRIPTION_MANAGER_UPGRADE_PATCH_FILE" \
+      "$UpgradePatchFileName" \
+      "$UpgradePatchFileNameDescription" \
+      "${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} patch staging directory" \
+      "${StageDirectory}/${PRODUCT_MANAGER}-patches" \
+      "$MarkerPatchApplied"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchHome" ]] ; then
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" "${HomeDirectory}/OMSPatcher/omspatcher" 'apply' "$PatchHome" '-analyze' '-bitonly' '-silent' '-oh' "$HomeDirectory"
+      processCommandCode $? "failed to apply ${DESCRIPTION_MANAGER_UPGRADE_PATCH}"  "$PatchNumber"
+      createMarker $? "$User" "$Group" "$PatchMarker"
+      Retcode=$?
+    fi
+  fi
 
   ########################################
   # Perform the post-installation steps. #
