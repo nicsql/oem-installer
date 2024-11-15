@@ -271,6 +271,8 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_MANAGER_PACKAGES_FILE_NAMES"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_OPATCH_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_OMSPATCHER_FILE_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_MANAGER_PATCHES_FILE_NAMES"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_RESPONSE_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_BASE"]=$OPTION_SOURCE_PROGRAM
@@ -385,6 +387,11 @@ declare -r DESCRIPTION_MANAGER_OPATCH_FILE="${DESCRIPTION_MANAGER_OPATCH} update
 declare -r DESCRIPTION_MANAGER_OMSPATCHER="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} OMS patcher utility"
 declare -r DESCRIPTION_MANAGER_OMSPATCHER_HOME="home of the ${DESCRIPTION_MANAGER_OMSPATCHER}"
 declare -r DESCRIPTION_MANAGER_OMSPATCHER_FILE="${DESCRIPTION_MANAGER_OMSPATCHER} update zip file"
+declare -r DESCRIPTION_MANAGER_UPGRADE_PATCH="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} patch update"
+declare -r DESCRIPTION_MANAGER_UPGRADE_PATCH_FILE="${DESCRIPTION_MANAGER_UPGRADE_PATCH} zip file"
+declare -r DESCRIPTION_MANAGER_PATCH="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} patch"
+declare -r DESCRIPTION_MANAGER_PATCH_FILE="${DESCRIPTION_MANAGER_PATCH} zip file"
+declare -r DESCRIPTION_MANAGER_PATCH_FILES="zip files for the ${DESCRIPTION_MANAGER_PATCH}s"
 declare -r DESCRIPTION_MANAGER_RESPONSE_FILE="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} installation response file"
 declare -r DESCRIPTION_MANAGER_KEYSTORE="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} key store"
 declare -r DESCRIPTION_MANAGER_KEYSTORE_FILE="${DESCRIPTION_MANAGER_KEYSTORE} file"
@@ -419,6 +426,8 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_MANAGER_PACKAGES_FILE_NAMES"]="names of the ${DESCRIPTION_MANAGER_FILES}"
   ["$OPTION_MANAGER_OPATCH_FILE_NAME"]="names of the ${DESCRIPTION_MANAGER_OPATCH_FILE}"
   ["$OPTION_MANAGER_OMSPATCHER_FILE_NAME"]="names of the ${DESCRIPTION_MANAGER_OMSPATCHER_FILE}"
+  ["$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME"]="name of the ${DESCRIPTION_NAME_UPGRADE_PATCH_FILE}"
+  ["$OPTION_MANAGER_PATCHES_FILE_NAMES"]="names of the ${DESCRIPTION_MANAGER_PATCH_FILES}"
   ["$OPTION_MANAGER_RESPONSE_FILE_NAME"]="name of the ${DESCRIPTION_MANAGER_RESPONSE_FILE}"
   ["$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS"]="file permissions on the ${DESCRIPTION_MANAGER_RESPONSE_FILE}"
   ["$OPTION_MANAGER_BASE"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} base directory"
@@ -874,49 +883,6 @@ processCommandCode() {
 }
 
 ################################################################################
-## @fn appendLine
-##
-## @brief Append a line to a text file.
-##
-## @param[in]  Retcode  A return code that causes the function to return
-##                      immediately when the code denotes an error.  The default
-##                      value of this parameter is RETCODE_SUCCESS.
-## @param[in]  Filename The name of the file to which to append the line.
-## @param[in]  Line     The line to append.
-##
-## @return The value of the parameter Retcode if it denotes an error, or
-##         otherwise the return code of the function execution.
-################################################################################
-appendLine() {
-  local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -r Filename="$2"
-  local -r Line="$3"
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if [[ -z "$Filename" ]] ; then
-      echoError $RETCODE_OPERATION_ERROR 'filename was not provided'
-      Retcode=$?
-    elif [[ -n "$Filename" ]] ; then
-      local ReadLine
-      local CleanLine
-      while read ReadLine; do
-        CleanLine=$(echo "$ReadLine" | sed -re 's/^[[:blank:]]+|[[:blank:]]+$//g' -e 's/[[:blank:]]+/ /g')
-        if [[ "$Line" == "$CleanLine" ]] ; then
-          echoInfo "the line is already present in the file" "$Filename" "$Line"
-          return $RETCODE_SUCCESS 
-        fi
-      done < <(sudo 'grep' '-o' '^[^#]*' "$Filename")
-      echoCommand 'sudo' 'sh' '-c' "echo -E '${Line}' >> '${Filename}'"
-      echo "cat >> '${Filename}' <<EOF
-${Line}
-EOF" | sudo 'sh'
-      processCommandCode $? 'failed to modify file' "$Filename"
-      Retcode=$?
-    fi
-  fi
-  return $Retcode
-}
-
-################################################################################
 ## @fn setOption
 ##
 ## @brief Set the program option to a specified value if it was not already set
@@ -1125,6 +1091,49 @@ retrieveOption() {
 }
 
 ################################################################################
+## @fn appendLine
+##
+## @brief Append a line to a text file.
+##
+## @param[in]  Retcode  A return code that causes the function to return
+##                      immediately when the code denotes an error.  The default
+##                      value of this parameter is RETCODE_SUCCESS.
+## @param[in]  Filename The name of the file to which to append the line.
+## @param[in]  Line     The line to append.
+##
+## @return The value of the parameter Retcode if it denotes an error, or
+##         otherwise the return code of the function execution.
+################################################################################
+appendLine() {
+  local -i Retcode=${1:-$RETCODE_SUCCESS}
+  local -r Filename="$2"
+  local -r Line="$3"
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    if [[ -z "$Filename" ]] ; then
+      echoError $RETCODE_OPERATION_ERROR 'filename was not provided'
+      Retcode=$?
+    elif [[ -n "$Filename" ]] ; then
+      local ReadLine
+      local CleanLine
+      while read ReadLine; do
+        CleanLine=$(echo "$ReadLine" | sed -re 's/^[[:blank:]]+|[[:blank:]]+$//g' -e 's/[[:blank:]]+/ /g')
+        if [[ "$Line" == "$CleanLine" ]] ; then
+          echoInfo "the line is already present in the file" "$Filename" "$Line"
+          return $RETCODE_SUCCESS
+        fi
+      done < <(sudo 'grep' '-o' '^[^#]*' "$Filename")
+      echoCommand 'sudo' 'sh' '-c' "echo -E '${Line}' >> '${Filename}'"
+      echo "cat >> '${Filename}' <<EOF
+${Line}
+EOF" | sudo 'sh'
+      processCommandCode $? 'failed to modify file' "$Filename"
+      Retcode=$?
+    fi
+  fi
+  return $Retcode
+}
+
+################################################################################
 ## @fn createMarker
 ##
 ## @brief Create a file that denotes the successful completion of an
@@ -1142,8 +1151,8 @@ retrieveOption() {
 ################################################################################
 createMarker() {
   local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -r User="${2:-'root'}"
-  local -r Group="${3:-'root'}"
+  local -r User="${2:-root}"
+  local -r Group="${3:-root}"
   local -r FileName="${4:-}"
   if [[ $RETCODE_SUCCES -eq $Retcode ]] && [[ -n "$FileName" ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$FileName"
@@ -1172,9 +1181,9 @@ createMarker() {
 ################################################################################
 setDirectoryOwnership() {
   local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -r User="${2:-'root'}"
-  local -r Group="${3:-'root'}"
-  local -r DirectoryDescription="${4:-'directory'}"
+  local -r User="${2:-root}"
+  local -r Group="${3:-root}"
+  local -r DirectoryDescription="${4:-directory}"
   local -r DirectoryName="${5:-}"
   if [[ $RETCODE_SUCCES -eq $Retcode ]] ; then
     executeCommand 'sudo' 'test' '-d' "$DirectoryName"
@@ -1200,7 +1209,7 @@ setDirectoryOwnership() {
 ## @return The return code of the function execution.
 ################################################################################
 deleteDirectory() {
-  local -r DirectoryDescription="${1:-'directory'}"
+  local -r DirectoryDescription="${1:-directory}"
   local -r DirectoryName="${2:-}"
   local -i Retcode=$RETCODE_SUCCESS
   if [[ -n "$DirectoryName" ]] && [[ '/' != "$DirectoryName" ]] ; then
@@ -1246,12 +1255,12 @@ deleteDirectory() {
 ################################################################################
 createDirectory() {
   local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -r User="${2:-'root'}"
-  local -r Group="${3:-'root'}"
-  local -r Permissions="${4:-'755'}"
-  local -r DirectoryDescription="${5:-'directory'}"
+  local -r User="${2:-root}"
+  local -r Group="${3:-root}"
+  local -r Permissions="${4:-755}"
+  local -r DirectoryDescription="${5:-directory}"
   local -r DirectoryName="${6:-}"
-  local -r ParentDirectoryDescription="${7:-'parent directory'}"
+  local -r ParentDirectoryDescription="${7:-parent directory}"
   local -r ParentDirectoryName="${8:-}"
   local -r -i bRecreate=${9:-${VALUE_FALSE}}
   local -i bCreate=$VALUE_TRUE
@@ -1314,9 +1323,9 @@ extractFile() {
   local -i Retcode=${1:-$RETCODE_SUCCESS}
   local -r User="${2:-}"
   local -r Group="${3:-}"
-  local -r FileDescription="${4-'file'}"
+  local -r FileDescription="${4:-file}"
   local -r FileName="${5:-}"
-  local -r DirectoryDescription="${6:-'directory'}"
+  local -r DirectoryDescription="${6:-directory}"
   local -r DirectoryName="${7:-}"
 
   ### Confirm the source file can be read. ###
@@ -1398,12 +1407,12 @@ extractPatch() {
   local -n _PatchMarker="${3:-PatchMarkerDummy}"
   local -r User="${4:-}"
   local -r Group="${5:-}"
-  local -r Permissions="${6:-'755'}"
-  local -r Description="${7:-'???'}"
-  local -r FileDescription="${8:-'???'}"
+  local -r Permissions="${6:-755}"
+  local -r Description="${7:-patch}"
+  local -r FileDescription="${8:-patch file}"
   local -r FileName="${9:-}"
-  local -r FileNameDescription="${10:-'???'}"
-  local -r DirectoryDescription="${11:-'???'}"
+  local -r FileNameDescription="${10:-name of the patch file}"
+  local -r DirectoryDescription="${11:-extraction directory}"
   local -r DirectoryName="${12:-}"
   local -r MarkerBase="${13:-}"
   local -i Retcode=$RETCODE_SUCCESS
@@ -1422,7 +1431,6 @@ extractPatch() {
     ### Verify whether the patch package file is valid and can be read. ###
 
     if [[ -z "$_PatchNumber" ]] ; then
-      _PatchNumber=''
       echoError $RETCODE_PARAMETER_ERROR "unable to determine a patch number from the ${FileNameDescription}" "$FileName"
     else
       executeCommand 'sudo' 'test' '-f' "$FileName" '-a' '-r' "$FileName"
@@ -1524,10 +1532,10 @@ updatePatcher() {
   local -i Retcode=${1:-$RETCODE_SUCCESS}
   local -r User="${2:-}"
   local -r Group="${3:-}"
-  local -r Description="${4:-'???'}"
-  local -r FileDescription="${5:-'file'}"
+  local -r Description="${4:-patcher}"
+  local -r FileDescription="${5:-patch update file}"
   local -r FileName="${6:-}"
-  local -r HomeDescription="${7:-'???'}"
+  local -r HomeDescription="${7:-home directory of the patcher}"
   local -r HomeName="${8:-}"
   local -r Marker="${9:-}"
 
@@ -1854,12 +1862,12 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
       "$User" \
       "$Group" \
       "$FilePermissions" \
-      "patch for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}" \
+      "$DESCRIPTION_DATABASE_UPGRADE_PATCH" \
       "$DESCRIPTION_DATABASE_UPGRADE_PATCH_FILE" \
       "$UpgradePatchFileName" \
       "$UpgradePatchFileNameDescription" \
-      "${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} patch update staging directory" \
-      "${StageDirectory}/database-patch" \
+      "${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} patch staging directory" \
+      "${StageDirectory}/${PRODUCT_DATABASE}-patches" \
       "$MarkerPatchApplied"
     Retcode=$?
   fi
@@ -2137,6 +2145,7 @@ installManager() {
   local DatabasePassword=''
   local Version=''
   local PackagesFileNames=''
+  local PackagesFileNamesDescription=''
   local OPatchFileName=''
   local OMSPatcherFileName=''
   local UpgradePatchFileName=''
@@ -2173,7 +2182,7 @@ installManager() {
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PORT"                     'Message' 'DatabasePort'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"                 'Message' 'DatabasePassword'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                   'Message' 'Version'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"       'Message' 'PackagesFileNames'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"       'Message' 'PackagesFileNames' 'PackagesFileNamesDescription'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_OPATCH_FILE_NAME"          'Message' 'OPatchFileName'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_OMSPATCHER_FILE_NAME"      'Message' 'OMSPatcherFileName'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME"   'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
@@ -2208,10 +2217,11 @@ installManager() {
   local -r MarkerFirewalldConfigured="${HomeDirectory}/INSTALLATION_STEP_FIREWALLD_CONFIGURED"
   local -r MarkerOPatchUpdated="${HomeDirectory}/INSTALLATION_STEP_OPATCH_UPDATED"
   local -r MarkerOMSPatcherUpdated="${HomeDirectory}/INSTALLATION_STEP_OMSPATCHER_UPDATED"
+  local -r MarkerPatchApplied="${HomeDirectory}/PATCH_APPLIED"
   local -i bRepositoryCreated=$VALUE_FALSE
   local -i bResponseCreated=$VALUE_FALSE
   local -a FileNames
-  local File=''
+  local FileName=''
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
     echo "$Message"
@@ -2257,24 +2267,24 @@ installManager() {
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           echoCommand "IFS=',' read -ra <<< ${PackagesFileNames}"
           IFS=',' read -ra FileNames <<< "$PackagesFileNames"
-          processCommandCode $? 'failed to read program option' "$OPTION_MANAGER_PACKAGES_FILE_NAMES"
+          processCommandCode $? "failed to read ${PackagesFileNamesDescription}" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"
           Retcode=$?
         fi
 
         ### Validate that the manager package zip files are accessible. ###
 
-        for File in ${FileNames[@]} ; do
+        for FileName in ${FileNames[@]} ; do
           if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-            executeCommand 'sudo' 'test' '-f' "$File" '-a' '-r' "$File"
-            processCommandCode $? "the ${DESCRIPTION_MANAGER_FILE} does not exist or is inaccessible" "$File"
+            executeCommand 'sudo' 'test' '-f' "$FileName" '-a' '-r' "$FileName"
+            processCommandCode $? "the ${DESCRIPTION_MANAGER_FILE} does not exist or is inaccessible" "$FileName"
             Retcode=$?
           fi
         done
 
         ### Unzip the manager package zip files to the manager repository directory. ###
 
-        for File in ${FileNames[@]} ; do
-          extractFile $Retcode "$User" "$Group" "$DESCRIPTION_MANAGER_FILE" "$File" "$RepositoryDescription" "$Repository"
+        for FileName in ${FileNames[@]} ; do
+          extractFile $Retcode "$User" "$Group" "$DESCRIPTION_MANAGER_FILE" "$FileName" "$RepositoryDescription" "$Repository"
           Retcode=$?
         done
 
@@ -2456,19 +2466,49 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     "${HomeDirectory}/OMSPatcher" \
     "$MarkerOMSPatcherUpdated"
   Retcode=$?
-return $Retcode
 
   ### Extract the patch packages files. ###
 
-#  if [[ -n "$PatchesFileNames" ]] ; then
-#    FileNames=()
-#    if [[ 0 -eq $Retcode ]] ; then
-#      echoCommand "IFS=',' read -ra <<< ${PackagesFileNames}"
-#      IFS=',' read -ra FileNames <<< "$PackagesFileNames"
-#      processCommandCode $? 'failed to read program option' "$OPTION_MANAGER_PACKAGES_FILE_NAMES"
-#      Retcode=$?
-#    fi
-#  fi
+  if [[ -n "$PatchesFileNames" ]] ; then
+    local PatchHome=''
+    local PatchNumber=''
+    local PatchMarker=''
+    FileNames=()
+    if [[ 0 -eq $Retcode ]] ; then
+      echoCommand "IFS=',' read -ra <<< ${PatchesFileNames}"
+      IFS=',' read -ra FileNames <<< "$PatchesFileNames"
+      processCommandCode $? "failed to read ${PatchesFileNamesDescription}" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"
+      Retcode=$?
+    fi
+    for FileName in ${FileNames[@]} ; do
+      extractPatch \
+        'PatchHome' \
+        'PatchNumber' \
+        'PatchMarker' \
+        "$User" \
+        "$Group" \
+        '755' \
+        "$DESCRIPTION_MANAGER_PATCH" \
+        "$DESCRIPTION_MANAGER_PATCH_FILE" \
+        "$FileName" \
+        "$PatchesFileNamesDescription" \
+        "${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} patch staging directory" \
+        "${StageDirectory}/${PRODUCT_MANAGER}-patches" \
+        "$MarkerPatchApplied"
+      Retcode=$?
+echo "Patch:   ${FileName}"
+echo "Number:  ${PatchNumber}"
+echo "Home:    ${PatchHome}"
+echo "Marker:  ${PatchMarker}"
+echo "Retcode: ${Retcode}"
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        export ORACLE_HOME="$HomeDirectory"
+        cd ${PatchHome}
+        sudo '-E' '-u' "$User" '-g' "$Group" "${ORACLE_HOME}/OPatch/opatch"
+        Retcode=$?
+      fi
+    done
+  fi
 
 return $Retcode
 
@@ -2482,16 +2522,16 @@ return $Retcode
 
   ### Delete the Oracle Enterprise Manager automated installation response file. ###
 
-  if [[ $VALUE_TRUE -eq $bResponseCreated ]] ; then
-    executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-f' "$ResponseFileName"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_MANAGER_RESPONSE_FILE} will be deleted" "$ResponseFileName"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'rm' "$ResponseFileName"
-      processCommandCode $? "failed to the delete the ${DESCRIPTION_MANAGER_RESPONSE_FILE}" "$ResponseFileName"
-    else
-      echoCommandMessage "the ${DESCRIPTION_MANAGER_RESPONSE_FILE} does not exist" "$ResponseFileName"
-    fi
-  fi
+#  if [[ $VALUE_TRUE -eq $bResponseCreated ]] ; then
+#    executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-f' "$ResponseFileName"
+#    if [[ 0 -eq $? ]] ; then
+#      echoCommandMessage "the ${DESCRIPTION_MANAGER_RESPONSE_FILE} will be deleted" "$ResponseFileName"
+#      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'rm' "$ResponseFileName"
+#      processCommandCode $? "failed to the delete the ${DESCRIPTION_MANAGER_RESPONSE_FILE}" "$ResponseFileName"
+#    else
+#      echoCommandMessage "the ${DESCRIPTION_MANAGER_RESPONSE_FILE} does not exist" "$ResponseFileName"
+#    fi
+#  fi
 
   ### Run the Oracle Enterprise Manager root installer program using the root user. ###
 
