@@ -1108,6 +1108,7 @@ appendLine() {
   local -i Retcode=${1:-$RETCODE_SUCCESS}
   local -r Filename="$2"
   local -r Line="$3"
+
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     if [[ -z "$Filename" ]] ; then
       echoError $RETCODE_OPERATION_ERROR 'filename was not provided'
@@ -1130,6 +1131,7 @@ EOF" | sudo 'sh'
       Retcode=$?
     fi
   fi
+
   return $Retcode
 }
 
@@ -1154,11 +1156,13 @@ createMarker() {
   local -r User="${2:-root}"
   local -r Group="${3:-root}"
   local -r FileName="${4:-}"
+
   if [[ $RETCODE_SUCCES -eq $Retcode ]] && [[ -n "$FileName" ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$FileName"
     processCommandCode $? "failed to create the installation marker file" "$FileName"
     Retcode=$?
   fi
+
   return $Retcode
 }
 
@@ -1186,18 +1190,18 @@ setDirectoryOwnership() {
   local -r DirectoryDescription="${4:-directory}"
   local -r DirectoryName="${5:-}"
 
-echo "CHOWN ${DirectoryName} ${User}:${Group}"
-
   if [[ $RETCODE_SUCCES -eq $Retcode ]] ; then
     executeCommand 'sudo' 'test' '-d' "$DirectoryName"
     processCommandCode $? "the ${DirectoryDescription} does not exist or is inaccessible" "$DirectoryName"
     Retcode=$?
   fi
+
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' 'chown' '-R' "${User}:${Group}" "$DirectoryName"
     processCommandCode $? "failed to set the ownership of the ${DirectoryDescription}" "$DirectoryName" "${User}:${Group}"
     Retcode=$?
   fi
+
   return $Retcode
 }
 
@@ -1215,6 +1219,7 @@ deleteDirectory() {
   local -r DirectoryDescription="${1:-directory}"
   local -r DirectoryName="${2:-}"
   local -i Retcode=$RETCODE_SUCCESS
+
   if [[ -n "$DirectoryName" ]] && [[ '/' != "$DirectoryName" ]] ; then
     executeCommand 'sudo' 'test' '-d' "$DirectoryName"
     if [[ 0 -eq $? ]] ; then
@@ -1226,6 +1231,7 @@ deleteDirectory() {
     fi
     Retcode=$?
   fi
+
   return $Retcode
 }
 
@@ -1267,10 +1273,12 @@ createDirectory() {
   local -r ParentDirectoryName="${8:-}"
   local -r -i bRecreate=${9:-${VALUE_FALSE}}
   local -i bCreate=$VALUE_TRUE
+
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -z "$DirectoryName" ]] ; then
     echoError $RETCODE_INTERNAL_ERROR "the ${DirectoryDescription} was not provided"
     Retcode=$?
   fi
+
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$DirectoryName"
     if [[ 0 -eq $? ]] ; then
@@ -1289,6 +1297,7 @@ createDirectory() {
       Retcode=$?
     fi
   fi
+
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bCreate ]] ; then
     executeCommand 'sudo' 'mkdir' '-m' "$Permissions" '-p' "$DirectoryName"
     processCommandCode $? "failed to create the ${DirectoryDescription}" "$DirectoryName"
@@ -1300,6 +1309,7 @@ createDirectory() {
     fi
     Retcode=$?
   fi
+
   return $Retcode
 }
 
