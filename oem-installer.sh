@@ -1354,7 +1354,7 @@ createDirectory() {
           echoInfo "the ${DirectoryDescription} is accessible and will not be re-created" "$DirectoryName"
         fi
       else
-        echoError $RETCODE_INTERNAL_ERROR "the ${DirectoryDescription} is not accessible" "$DirectoryName"
+        echoError $RETCODE_OPERATION_ERROR "the ${DirectoryDescription} is not accessible" "$DirectoryName"
       fi
       Retcode=$?
     else
@@ -1938,10 +1938,14 @@ installDatabase() {
       read -d '' FileContent <<EOF
 oracle.install.responseFileVersion=/oracle/install/rspfmt_dbinstall_response_schema_v19.0.0
 oracle.install.option=INSTALL_DB_AND_CONFIG
+# SELECTED_LANGUAGES=en
 UNIX_GROUP_NAME=${Group}
 INVENTORY_LOCATION=${InventoryDirectory}
 ORACLE_HOME=${HomeDirectory}
 ORACLE_BASE=${BaseDirectory}
+# ORACLE_HOSTNAME=
+# SECURITY_UPDATES_VIA_MYORACLESUPPORT=false
+# DECLINE_SECURITY_UPDATES=true
 oracle.install.db.InstallEdition=EE
 oracle.install.db.OSDBA_GROUP=${DBAGroup}
 oracle.install.db.OSBACKUPDBA_GROUP=${DBAGroup}
@@ -1955,11 +1959,14 @@ oracle.install.db.rootconfig.sudoUserName=${User}
 oracle.install.db.config.starterdb.type=GENERAL_PURPOSE
 oracle.install.db.config.starterdb.globalDBName=${DatabaseName}
 oracle.install.db.config.starterdb.SID=${DatabaseName}
+oracle.install.db.ConfigureAsContainerDB=true
+oracle.install.db.config.PDBName=${DatabaseName}
 oracle.install.db.config.starterdb.characterSet=AL32UTF8
-oracle.install.db.config.starterdb.memoryOption=false
-oracle.install.db.config.starterdb.memoryLimit=2048
+oracle.install.db.config.starterdb.memoryOption=true
+oracle.install.db.config.starterdb.memoryLimit=8192
 oracle.install.db.config.starterdb.installExampleSchemas=false
 oracle.install.db.config.starterdb.password.ALL=${Password}
+oracle.install.db.config.starterdb.password.PDBADMIN=${Password}
 oracle.install.db.config.starterdb.managementOption=DEFAULT
 oracle.install.db.config.starterdb.enableRecovery=true
 oracle.install.db.config.starterdb.storageType=FILE_SYSTEM_STORAGE
@@ -3451,20 +3458,21 @@ uninstallDatabase() {
   local User
   local Group
   local DatabaseHome
-  local DescriptionDatabaseHome
+  local DatabaseHomeDescription
   echoTitle "Uninstalling the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"  'Message' 'User'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP" 'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"      'Message' 'DatabaseHome' 'DescriptionDatabaseHome'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"      'Message' 'DatabaseHome' 'DatabaseHomeDescription'
   local -i Retcode=$?
-  local -r User
-  local -r Group
-  local -r DatabaseHome
-  local -r DescriptionDatabaseHome
   local -r DatabaseDeinstaller="${DatabaseHome}/deinstall/deinstall"
-  local -r DescriptionDatabaseDeinstaller="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} de-installer program"
+  local -r DatabaseDeinstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} de-installer program"
   local ResponseFileName=''
-  local -r DescriptionResponseFileName="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} de-installation response file"
+  local -r ResponseFileNameDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} de-installation response file"
+
+  if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
+    echo "$Message"
+    return $Retcode
+  fi
 
   ###########################################################
   # Preparation for de-installation of the Oracle Database. #
@@ -3479,10 +3487,10 @@ uninstallDatabase() {
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' 'test' '-d' "$DatabaseHome"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionDatabaseHome} exists" "$DatabaseHome"
+      echoCommandMessage "the ${DatabaseHomeDescription} exists" "$DatabaseHome"
       Retcode=$?
     else
-      echoCommandMessage "the ${DescriptionDatabaseHome} does not exit" "$DatabaseHome"
+      echoCommandMessage "the ${DatabaseHomeDescription} does not exit" "$DatabaseHome"
       return $RETCODE_SUCCESS
     fi
   fi
@@ -3491,7 +3499,7 @@ uninstallDatabase() {
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-x' "$DatabaseDeinstaller"
-    processCommandCode $? "the ${DescriptionDatabaseDeinstaller} does not exist or is inaccessible" "$DatabaseDeinstaller"
+    processCommandCode $? "the ${DatabaseDeinstallerDescription} does not exist or is inaccessible" "$DatabaseDeinstaller"
     Retcode=$?
   fi
 
@@ -3511,27 +3519,34 @@ uninstallDatabase() {
     local Line=''
     local Left=''
     local Right=''
+    local Error=''
     echoCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$DatabaseDeinstaller" '-silent' '-checkonly'
     while IFS= read -r Line ; do
-      if [[ -z "$Right" ]] ; then
+      if [[ -z "$Error" ]] && [[ -z "$Right" ]] ; then
         Left=$(echo "$Line" | awk -F ':' '{ print $1 }')
-        if [[ 'Location of response file generated' == "$Left" ]] ; then
+        if [[ 'ERROR' == "$Left" ]] ; then
           Right=$(echo "$Line" | awk -F ':' '{ print $2 }')
+          Error=$(echo "$Right" | awk '{$1=$1};1')
+        elif [[ 'Location of response file generated' == "$Left" ]] ; then
+          Right=$(echo "$Line" | awk -F ':' '{ print $2 }')
+          ResponseFileName=$(echo "$Right" | awk -F "$CHARACTER_SINGLE_QUOTE" '{ print $2 }')
         else
           Left=''
         fi
       fi
     done < <(sudo -E -u "$User" -g "$Group" "$DatabaseDeinstaller" -silent -checkonly)
     Retcode=$?
-    if [[ 0 -eq $Retcode ]] && [[ -n "$Right" ]] ; then
-      ResponseFileName=$(echo "$Right" | awk -F "$CHARACTER_SINGLE_QUOTE" '{ print $2 }')
-      if [[ -z "$ResponseFileName" ]] ; then
-        echoError $RETCODE_OPERATION_ERROR "failed to obtain a ${DescriptionResponseFileName} from the ${DescriptionDatabaseDeinstaller}" "$DatabaseDeinstaller"
-      else
-        echoCommandMessage "${DescriptionResponseFileName}" "$ResponseFileName"
-      fi
+    if [[ 0 -eq $Retcode ]] && [[ -z "$ResponseFileName" ]] ; then
+      Retcode=1
+    fi
+    if [[ 0 -eq $Retcode ]] ; then
+      echoCommandMessage "$ResponseFileNameDescription" "$ResponseFileName"
+    elif [[ -n "$Error" ]] ; then
+      processCommandCode $Retcode "an error occurred during the execution of the ${DatabaseDeinstallerDescription}" "$DatabaseDeinstaller" "$Error"
+    elif [[ -n "$Right" ]] ; then
+      processCommandCode $Retcode "failed to obtain a ${ResponseFileNameDescription} from the ${DatabaseDeinstallerDescription}" "$DatabaseDeinstaller"
     else
-      echoError $Retcode "failed to generate a ${DescriptionResponseFileName} with the ${DescriptionDatabaseDeinstaller}" "$DatabaseDeinstaller"
+      processCommandCode $Retcode "failed to generate a ${ResponseFileNameDescription} with the ${DatabaseDeinstallerDescription}" "$DatabaseDeinstaller"
     fi
     Retcode=$?
   fi
@@ -3539,8 +3554,8 @@ uninstallDatabase() {
   ### Validate that the automated uninstallation response file is present and accessible to the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'test' '-r' "$ResponseFileName"
-    processCommandCode $? "the ${DescriptionResponseFileName} does not exist or is inaccessible" "$ResponseFileName"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$ResponseFileName"
+    processCommandCode $? "the ${ResponseFileNameDescription} does not exist or is inaccessible" "$ResponseFileName"
     Retcode=$?
   fi
 
@@ -3556,7 +3571,7 @@ uninstallDatabase() {
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$DatabaseDeinstaller" '-silent' '-paramfile' "$ResponseFileName"
-    processCommandCode $? "an error occurred when running the ${DescriptionDatabaseDeinstaller}" "$DatabaseDeinstaller" "response file" "$ResponseFileName"
+    processCommandCode $? "an error occurred when running the ${DatabaseDeinstallerDescription}" "$DatabaseDeinstaller" "$ResponseFileName"
     Retcode=$?
   fi
 
@@ -3612,6 +3627,11 @@ uninstallManager() {
   local -r ManagerDeinstaller1="${ManagerHome}/sysman/install/EMDeinstall.pl"
   local -r ManagerDeinstaller2="${InstallationStage}/EMDeinstall.pl"
   local -r DescriptionDatabaseDeinstaller="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} de-installer program"
+
+  if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
+    echo "$Message"
+    return $Retcode
+  fi
 
   # Validate that the Oracle Enterprise Manager is installed in the provided home directory. #
 
