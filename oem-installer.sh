@@ -317,7 +317,7 @@ declare -r -A OPTIONS_OPTIONAL=(
 
 # Option default values
 
-declare -r DEFAULT_SYSTEMD_SERVICE_NAME='dbora.service'
+declare -r DEFAULT_SYSTEMD_SERVICE_NAME='oracle.service'
 declare -r DEFAULT_PASSWORD='Abcd_1234'
 
 declare -r -A OPTION_DEFAULT_VALUES=(
@@ -401,7 +401,7 @@ declare -r DESCRIPTION_MANAGER_TRUSTSTORE_FILE="${DESCRIPTION_MANAGER_TRUSTSTORE
 declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_FILE_NAME"]='name of an optional file that contains options to override the default option values of this program'
   ["$OPTION_INSTALLATION_ROOT"]='Oracle installation root directory'
-  ["$OPTION_INSTALLATION_STAGE"]='staging (de-)installation directory'
+  ["$OPTION_INSTALLATION_STAGE"]='staging directory'
   ["$OPTION_INSTALLATION_INVENTORY"]='Oracle inventory directory'
   ["$OPTION_INSTALLATION_FILE_PERMISSIONS"]='file permissions of the Oracle installation'
   ["$OPTION_INSTALLATION_BASE"]='Oracle installation base directory'
@@ -1120,13 +1120,11 @@ appendLine() {
         CleanLine=$(echo "$ReadLine" | sed -re 's/^[[:blank:]]+|[[:blank:]]+$//g' -e 's/[[:blank:]]+/ /g')
         if [[ "$Line" == "$CleanLine" ]] ; then
           echoInfo "the line is already present in the file" "$Filename" "$Line"
-          return $RETCODE_SUCCESS
+          return $?
         fi
       done < <(sudo 'grep' '-o' '^[^#]*' "$Filename")
-      echoCommand 'sudo' 'sh' '-c' "echo -E '${Line}' >> '${Filename}'"
-      echo "cat >> '${Filename}' <<EOF
-${Line}
-EOF" | sudo 'sh'
+      echoCommand 'sudo' 'sh' '-c' "echo '${Line}' >> '${Filename}'"
+      sudo 'sh' '-c' "echo '${Line}' >> '${Filename}'"
       processCommandCode $? 'failed to modify file' "$Filename"
       Retcode=$?
     fi
@@ -1136,40 +1134,9 @@ EOF" | sudo 'sh'
 }
 
 ################################################################################
-## @fn createMarker
+## @fn setDirectoryAttributes
 ##
-## @brief Create a file that denotes the successful completion of an
-##        installation step.
-##
-## @param[in] Retcode  A return code that causes the function to return
-##                     immediately when the code denotes an error.  The default
-##                     value of this parameter is RETCODE_SUCCESS.
-## @param[in] User     The user to own the directory.
-## @param[in] Group    The group to own the directory.
-## @param[in] FileName The name of the installation marker file.
-##
-## @return The value of the parameter Retcode if it denotes an error, or the
-##         return code of the function execution.
-################################################################################
-createMarker() {
-  local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -r User="${2:-root}"
-  local -r Group="${3:-root}"
-  local -r FileName="${4:-}"
-
-  if [[ $RETCODE_SUCCES -eq $Retcode ]] && [[ -n "$FileName" ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$FileName"
-    processCommandCode $? "failed to create the installation marker file" "$FileName"
-    Retcode=$?
-  fi
-
-  return $Retcode
-}
-
-################################################################################
-## @fn setDirectoryOwnership
-##
-## @brief Set the ownership of a directory.
+## @brief Set the ownership and file system permissions of a directory.
 ##
 ## @param[in] Retcode              A return code that causes the function to
 ##                                 return immediately when the code denotes an
@@ -1179,27 +1146,91 @@ createMarker() {
 ## @param[in] Group                The group to own the directory.
 ## @param[in] DirectoryDescription The description of the directory
 ## @param[in] DirectoryName        The name of the directory.
+## @param[in] Permissions          The file system permissions to apply on the
+##                                 directory.
 ##
 ## @return The value of the parameter Retcode if it denotes an error, or the
 ##         return code of the function execution.
 ################################################################################
-setDirectoryOwnership() {
+setDirectoryAttributes() {
   local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -r User="${2:-root}"
-  local -r Group="${3:-root}"
+  local -r User="${2:-}"
+  local -r Group="${3:-}"
   local -r DirectoryDescription="${4:-directory}"
   local -r DirectoryName="${5:-}"
+  local -r Permissions="${6:-}"
 
-  if [[ $RETCODE_SUCCES -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'test' '-d' "$DirectoryName"
-    processCommandCode $? "the ${DirectoryDescription} does not exist or is inaccessible" "$DirectoryName"
-    Retcode=$?
+  if [[ -n "$DirectoryName" ]] ; then
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      executeCommand 'sudo' 'test' '-d' "$DirectoryName"
+      processCommandCode $? "the ${DirectoryDescription} does not exist or is inaccessible" "$DirectoryName"
+      Retcode=$?
+    fi
+
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$User" ]] && [[ -n "$Group" ]] ; then
+      executeCommand 'sudo' 'chown' '-R' "${User}:${Group}" "$DirectoryName"
+      processCommandCode $? "failed to set the ownership of the ${DirectoryDescription}" "$DirectoryName" "${User}:${Group}"
+      Retcode=$?
+    fi
+
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$Permissions" ]] ; then
+      executeCommand 'sudo' 'chmod' '-R' "$Permissions" "$DirectoryName"
+      processCommandCode $? "failed to set the file system permissions of the ${DirectoryDescription}" "$DirectoryName" "$Permissions"
+      Retcode=$?
+    fi
   fi
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'chown' '-R' "${User}:${Group}" "$DirectoryName"
-    processCommandCode $? "failed to set the ownership of the ${DirectoryDescription}" "$DirectoryName" "${User}:${Group}"
-    Retcode=$?
+  return $Retcode
+}
+
+################################################################################
+## @fn setFileAttributes
+##
+## @brief Set the ownership and file system permissions of a file.
+##
+## @param[in] Retcode         A return code that causes the function to return
+##                            immediately when the code denotes an error.  The
+##                            default value of this parameter is
+##                            RETCODE_SUCCESS.
+## @param[in] User            The user to own the file.
+## @param[in] Group           The group to own the file.
+## @param[in] FileDescription The description of the file 
+## @param[in] FileName        The name of the file.
+## @param[in] Permissions     The file system permissions to apply on the file,
+##
+## @return The value of the parameter Retcode if it denotes an error, or the
+##         return code of the function execution.
+################################################################################
+setFileAttributes() {
+  local -i Retcode=${1:-$RETCODE_SUCCESS}
+  local -r User="${2:-}"
+  local -r Group="${3:-}"
+  local -r FileDescription="${4:-file}"
+  local -r FileName="${5:-}"
+  local -r Permissions="${6:-}"
+
+  if [[ -n "$FileName" ]] ; then
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      executeCommand 'sudo' 'test' '-f' "$FileName"
+      processCommandCode $? "the ${FileDescription} does not exist or is inaccessible" "$FileName"
+      Retcode=$?
+    fi
+
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$User" ]] && [[ -n "$Group" ]] ; then
+      executeCommand 'sudo' 'chown' "${User}:${Group}" "$FileName"
+      processCommandCode $? "failed to set the ownership of the ${FileDescription}" "$FileName" "${User}:${Group}"
+      Retcode=$?
+    fi
+
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$Permissions" ]] ; then
+      if [[ -n "$User" ]] && [[ -n "$Group" ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'chmod' "$Permissions" "$FileName"
+      else
+        executeCommand 'sudo' 'chmod' "$Permissions" "$FileName"
+      fi
+      processCommandCode $? "failed to set the file system permissions of the ${FileDescription}" "$FileName" "$Permissions"
+      Retcode=$?
+    fi
   fi
 
   return $Retcode
@@ -1228,6 +1259,36 @@ deleteDirectory() {
       processCommandCode $? "failed to delete ${DirectoryDescription}" "$DirectoryName"
     else
       echoCommandMessage "the ${DirectoryDescription} does not exist" "$DirectoryName"
+    fi
+    Retcode=$?
+  fi
+
+  return $Retcode
+}
+
+################################################################################
+## @fn deleteFile
+##
+## @brief Delete a file.
+##
+## @param[in] FileDescription The description of the file.
+## @param[in] FileName        The name of the file to delete.
+##
+## @return The return code of the function execution.
+################################################################################
+deleteFile() {
+  local -r FileDescription="${1:-file}"
+  local -r FileName="${2:-}"
+  local -i Retcode=$RETCODE_SUCCESS
+
+  if [[ -n "$FileName" ]] ; then
+    executeCommand 'sudo' 'test' '-f' "$FileName"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandSuccess
+      executeCommand 'sudo' 'rm' '-f' "$FileName"
+      processCommandCode $? "failed to delete ${FileDescription}" "$FileName"
+    else
+      echoCommandMessage "the ${FileDescription} does not exist" "$FileName"
     fi
     Retcode=$?
   fi
@@ -1272,7 +1333,7 @@ createDirectory() {
   local -r ParentDirectoryDescription="${7:-parent directory}"
   local -r ParentDirectoryName="${8:-}"
   local -r -i bRecreate=${9:-${VALUE_FALSE}}
-  local -i bCreate=$VALUE_TRUE
+  local -i bCreate=$VALUE_FALSE
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -z "$DirectoryName" ]] ; then
     echoError $RETCODE_INTERNAL_ERROR "the ${DirectoryDescription} was not provided"
@@ -1284,29 +1345,156 @@ createDirectory() {
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${DirectoryDescription} already exists" "$DirectoryName"
       executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$DirectoryName" '-a' '-w' "$DirectoryName"
-      processCommandCode $? "the ${DirectoryDescription} is not accessible" "$DirectoryName"
-      Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bRecreate ]] ; then
-        echoInfo "the ${DirectoryDescription} will be re-created" "$DirectoryName"
-        deleteDirectory "$DirectoryDescription" "$DirectoryName"
-        Retcode=$?
-        bCreate=$VALUE_TRUE
+      if [[ 0 -eq $? ]] ; then
+        if [[ $VALUE_TRUE -eq $bRecreate ]] ; then
+          bCreate=$VALUE_TRUE
+          echoInfo "the ${DirectoryDescription} will be re-created" "$DirectoryName"
+          deleteDirectory "$DirectoryDescription" "$DirectoryName"
+        else
+          echoInfo "the ${DirectoryDescription} is accessible and will not be re-created" "$DirectoryName"
+        fi
+      else
+        echoError $RETCODE_INTERNAL_ERROR "the ${DirectoryDescription} is not accessible" "$DirectoryName"
       fi
+      Retcode=$?
     else
       echoCommandMessage "the ${DirectoryDescription} does not exist" "$DirectoryName"
-      Retcode=$?
+      bCreate=$VALUE_TRUE
     fi
   fi
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bCreate ]] ; then
     executeCommand 'sudo' 'mkdir' '-m' "$Permissions" '-p' "$DirectoryName"
-    processCommandCode $? "failed to create the ${DirectoryDescription}" "$DirectoryName"
+    processCommandCode $Code "failed to create the ${DirectoryDescription}" "$DirectoryName"
     Retcode=$?
-    if [[ -z "$ParentDirectoryName" ]] ; then
-      setDirectoryOwnership $Retcode "$User" "$Group" "$DirectoryDescription" "$DirectoryName"
-    else
-      setDirectoryOwnership $Retcode "$User" "$Group" "$ParentDirectoryDescription" "$ParentDirectoryName"
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      if [[ -n "$ParentDirectoryName" ]] && [[ "${DirectoryName:0:$((${#ParentDirectoryName}+1))}" == "${ParentDirectoryName}/" ]] ; then
+        setDirectoryAttributes $Retcode "$User" "$Group" "$ParentDirectoryDescription" "$ParentDirectoryName" ''
+      else
+        setDirectoryAttributes $Retcode "$User" "$Group" "$DirectoryDescription" "$DirectoryName" ''
+      fi
+      Retcode=$?
     fi
+  fi
+
+  return $Retcode
+}
+
+################################################################################
+## @fn createFile
+##
+## @brief Create a file and populate it with the provided content.
+##
+## @param[in]  Retcode         A return code that causes the function to return
+##                             immediately when the code denotes an error.  The
+##                             default value of this parameter is
+##                             RETCODE_SUCCESS.
+## @param[in]  User            The user to own the response file.
+## @param[in]  Group           The group to own the response file.
+## @param[in]  Permissions     The file permissions of the response file.
+## @param[in]  FileDescription The description of the response file.
+## @param[in]  FileName        The name of the response file.
+## @param[in]  Content         The content of the response file.
+## @param[in]  bOverwrite      Whether to overwrite the file if it already
+##                             exists.
+## @param[out] bCreated        Whether the file was newly created.
+##
+## @return The value of the parameter Retcode if it denotes an error, or the
+##         return code of the function execution.
+################################################################################
+createFile() {
+  local -r ContentDummy=''
+  local -i CreatedDummy=$VALUE_FALSE
+  local -i Retcode=${1:-$RETCODE_SUCCESS}
+  local -r User="${2:-:root}"
+  local -r Group="${3:-:root}"
+  local -r Permissions="${4:-644}"
+  local -r FileDescription="${5:-file}"
+  local -r FileName="${6:-}"
+  local -n Content="${7:-ContentDummy}"
+  local -r -i bOverwrite="${8:-$VALUE_FALSE}"
+  local -n bCreated="${9:-CreatedDummy}"
+  local -i bSetOwner=$VALUE_FALSE
+
+  bCreated=$VALUE_FALSE
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -z "$FileName" ]] ; then
+    echoError $RETCODE_INTERNAL_ERROR "the ${FileDescription} was not provided"
+    Retcode=$?
+  fi
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$FileName"
+    if [[ 0 -eq $? ]] ; then
+      if [[ $VALUE_TRUE -eq bOverwrite ]] ; then
+        echoCommandMessage "the ${FileDescription} already exists and will be overwritten" "$FileName"
+      else
+        echoCommandMessage "the ${FileDescription} already exists" "$FileName"
+        return $?
+      fi
+    else
+      echoCommandMessage "the ${FileDescription} does not exist" "$FileName"
+    fi
+  fi
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    if [[ -z "$Content" ]] ; then
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'touch' "$FileName"
+    else
+      bSetOwner=$VALUE_TRUE
+      echoCommand 'sudo' 'sh' '-c' "echo 'response file contents' >> '${FileName}'"
+      sudo 'sh' '-c' "echo '${Content}' > '${FileName}'"
+    fi
+    processCommandCode $? "the ${FileDescription} was not created" "$FileName"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      bCreated=$VALUE_TRUE
+    fi
+  fi
+
+  if [[ $VALUE_TRUE -eq $bSetOwner ]] ; then
+    setFileAttributes $Retcode "$User" "$Group" "$FileDescription" "$FileName" "$Permissions"
+    Retcode=$?
+  fi
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bSetOwner ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$FileName"
+    processCommandCode $? "the ${FileDescription} does not exist or is inaccessible" "$FileName"
+    Retcode=$?
+  fi
+
+  if [[ $RETCODE_SUCCESS -ne $Retcode ]] && [[ $VALUE_TRUE -eq $bCreated ]] ; then
+    deleteFile "$FileDescription" "$FileName"
+    bCreated=$VALUE_FALSE
+  fi
+
+  return $Retcode
+}
+
+################################################################################
+## @fn createMarker
+##
+## @brief Create a file that denotes the successful completion of an
+##        installation step.
+##
+## @param[in] Retcode  A return code that causes the function to return
+##                     immediately when the code denotes an error.  The default
+##                     value of this parameter is RETCODE_SUCCESS.
+## @param[in] User     The user to own the directory.
+## @param[in] Group    The group to own the directory.
+## @param[in] FileName The name of the installation marker file.
+##
+## @return The value of the parameter Retcode if it denotes an error, or the
+##         return code of the function execution.
+################################################################################
+createMarker() {
+  local -i Retcode=${1:-$RETCODE_SUCCESS}
+  local -r User="${2:-root}"
+  local -r Group="${3:-root}"
+  local -r FileName="${4:-}"
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$FileName" ]] ; then
+    createFile $Retcode "$User" "$Group" '' 'installation progress marker file' "$FileName"
     Retcode=$?
   fi
 
@@ -1464,7 +1652,6 @@ extractPatch() {
       else
         echoCommandMessage "the ${Description} '${_PatchNumber}' has not been applied" "$FileName"
       fi
-      Retcode=$?
     fi
 
     ### Create the patch base directory. ###
@@ -1482,21 +1669,18 @@ extractPatch() {
       executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "${_PatchHome}/README.txt" '-o' '-f' "${_PatchHome}/README.html"
       if [[ 0 -eq $? ]] ; then
         echoCommandMessage "the ${FileDescription} is already unzipped" "$FileName" "$_PatchHome"
-        Retcode=$?
       else
         echoCommandMessage "the ${FileDescription} has not been unzipped" "$FileName" "$_PatchHome"
-        extractFile $? "$User" "$Group" "$FileDescription" "$FileName" "$DirectoryDescription" "$DirectoryName"
-        setDirectoryOwnership $? "$User" "$Group" "$PatchHomeDescription" "$_PatchHome"
+        extractFile $Retcode "$User" "$Group" "$FileDescription" "$FileName" "$DirectoryDescription" "$DirectoryName"
+        setDirectoryAttributes $? "$User" "$Group" "$PatchHomeDescription" "$_PatchHome"
         Retcode=$?
-        if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
-          deleteDirectory "$PatchHomeDescription" "$_PatchHome"
-        fi
       fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$_PatchHome" '-a' '-r' "$_PatchHome"
         processCommandCode $? "the ${PatchHomeDescription} does not exist, is inaccessible, or cannot be read" "$_PatchHome"
         Retcode=$?
       else
+        deleteDirectory "$PatchHomeDescription" "$_PatchHome"
         _PatchHome=''
       fi
     fi
@@ -1573,7 +1757,6 @@ updatePatcher() {
       else
         echoCommandMessage "the ${FileDescription} has not been updated" "$FileName" "$HomeName"
       fi
-      Retcode=$?
     fi
 
     ### Rename the original patching utility home to serve as backup. ###
@@ -1726,6 +1909,8 @@ installDatabase() {
   local -r MarkerOratabModified="${HomeDirectory}/INSTALLATION_STEP_ORATAB_MODIFIED"
   local -r MarkerDatabasePrepared="${HomeDirectory}/INSTALLATION_STEP_DATABASE_PREPARED"
   local -i bResponseCreated=$VALUE_FALSE
+  local PatchHome=''
+  local PatchMarker=''
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
     echo "$Message"
@@ -1749,14 +1934,8 @@ installDatabase() {
     else
       echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been installed or configured"
       echoInfo "a ${DESCRIPTION_DATABASE_RESPONSE_FILE} will be generated" "$ResponseFileName"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$ResponseFileName"
-      if [[ 0 -eq $? ]] ; then
-        echoCommandMessage "the ${DESCRIPTION_DATABASE_RESPONSE_FILE} already exists and will be overwritten" "$ResponseFileName"
-      else
-        echoCommandMessage "the ${DESCRIPTION_DATABASE_RESPONSE_FILE} does not exist" "$ResponseFileName"
-      fi
-      echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat > '${ResponseFileName}' <<EOF ... EOF"
-      echo "cat > ${ResponseFileName} <<EOF
+      local FileContent=''
+      read -d '' FileContent <<EOF
 oracle.install.responseFileVersion=/oracle/install/rspfmt_dbinstall_response_schema_v19.0.0
 oracle.install.option=INSTALL_DB_AND_CONFIG
 UNIX_GROUP_NAME=${Group}
@@ -1786,24 +1965,10 @@ oracle.install.db.config.starterdb.enableRecovery=true
 oracle.install.db.config.starterdb.storageType=FILE_SYSTEM_STORAGE
 oracle.install.db.config.starterdb.fileSystemStorage.dataLocation=${DataDirectory}
 oracle.install.db.config.starterdb.fileSystemStorage.recoveryLocation=${RecoveryDirectory}
-EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
-      processCommandCode $? "the ${DESCRIPTION_DATABASE_RESPONSE_FILE} was not created" "$ResponseFileName"
+EOF
+      local -r FileContent
+      createFile $Retcode "$User" "$Group" "$ResponseFilePermissions" "$DESCRIPTION_DATABASE_RESPONSE_FILE" "$ResponseFileName" 'FileContent' $VALUE_TRUE 'bResponseCreated'
       Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        bResponseCreated=$VALUE_TRUE
-      fi
-      ### Restrict the file permissions of the response file. ###
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'chmod' ${ResponseFilePermissions} "$ResponseFileName"
-        processCommandCode $? "failed to restrict the ${ResponseFilePermissionsDescription} to '${ResponseFilePermissions}'" "$ResponseFileName"
-        Retcode=$?
-      fi
-      ### Validate that the response file is accessible by the installation user. ###
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$ResponseFileName"
-        processCommandCode $? "the ${DESCRIPTION_DATABASE_RESPONSE_FILE} does not exist or is inaccessible" "$ResponseFileName"
-        Retcode=$?
-      fi
     fi
   fi
 
@@ -1845,7 +2010,7 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           executeCommand 'sudo' 'unzip' '-d' "$HomeDirectory" "$PackageFileName"
           processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_PACKAGE_FILE}" "$PackageFileName" "${HomeDirectory}"
-          setDirectoryOwnership $? "$User" "$Group" "$HomeDirectoryDescription" "$HomeDirectory"
+          setDirectoryAttributes $? "$User" "$Group" "$HomeDirectoryDescription" "$HomeDirectory"
           createMarker $? "$User" "$Group" "$MarkerDatabaseExtracted"
           Retcode=$?
         fi
@@ -1864,9 +2029,6 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     "${HomeDirectory}/OPatch" \
     "$MarkerOPatchUpdated"
   Retcode=$?
-
-  local PatchHome=''
-  local PatchMarker=''
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     extractPatch \
@@ -1935,6 +2097,7 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
     Retcode=$?
   fi
 
+return $Retcode
   ### Install the Oracle Database. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -2266,7 +2429,6 @@ installManager() {
 
         executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$StageDirectory" '-a' '-w' "$StageDirectory"
         processCommandCode $? "the ${StageDirectoryDescription} does not exist or is inaccessible" "$StageDirectory"
-        Retcode=$?
 
         ### (Re-)create the manager repository directory. ###
 
@@ -2289,7 +2451,7 @@ installManager() {
 
         for FileName in ${FileNames[@]} ; do
           if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-            executeCommand 'sudo' 'test' '-f' "$FileName" '-a' '-r' "$FileName"
+            executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$FileName" '-a' '-r' "$FileName"
             processCommandCode $? "the ${DESCRIPTION_MANAGER_FILE} does not exist or is inaccessible" "$FileName"
             Retcode=$?
           fi
@@ -2304,7 +2466,7 @@ installManager() {
 
         ### Change the file ownership of the manager repository directory. ###
 
-        setDirectoryOwnership $Retcode "$User" "$Group" "$RepositoryDescription" "$Repository"
+        setDirectoryAttributes $Retcode "$User" "$Group" "$RepositoryDescription" "$Repository"
 
         ### Create indicator that the Oracle Enterprise Manager package zip files have been unzipped. ###
 
@@ -2638,6 +2800,7 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
 ##                    program option values.
 ## @param[in] Values  The name of the vatiable that contains the program option
 ##                    values.
+## @param[in] Target  The target of the installation.
 ##
 ## @note This function performs the following steps:
 ##
@@ -2653,66 +2816,83 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
 ## @return The return code of the function execution.
 ################################################################################
 prepareInstallation() {
+  local -r Target="${3:-}"
   local Message=''
   local Capture=''
-  local InstallationStage         DescriptionInstallationStage
-  local InstallationInventory     DescriptionInstallationInventory
-  local InstallationBase          DescriptionInstallationBase
-  local InstallationPermissions   DescriptionInstallationPermissions
-  local User                      DescriptionUser
-  local Group                     DescriptionGroup
+  local InstallationStage
+  local InstallationStageDescription
+  local InstallationInventory
+  local InstallationInventoryDescription
+  local InstallationBase
+  local InstallationBaseDescription
+  local InstallationPermissions
+  local User
+  local UserDescription
+  local Group
+  local GroupDescription
   local Hostname
-  local DatabaseHome              DescriptionDatabaseHome
+  local DatabaseHome
+  local DatabaseHomeDescription
   local DatabaseName
-  local DBAGroup                  DescriptionDBAGroup
+  local DBAGroup
+  local DBAGroupDescription
   local ManagerVersion
-  local ManagerHome               DescriptionManagerHome
-  local ManagerInstance           DescriptionManagerInstance
-  local AgentBase                 DescriptionAgentBase
+  local ManagerHome
+  local ManagerHomeDescription
+  local ManagerInstance
+  local ManagerInstanceDescription
+  local AgentBase
+  local AgentBaseDescription
   local SudoersFileName
-  local SudoersFilePermissions    DescriptionSudoersFilePermissions
-  local SwapGoal                  DescriptionSwapGoal
+  local SudoersFilePermissions
+  local SwapGoal
+  local SwapGoalDescription
   local SwapFileName
-  local SwapFilePermissions       DescriptionSwapFilePermissions
+  local SwapFilePermissions
+  local SwapFilePermissionsDescription
   local SysctlFileName
-  local SysctlFilePermissions     DescriptionSysctlFilePermissions
+  local SysctlFilePermissions
+  local SysctlFilePermissionsDescription
   local LimitsFileName
-  local LimitsFilePermissions     DescriptionLimitsFilePermissions
+  local LimitsFilePermissions
+  local LimitsFilePermissionsDescription
   local ControlLerFileName
-  local ControlLerFilePermissions DescriptionControllerFilePermissions
-  local SystemdService            DescriptionSystemdService
+  local ControlLerFilePermissions
+  local ControlLerFilePermissionsDescription
+  local SystemdService
+  local SystemdServiceDescription
   local SystemdFileName
-  local SystemdFilePermissions    DescriptionSystemdFilePermissions
+  local SystemdFilePermissions
+  local SystemdFilePermissionsDescription
   echoTitle 'Preparing for installation of the Oracle products'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGE"            'Message' 'InstallationStage'         'DescriptionInstallationStage'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"        'Message' 'InstallationInventory'     'DescriptionInstallationInventory'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_BASE"             'Message' 'InstallationBase'          'DescriptionInstallationBase'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_FILE_PERMISSIONS" 'Message' 'InstallationPermissions'   'DescriptionInstallationPermissions'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"             'Message' 'User'                      'DescriptionUser'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"            'Message' 'Group'                     'DescriptionGroup'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGE"            'Message' 'InstallationStage'         'InstallationStageDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"        'Message' 'InstallationInventory'     'InstallationInventoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_BASE"             'Message' 'InstallationBase'          'InstallationBaseDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_FILE_PERMISSIONS" 'Message' 'InstallationPermissions'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"             'Message' 'User'                      'UserDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"            'Message' 'Group'                     'GroupDescription'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_HOSTNAME"         'Message' 'Hostname'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"                 'Message' 'DatabaseHome'              'DescriptionDatabaseHome'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"                 'Message' 'DatabaseHome'              'DatabaseHomeDescription'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                 'Message' 'DatabaseName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP"  'Message' 'DBAGroup'                  'DescriptionDBAGroup'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP"  'Message' 'DBAGroup'                  'DBAGroupDescription'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"               'Message' 'ManagerVersion'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"                  'Message' 'ManagerHome'               'DescriptionManagerHome'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE"              'Message' 'ManagerInstance'           'DescriptionManagerInstance'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"                    'Message' 'AgentBase'                 'DescriptionAgentBase'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"                  'Message' 'ManagerHome'               'ManagerHomeDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE"              'Message' 'ManagerInstance'           'ManagerInstanceDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"                    'Message' 'AgentBase'                 'AgentBaseDescription'
   retrieveOption $? "$1" "$2" "$OPTION_SUDOERS_FILE_NAME"             'Message' 'SudoersFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SUDOERS_FILE_PERMISSIONS"      'Message' 'SudoersFilePermissions'    'DescriptionSudoersFilePermissions'
-  retrieveOption $? "$1" "$2" "$OPTION_SWAP_GOAL"                     'Message' 'SwapGoal'                  'DescriptionSwapGoal'
+  retrieveOption $? "$1" "$2" "$OPTION_SUDOERS_FILE_PERMISSIONS"      'Message' 'SudoersFilePermissions'
+  retrieveOption $? "$1" "$2" "$OPTION_SWAP_GOAL"                     'Message' 'SwapGoal'                  'SwapGoalDescription'
   retrieveOption $? "$1" "$2" "$OPTION_SWAP_FILE_NAME"                'Message' 'SwapFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SWAP_FILE_PERMISSIONS"         'Message' 'SwapFilePermissions'       'DescriptionSwapFilePermissions'
+  retrieveOption $? "$1" "$2" "$OPTION_SWAP_FILE_PERMISSIONS"         'Message' 'SwapFilePermissions'       'SwapFilePermissionsDescription'
   retrieveOption $? "$1" "$2" "$OPTION_SYSCTL_FILE_NAME"              'Message' 'SysctlFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSCTL_FILE_PERMISSIONS"       'Message' 'SysctlFilePermissions'     'DescriptionSysctlFilePermissions'
+  retrieveOption $? "$1" "$2" "$OPTION_SYSCTL_FILE_PERMISSIONS"       'Message' 'SysctlFilePermissions'     'SysctlFilePermissionsDescription'
   retrieveOption $? "$1" "$2" "$OPTION_LIMITS_FILE_NAME"              'Message' 'LimitsFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_FILE_PERMISSIONS"       'Message' 'LimitsFilePermissions'     'DescriptionLimitsFilePermissions'
+  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_FILE_PERMISSIONS"       'Message' 'LimitsFilePermissions'     'LimitsFilePermissionsDescription'
   retrieveOption $? "$1" "$2" "$OPTION_CONTROLLER_FILE_NAME"          'Message' 'ControllerFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_CONTROLLER_FILE_PERMISSIONS"   'Message' 'ControllerFilePermissions' 'DescriptionControllerFilePermissions'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"               'Message' 'SystemdService'            'DescriptionSystemdService'
+  retrieveOption $? "$1" "$2" "$OPTION_CONTROLLER_FILE_PERMISSIONS"   'Message' 'ControllerFilePermissions' 'ControlLerFilePermissionsDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"               'Message' 'SystemdService'            'SystemdServiceDescription'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_FILE_NAME"             'Message' 'SystemdFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_FILE_PERMISSIONS"      'Message' 'SystemdFilePermissions'    'DescriptionSystemdFilePermissions'
-  local -i bUserCreated=$VALUE_FALSE
+  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_FILE_PERMISSIONS"      'Message' 'SystemdFilePermissions'    'SystemdFilePermissionsDescription'
   local -i Retcode=$?
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
@@ -2733,11 +2913,11 @@ prepareInstallation() {
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand2 'Capture' 'sudo' 'getent' 'group' "$Group"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionGroup} already exists" "$Group" "$Capture"
+      echoCommandMessage "the ${GroupDescription} already exists" "$Group" "$Capture"
     else
-      echoCommandMessage "the ${DescriptionGroup} does not exist" "$Group" "$Capture"
+      echoCommandMessage "the ${GroupDescription} does not exist" "$Group" "$Capture"
       executeCommand 'sudo' '/usr/sbin/groupadd' '-g' '54321' "$Group"
-      processCommandCode $? "failed to create the ${DescriptionGroup}" "$Group"
+      processCommandCode $? "failed to create the ${GroupDescription}" "$Group"
     fi
     Retcode=$?
   fi
@@ -2747,11 +2927,11 @@ prepareInstallation() {
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand2 'Capture' 'sudo' 'getent' 'group' "$DBAGroup"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionDBAGroup} already exists" "$DBAGroup" "$Capture"
+      echoCommandMessage "the ${DBAGroupDescription} already exists" "$DBAGroup" "$Capture"
     else
-      echoCommandMessage "the ${DescriptionDBAGroup} does not exist" "$DBAGroup" "$Capture"
+      echoCommandMessage "the ${DBAGroupDescription} does not exist" "$DBAGroup" "$Capture"
       executeCommand 'sudo' '/usr/sbin/groupadd' '-g' '54322' "$DBAGroup"
-      processCommandCode $? "failed to create the ${DescriptionDBAGroup}" "$DBAGroup"
+      processCommandCode $? "failed to create the ${DBAGroupDescription}" "$DBAGroup"
     fi
     Retcode=$?
   fi
@@ -2764,27 +2944,24 @@ prepareInstallation() {
     echoCommand 'id' "$User"
     Output1=$(id "$User")
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionUser} already exists" "$User"
+      echoCommandMessage "the ${UserDescription} already exists" "$User"
       echoCommand 'echo' "$Output1" '|' 'awk' "-F ' ' '{ print \$2 }'" '|' 'awk' "-F '(' '{ print \$2 }'" '|' 'tr' "-d' ')'"
       Output2=$(echo "$Output1" | awk -F ' ' '{ print $2 }' | awk -F '(' '{ print $2 }' | tr -d ')')
-      processCommandCode $? "failed to validate group membership of the ${DescriptionUser}" "$User"
+      processCommandCode $? "failed to validate group membership of the ${UserDescription}" "$User"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         if [[ "$Group" == "$Output2" ]] ; then
-          echoInfo "the primary group of the ${DescriptionUser} '${User}' is the ${DescriptionGroup}" "$Group"
+          echoInfo "the primary group of the ${UserDescription} '${User}' is the ${GroupDescription}" "$Group"
         else
-          echoError $RETCODE_OPERATION_ERROR "the primary group of the ${DescriptionUser} '${User}' is not the ${DescriptionGroup}" "$Group" "$Output2"
+          echoError $RETCODE_OPERATION_ERROR "the primary group of the ${UserDescription} '${User}' is not the ${GroupDescription}" "$Group" "$Output2"
         fi
         Retcode=$?
       fi
     else
-      echoCommandMessage "the ${DescriptionUser} does not exist" "$User"
+      echoCommandMessage "the ${UserDescription} does not exist" "$User"
       executeCommand 'sudo' '/usr/sbin/useradd' '-u' '54321' '-g' "$Group" '-s' '/bin/bash' '-m' "$User"
-      processCommandCode $? "failed to create the ${DescriptionUser}" "${User}:${Group}"
+      processCommandCode $? "failed to create the ${UserDescription}" "${User}:${Group}"
       Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        bUserCreated=$VALUE_TRUE
-      fi
     fi
   fi
 
@@ -2795,17 +2972,17 @@ prepareInstallation() {
     local Output4=''
     echoCommand 'sudo' 'getent' 'group' "$DBAGroup"
     Output3=$(sudo getent 'group' "$DBAGroup")
-    processCommandCode $? "the ${DescriptionDBAGroup} does not exist" "$DBAGroup"
+    processCommandCode $? "the ${DBAGroupDescription} does not exist" "$DBAGroup"
     Retcode=$?
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       echoCommand 'echo' "$Output3" '|' 'awk' '-F' ':' '{ print $4}'
       Output4=$(echo "$Output3" | awk -F ':' '{ print $4}')
       if [[ 0 -eq $? ]] && [[ "$User" == "$Output4" ]] ; then
-        echoCommandMessage "the ${DescriptionUser} '${User}' is already a member of the ${DescriptionDBAGroup}" "$DBAGroup"
+        echoCommandMessage "the ${UserDescription} '${User}' is already a member of the ${DBAGroupDescription}" "$DBAGroup"
       else
-        echoCommandMessage "the ${DescriptionUser} '${User}' is not a member of the ${DescriptionDBAGroup}" "$DBAGroup" "$Output4"
+        echoCommandMessage "the ${UserDescription} '${User}' is not a member of the ${DBAGroupDescription}" "$DBAGroup" "$Output4"
         executeCommand 'sudo' 'usermod' '-a' '-G' "$DBAGroup" "$User"
-        processCommandCode $? "failed to add the ${DescriptionUser} '${User}' to the ${DescriptionDBAGroup}" "$DBAGroup"
+        processCommandCode $? "failed to add the ${UserDescription} '${User}' to the ${DBAGroupDescription}" "$DBAGroup"
       fi
       Retcode=$?
     fi
@@ -2821,12 +2998,12 @@ prepareInstallation() {
     if [[ 0 -eq $ExitCode ]] && [[ -z "$Output5" ]] ; then
       ExitCode=2
     fi
-    processCommandCode $ExitCode "failed to determine the home directory of the ${DescriptionUser}" "$User"
+    processCommandCode $ExitCode "failed to determine the home directory of the ${UserDescription}" "$User"
     Retcode=$?
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      echoInfo "the home directory of the ${DescriptionUser} '${User}'" "$Output5"
+      echoInfo "the home directory of the ${UserDescription} '${User}'" "$Output5"
       executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$Output5"
-      processCommandCode $? "failed to access the home directory of the ${DescriptionUser} (${User})" "$Output5"
+      processCommandCode $? "failed to access the home directory of the ${UserDescription} (${User})" "$Output5"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         local -r UserHome="$Output5"
@@ -2837,7 +3014,7 @@ prepareInstallation() {
   ### Update the .bashrc of the new installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    appendLine $Retcode "${UserHome}/.bashrc" 'export PATH="/usr/local/bin:\${PATH}"'
+    appendLine $Retcode "${UserHome}/.bashrc" 'export PATH="/usr/local/bin:${PATH}"'
     appendLine $?       "${UserHome}/.bashrc" "export ORACLE_HOSTNAME='${Hostname}'"
     appendLine $?       "${UserHome}/.bashrc" "export ORACLE_SID='${DatabaseName}'"
     appendLine $?       "${UserHome}/.bashrc" "export ORACLE_HOME='${DatabaseHome}'"
@@ -2849,34 +3026,14 @@ prepareInstallation() {
   ### Add the installation user to the operating systems's list of sudoers. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'test' '-r' "$SudoersFileName"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_SUDOERS_FILE} already exists" "$SudoersFileName"
-      Retcode=$?
-    else
-      echoCommandMessage "the ${DESCRIPTION_SUDOERS_FILE} does not exist" "$SudoersFileName"
-      echoCommand 'sudo' "cat > ${SudoersFileName} <<EOF ... EOF"
-      echo "cat > '${SudoersFileName}' <<EOF
+    local SudoersContent=''
+    read -d '' SudoersContent <<EOF
 # Created by ${PROGRAM} on $(date)
 # Grant sudo privileges to the Oracle installation user
 ${User} ALL=(ALL) NOPASSWD:ALL
-EOF" | sudo 'sh'
-      processCommandCode $? "failed to create the ${DESCRIPTION_SUDOERS_FILE}" "$SudoersFileName"
-      Retcode=$?
-      # Restrict the file permissions of the Oracle Database automated installation response file.
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'chmod' "$SudoersFilePermissions" "$SudoersFileName"
-        processCommandCode $? "failed to restrict the ${DescriptionSudoersFilePermissions} to '${SudoersFilePermissions}'" "$SudoersFileName"
-        Retcode=$?
-      fi
-    fi
-  fi
-
-  ### Validate that the installation user sudoers supplementary file exists. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'test' '-f' "$SudoersFileName"
-    processCommandCode $? "the ${DESCRIPTION_SUDOERS_FILE} is inaccessible" "$SudoersFileName"
+EOF
+    local -r SudoersContent
+    createFile $Retcode 'root' 'root' "$SudoersFilePermissions" "$DESCRIPTION_SUDOERS_FILE" "$SudoersFileName" 'SudoersContent'
     Retcode=$?
   fi
 
@@ -2891,9 +3048,15 @@ EOF" | sudo 'sh'
   ### Install pre-requisite system libraries. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if ! [[ -f '/usr/lib64/libnsl.so.1' ]] ; then
-      executeCommand 'sudo' 'yum' '-y' 'install' 'libnsl'
-      processCommandCode $? 'failed to install the pre-requisite system library' 'libnsl'
+    local -r PreRequisiteLibrary='pre-requisite system library'
+    local -r Library_libnsl='libnsl'
+    executeCommand 'test' '-f' '/usr/lib64/libnsl.so.1'
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${PreRequisiteLibrary} is already installed" "$Library_libnsl"
+    else
+      echoCommandMessage "a ${PreRequisiteLibrary} is not installed" "$Library_libnsl"
+      executeCommand 'sudo' 'yum' '-y' 'install' "$Library_libnsl"
+      processCommandCode $? "failed to install the ${PreRequisiteLibrary}" "$Library_libnsl"
       Retcode=$?
     fi
   fi
@@ -2916,7 +3079,7 @@ EOF" | sudo 'sh'
     if [[ $RETCODE_SUCCESS -eq $? ]] && [[ -n "$SwapString" ]] && [[ "$SwapString" =~ ^[0-9]+$ ]] ; then
       local -r -i SwapSize=$SwapString
       echoInfo "${DESCRIPTION_SWAP}" "${SwapSize}GB"
-      echoInfo "${DescriptionSwapGoal}" "${SwapGoal}GB"
+      echoInfo "${SwapGoalDescription}" "${SwapGoal}GB"
     else
       local -r -i SwapSize=0
     fi
@@ -2935,7 +3098,7 @@ EOF" | sudo 'sh'
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         bSwapCreated=$VALUE_TRUE
         executeCommand 'sudo' 'chmod' "$SwapFilePermissions" "$SwapFileName"
-        processCommandCode $? "failed to restrict the ${DescriptionSwapFilePermissions} to '${SwapFilePermissions}'" "$SwapFileName"
+        processCommandCode $? "failed to restrict the ${SwapFilePermissionsDescription} to '${SwapFilePermissions}'" "$SwapFileName"
         Retcode=$?
       fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -2978,20 +3141,17 @@ EOF" | sudo 'sh'
   # Configuration of the Sysctl settings for the Oracle Database. #
   #################################################################
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Configuration of the ${DESCRIPTION_SYSCTL}"
-  fi
+  if [[ -z "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      echoSection "Configuration of the ${DESCRIPTION_SYSCTL}"
+    fi
 
-  ### Create and activate the Systctl settings for the Oracle Database. ###
+    ### Create and activate the Systctl settings for the Oracle Database. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' 'root' '-g' 'root' 'test' '-f' "$SysctlFileName"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_SYSCTL_FILE} already exists" "$SysctlFileName"
-    else
-      echoCommandMessage "the ${DESCRIPTION_SYSCTL_FILE} does not exist" "$SysctlFileName"
-      echoCommand 'sudo' '-u' 'root' '-g' 'root' "cat > '${SysctlFileName}' <<EOF ... EOF"
-      echo "cat > '${SysctlFileName}' <<EOF
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      local SysctlContent=''
+      local -i bSysctlCreated=$VALUE_FALSE
+      read -d '' SysctlContent <<EOF
 # Created by ${PROGRAM} on $(date)
 fs.file-max = 6815744
 kernel.sem = 250 32000 100 128
@@ -3007,18 +3167,14 @@ net.ipv4.conf.all.rp_filter = 2
 net.ipv4.conf.default.rp_filter = 2
 fs.aio-max-nr = 1048576
 net.ipv4.ip_local_port_range = 9000 65500
-EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
-      processCommandCode $? "failed to create the ${DESCRIPTION_SYSCTL_FILE}" "$SysctlFileName"
+EOF
+      local -r SysctlContent
+      createFile $Retcode 'root' 'root' "$SysctlFilePermissions" "$DESCRIPTION_SYSCTL_FILE" "$SysctlFileName" 'SysctlContent' $VALUE_FALSE 'bSysctlCreated'
       Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'chmod' "$SysctlFilePermissions" "$SysctlFileName"
-        processCommandCode $? "failed to restrict the ${DescriptionSysctlFilePermissions} to '${SysctlFilePermissions}'" "$SysctlFileName"
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bSysctlCreated ]] ; then
+        executeCommand 'sudo' '/sbin/sysctl' '-p' "$SysctlFileName"
+        processCommandCode $? "failed to activate ${DESCRIPTION_SYSCT_FILE}" "$SysctlFileName"
         Retcode=$?
-        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' '/sbin/sysctl' '-p' "$SysctlFileName"
-          processCommandCode $? "failed to activate ${DESCRIPTION_SYSCT_FILE}" "$SysctlFileName"
-          Retcode=$?
-        fi
       fi
     fi
   fi
@@ -3027,20 +3183,16 @@ EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
   # Configuration of the limits settings for the installation user of the Oracle Database. #
   ##########################################################################################
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Configuration of the ${DESCRIPTION_LIMITS}"
-  fi
+  if [[ -z "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      echoSection "Configuration of the ${DESCRIPTION_LIMITS}"
+    fi
 
-  ### Create the limits settings for the installation user of the Oracle Database. ###
+    ### Create the limits settings for the installation user of the Oracle Database. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' 'root' '-g' 'root' 'test' '-f' "$LimitsFileName"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_LIMITS_FILE} already exists" "$LimitsFileName"
-    else
-      echoCommandMessage "the ${DESCRIPTION_LIMITS_FILE} does not exist" "$LimitsFileName"
-      echoCommand 'sudo' '-u' 'root' '-g' 'root' "cat > '${LimitsFileName}' <<EOF ... EOF"
-      echo "cat > '${LimitsFileName}' <<EOF
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      local LimitsContent=''
+      read -d '' LimitsContent <<EOF
 # Created by ${PROGRAM} on $(date)
 ${User} soft nofile  1024
 ${User} hard nofile  65536
@@ -3050,14 +3202,10 @@ ${User} soft stack   10240
 ${User} hard stack   32768
 ${User} hard memlock 134217728
 ${User} soft memlock 134217728
-EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
-      processCommandCode $? "failed to create the ${DESCRIPTION_LIMITS_FILE}" "$LimitsFileName"
+EOF
+      local -r LimitsContent
+      createFile $Retcode 'root' 'root' "$LimitsFilePermissions" "$DESCRIPTION_LIMITS_FILE" "$LimitsFileName" 'LimitsContent'
       Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'chmod' "$LimitsFilePermissions" "$LimitsFileName"
-        processCommandCode $? "failed to restrict the ${DescriptionLimitsFilePermissions} to '${LimitsFilePermissions}'" "$LimitsFileName"
-        Retcode=$?
-      fi
     fi
   fi
 
@@ -3071,38 +3219,45 @@ EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
 
   ### Create the installation staging directory. ###
 
-  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionInstallationStage" "$InstallationStage"
-  Retcode=$?
+  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$InstallationStageDescription" "$InstallationStage"
 
   ### Create the installation base directory. ###
 
-  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionInstallationBase" "$InstallationBase"
+  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$InstallationBaseDescription" "$InstallationBase"
   Retcode=$?
 
   ### Create the installation inventory directory. ###
 
-  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionInstallationInventory" "$InstallationInventory" "$DescriptionInstallationBase" "$InstallationBase"
+  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$InstallationInventoryDescription" "$InstallationInventory" "$InstallationBaseDescription" "$InstallationBase"
   Retcode=$?
 
   ### Create the Oracle Database home directory. ###
 
-  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionDatabaseHome" "$DatabaseHome" "$DescriptionInstallationBase" "$InstallationBase"
-  Retcode=$?
+  if [[ -z "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
+    createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DatabaseHomeDescription" "$DatabaseHome" "$InstallationBaseDescription" "$InstallationBase"
+    Retcode=$?
+  fi
 
   ### Create the Oracle Enterprise Manager home directory. ###
 
-  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionManagerHome" "$ManagerHome" "$DescriptionInstallationBase" "$InstallationBase"
-  Retcode=$?
+  if [[ -z "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
+    createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$ManagerHomeDescription" "$ManagerHome" "$InstallationBaseDescription" "$InstallationBase"
+    Retcode=$?
+  fi
 
   ### Create the Oracle Enterprise Manager instance home directory. ###
 
-  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionManagerInstance" "$ManagerInstance" "$DescriptionInstallationBase" "$InstallationBase"
-  Retcode=$?
+  if [[ -z "$Target" ]] || [[ "$PRODUCT_MANAGER" == "$Target" ]] ; then
+    createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$ManagerInstanceDescription" "$ManagerInstance" "$InstallationBaseDescription" "$InstallationBase"
+    Retcode=$?
+  fi
 
   ### Create the Oracle Enterprise Manager agent base directory. ###
 
-  createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$DescriptionAgentBase" "$AgentBase" "$DescriptionInstallationBase" "$InstallationBase"
-  Retcode=$?
+  if [[ -z "$Target" ]] || [[ "$PRODUCT_MANAGER" == "$Target" ]] || [[ "$PRODUCT_AGENT" == "$Target" ]] ; then
+    createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$AgentBaseDescription" "$AgentBase" "$InstallationBaseDescription" "$InstallationBase"
+    Retcode=$?
+  fi
 
   #######################################################
   # Create the Systemd service for the Oracle Database. #
@@ -3116,14 +3271,8 @@ EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local -r ControllerFile="${UserHome}/${ControllerFileName}"
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-x' "$ControllerFile"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_CONTROLLER_FILE} already exists and will be overwritten" "$ControllerFile"
-    else
-      echoCommandMessage "the ${DESCRIPTION_CONTROLLER_FILE} does not exist or is inaccessible" "$ControllerFile"
-    fi
-    echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat > '${ControllerFile}' <<EOF ... EOF"
-    echo '-e' "cat > '${ControllerFile}' <<EOF
+    local ControllerContent=''
+    read -d '' ControllerContent <<EOF
 #!/usr/bin/bash
 
 # Created by ${PROGRAM} on $(date)
@@ -3235,31 +3384,22 @@ if [[ 0 -ne \\\$Retcode ]] ; then
 fi
 
 exit \\\$Retcode
-EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
-    processCommandCode $? "failed to create the ${DESCRIPTION_CONTROLLER_FILE}" "$ControllerFile"
+EOF
+    local -r ControllerContent
+    createFile $Retcode "$User" "$Group" "$ControllerFilePermissions" "$DESCRIPTION_CONTROLLER_FILE" "$ControllerFile" 'ControllerContent' $VALUE_TRUE
     Retcode=$?
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      executeCommand 'sudo' 'chmod' "$ControllerFilePermissions" "$ControllerFile"
-      processCommandCode $? "failed to restrict the ${DescriptionControllerFilePermissions} to '${ControllerFilePermissions}'" "$ControllerFile"
-      Retcode=$?
-    fi
   fi
 
   ### Create the Systemd service file for Oracle Database. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' 'root' '-g' 'root' 'test' '-f' "$SystemdFileName"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_SYSTEMD_SERVICE_FILE} already exists and will be overwritten" "$SystemdFileName"
-    else
-      echoCommandMessage "the ${DESCRIPTION_SYSTEMD_SERVICE_FILE} does not exist" "$SystemdFileName"
-    fi
-    echoCommand 'sudo' '-u' 'root' '-g' 'root' "cat > '${SystemdFileName}' <<EOF ... EOF"
-    echo "cat > '${SystemdFileName}' <<EOF
+    local SystemdContent=''
+    local bSystemdCreated=$VALUE_FALSE
+    read -d '' SystemdContent <<EOF
 # Created by ${PROGRAM} on $(date)
 
 [Unit]
-Description=${DescriptionSystemdService}
+Description=${SystemdServiceDescription}
 After=syslog.target network.target
 
 [Service]
@@ -3274,18 +3414,14 @@ ExecStop=/usr/bin/bash -c '${ControllerFile} stop'
 
 [Install]
 WantedBy=multi-user.target
-EOF" | sudo '-u' 'root' '-g' 'root' 'sh'
-    processCommandCode $? "failed to create the ${DESCRIPTION_SYSTEMD_SERVICE_FILE}" "$SystemdFileName"
+EOF
+    local -r SystemdContent
+    createFile $Retcode 'root' 'root' "$SystemdFilePermissions" "$DESCRIPTION_SYSTEMD_SERVICE_FILE" "$SystemdFileName" 'SystemdContent' $VALUE_TRUE 'bSystemdCreated'
     Retcode=$?
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      executeCommand 'sudo' 'chmod' "$SystemdFilePermissions" "$SystemdFileName"
-      processCommandCode $? "failed to restrict the ${DescriptionSystemdFilePermissions} to '${SystemdFilePermissions}'" "$SystemdFileName"
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALLUE_TRUE -eq $bSystemdCreated ]] ; then
+      executeCommand 'sudo' 'systemctl' 'enable' "$SystemdService"
+      processCommandCode $? "failed to enable the ${DESCRIPTION_SYSTEMD_SERVICE}" "$SystemdService"
       Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'systemctl' 'enable' "$SystemdService"
-        processCommandCode $? "failed to enable the ${DESCRIPTION_SYSTEMD_SERVICE}" "$SystemdService"
-        Retcode=$?
-      fi
     fi
   fi
 
@@ -3581,7 +3717,7 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     fi
   fi
   if [[ 1 -le $# ]] ; then
-    if [[ "$COMMAND_INSTALL" == "$COMMAND" ]] || [[ "$COMMAND_UNINSTALL" == "$COMMAND" ]] ; then
+    if [[ "$COMMAND_PREPARE" == "$COMMAND" ]] || [[ "$COMMAND_INSTALL" == "$COMMAND" ]] || [[ "$COMMAND_UNINSTALL" == "$COMMAND" ]] ; then
       if [[ "$PRODUCT_DATABASE" == "$1" ]] || [[ "$PRODUCT_MANAGER" == "$1" ]] || [[ "$PRODUCT_AGENT" == "$1" ]] ; then
         declare -r COMMAND_TARGET="$1"
         shift
@@ -3656,7 +3792,7 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       displayOptions 'OptionSources' 'OptionValues'
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        prepareInstallation 'OptionSources' 'OptionValues'
+        prepareInstallation 'OptionSources' 'OptionValues' "$COMMAND_TARGET"
         Retcode=$?
       fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ "$COMMAND_INSTALL" == "$COMMAND" ]]; then
