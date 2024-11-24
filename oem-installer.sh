@@ -148,7 +148,8 @@ declare -r OPTION_SWAP_FILE_NAME='swap-file-name'
 declare -r OPTION_SWAP_FILE_PERMISSIONS='swap-file-permissions'
 declare -r OPTION_SYSCTL_FILE_NAME='sysctl-file-name'
 declare -r OPTION_SYSCTL_FILE_PERMISSIONS='sysctl-file-permissions'
-declare -r OPTION_LIMITS_FILE_NAME='limits-file-name'
+declare -r OPTION_LIMITS_DATABASE_FILE_NAME='database-limits-file-name'
+declare -r OPTION_LIMITS_MANAGER_FILE_NAME='manager-limits-file-name'
 declare -r OPTION_LIMITS_FILE_PERMISSIONS='limits-file-permissions'
 declare -r OPTION_CONTROLLER_FILE_NAME='controller-file-name'
 declare -r OPTION_CONTROLLER_FILE_PERMISSIONS='controller-file-permissions'
@@ -209,7 +210,8 @@ declare -r -a OPTIONS=(
   "$OPTION_SWAP_FILE_PERMISSIONS"
   "$OPTION_SYSCTL_FILE_NAME"
   "$OPTION_SYSCTL_FILE_PERMISSIONS"
-  "$OPTION_LIMITS_FILE_NAME"
+  "$OPTION_LIMITS_DATABASE_FILE_NAME"
+  "$OPTION_LIMITS_MANAGER_FILE_NAME"
   "$OPTION_LIMITS_FILE_PERMISSIONS"
   "$OPTION_CONTROLLER_FILE_NAME"
   "$OPTION_CONTROLLER_FILE_PERMISSIONS"
@@ -297,19 +299,20 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_AGENT_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_WEBLOGIC_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_WEBLOGIC_PASSWORD"]=$OPTION_SOURCE_FILE
-  ["$OPTION_SUDOERS_FILE_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_SUDOERS_FILE_NAME"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_SUDOERS_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
-  ["$OPTION_SWAP_GOAL"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_SWAP_GOAL"]=$OPTION_SOURCE_ALL
   ["$OPTION_SWAP_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_SWAP_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
-  ["$OPTION_SYSCTL_FILE_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_SYSCTL_FILE_NAME"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_SYSCTL_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
-  ["$OPTION_LIMITS_FILE_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_LIMITS_DATABASE_FILE_NAME"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_LIMITS_MANAGER_FILE_NAME"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_LIMITS_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_CONTROLLER_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_CONTROLLER_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_SYSTEMD_SERVICE"]=$OPTION_SOURCE_ALL
-  ["$OPTION_SYSTEMD_FILE_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_SYSTEMD_FILE_NAME"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_SYSTEMD_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
 )
 
@@ -357,9 +360,10 @@ declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_SWAP_GOAL"]=16
   ["$OPTION_SWAP_FILE_NAME"]='/.swapfile_oem'
   ["$OPTION_SWAP_FILE_PERMISSIONS"]='600'
-  ["$OPTION_SYSCTL_FILE_NAME"]='/etc/sysctl.d/98-oracle.conf'
+  ["$OPTION_SYSCTL_FILE_NAME"]='/etc/sysctl.d/99-oracle-database-preinstall-19c-sysctl.conf'
   ["$OPTION_SYSCTL_FILE_PERMISSIONS"]='644'
-  ["$OPTION_LIMITS_FILE_NAME"]='/etc/security/limits.d/oracle-database-preinstall-19c.conf'
+  ["$OPTION_LIMITS_DATABASE_FILE_NAME"]='/etc/security/limits.d/oracle-database-preinstall-19c.conf'
+  ["$OPTION_LIMITS_MANAGER_FILE_NAME"]='/etc/security/limits.d/oracle-em.conf'
   ["$OPTION_LIMITS_FILE_PERMISSIONS"]='644'
   ["$OPTION_CONTROLLER_FILE_NAME"]='servicectl.sh'
   ["$OPTION_CONTROLLER_FILE_PERMISSIONS"]='740'
@@ -375,8 +379,10 @@ declare -r DESCRIPTION_SWAP='system swap'
 declare -r DESCRIPTION_SWAP_FILE="additional file for the ${DESCRIPTION_SWAP}"
 declare -r DESCRIPTION_SYSCTL="Systemctl settings for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
 declare -r DESCRIPTION_SYSCTL_FILE="definition file for the ${DESCRIPTION_SYSCTL}"
-declare -r DESCRIPTION_LIMITS="system limits settings for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
-declare -r DESCRIPTION_LIMITS_FILE="definition file for the ${DESCRIPTION_LIMITS}"
+declare -r DESCRIPTION_LIMITS_DATABASE="system limits settings for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
+declare -r DESCRIPTION_LIMITS_DATABASE_FILE="definition file for the ${DESCRIPTION_LIMITS_DATABASE}"
+declare -r DESCRIPTION_LIMITS_MANAGER="system limits settings for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+declare -r DESCRIPTION_LIMITS_MANAGER_FILE="definition file for the ${DESCRIPTION_LIMITS_MANAGER}"
 declare -r DESCRIPTION_CONTROLLER='service controller for the Oracle products'
 declare -r DESCRIPTION_CONTROLLER_FILE="program file for ${DESCRIPTION_CONTROLLER}"
 declare -r DESCRIPTION_SYSTEMD_SERVICE='Systemd service for the Oracle products'
@@ -460,8 +466,9 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_SWAP_FILE_PERMISSIONS"]="file permissions of the ${DESCRIPTION_SWAP_FILE}"
   ["$OPTION_SYSCTL_FILE_NAME"]="name of the ${DESCRIPTION_SYSCTL_FILE}"
   ["$OPTION_SYSCTL_FILE_PERMISSIONS"]="file permissions on the ${DESCRIPTION_SYSCTL_FILE}"
-  ["$OPTION_LIMITS_FILE_NAME"]="name of the ${DESCRIPTION_LIMITS_FILE}"
-  ["$OPTION_LIMITS_FILE_PERMISSIONS"]="file permissions on the ${DESCRIPTION_LIMITS_FILE}"
+  ["$OPTION_LIMITS_DATABASE_FILE_NAME"]="name of the ${DESCRIPTION_LIMITS_DATABASE_FILE}"
+  ["$OPTION_LIMITS_MANAGER_FILE_NAME"]="name of the ${DESCRIPTION_LIMITS_MANAGER_FILE}"
+  ["$OPTION_LIMITS_FILE_PERMISSIONS"]="file permissions on the system limits settings for the Oracle products"
   ["$OPTION_CONTROLLER_FILE_NAME"]="name of the ${DESCRIPTION_CONTROLLER_FILE}"
   ["$OPTION_CONTROLLER_FILE_PERMISSIONS"]="file permissions on the ${DESCRIPTION_CONTROLLER_FILE}"
   ["$OPTION_SYSTEMD_SERVICE"]="name of the $DESCRIPTION_SYSTEMD_SERVICE"
@@ -1117,6 +1124,7 @@ retrieveOption() {
 ##                      value of this parameter is RETCODE_SUCCESS.
 ## @param[in]  Filename The name of the file to which to append the line.
 ## @param[in]  Line     The line to append.
+## @param[in]  Quote    An optional quote character used in the line (' or ").
 ##
 ## @return The value of the parameter Retcode if it denotes an error, or
 ##         otherwise the return code of the function execution.
@@ -1125,6 +1133,7 @@ appendLine() {
   local -i Retcode=${1:-$RETCODE_SUCCESS}
   local -r Filename="$2"
   local -r Line="$3"
+  local -r Quote="$4"
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     if [[ -z "$Filename" ]] ; then
@@ -1140,8 +1149,13 @@ appendLine() {
           return $?
         fi
       done < <(sudo 'grep' '-o' '^[^#]*' "$Filename")
-      echoCommand 'sudo' 'sh' '-c' "echo '${Line}' >> '${Filename}'"
-      sudo 'sh' '-c' "echo '${Line}' >> '${Filename}'"
+      if [[ -n "$Quote" ]] && [[ "'" == "$Quote" ]] ; then
+        local -r Command='echo "'"$Line"'" >> '"'${Filename}'"
+      else
+        local -r Command="echo '${Line}' >> '${Filename}'"
+      fi
+      echoCommand 'sudo' 'sh' '-c' "$Command"
+      sudo 'sh' '-c' "$Command"
       processCommandCode $? 'failed to modify file' "$Filename"
       Retcode=$?
     fi
@@ -1586,26 +1600,19 @@ extractFile() {
 ##
 ## @brief Determine the patch number from the package zip file.
 ##
-## @param[out] PatchNumber          The patch number.
-## @param[in]  Description          The description of the patch.
-## @param[in]  FileDescription      The description of the package zip file that
-##                                  contains the patch.
-## @param[in]  FileName             The name of the package zip file that
-##                                  contains the patch.
-## @param[in]  FileNameDescription  The description of the name of the package
-##                                  zip file.
+## @param[out] PatchNumber         The patch number.
+## @param[in]  FileName            The name of the package zip file that
+##                                 contains the patch.
+## @param[in]  FileNameDescription The description of the name of the package
+##                                 zip file.
 ##
 ## @return The return code of the function execution.
 ################################################################################
 determinePatchNumber() {
   local DeterminedPatchNumberDummy=''
   local -n DeterminedPatchNumber="${1:-DeterminedPatchNumberDummy}"
-  local -r Description="${2:-patch}"
-  local -r FileDescription="${3:-patch file}"
-  local -r FileName="${4:-}"
-  local -r FileNameDescription="${5:-name of the patch file}"
-
-  echoSection "determination of the ${Description} for ${FileDescription} '${FileName}'"
+  local -r FileName="${2:-}"
+  local -r FileNameDescription="${3:-name of the patch file}"
 
   if [[ -z "$FileName" ]] ; then
     DeterminedPatchNumber=''
@@ -1690,12 +1697,12 @@ extractPatch() {
   if [[ -n "$FileName" ]] && [[ -n "$DirectoryName" ]] ; then
     local -i bProceed=$VALUE_TRUE
 
-    determinePatchNumber '_PatchNumber' "$Description" "$FileDescription" "$FileName" "$FileNameDescription"
-    Retcode=$?
-
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       echoSection "Extraction of the ${Description} '${_PatchNumber}'"
     fi
+
+    determinePatchNumber '_PatchNumber' "$FileName" "$FileNameDescription"
+    Retcode=$?
 
     ### Verify whether the patch package file is valid and can be read. ###
 
@@ -2057,6 +2064,7 @@ installDatabase() {
   local FilePermissions=''
   local User=''
   local Group=''
+  local HostName=''
   local PackageFileName=''
   local OPatchFileName=''
   local UpgradePatchFileName=''
@@ -2067,10 +2075,10 @@ installDatabase() {
   local BaseDirectory=''
   local HomeDirectory=''
   local HomeDirectoryDescription=''
-  local DBAGroup=''
   local DataDirectory=''
   local RecoveryDirectory=''
   local DatabaseName=''
+  local DBAGroup=''
   local Password=''
   local SystemdService=''
   local SystemdServiceDescription=''
@@ -2080,6 +2088,7 @@ installDatabase() {
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_FILE_PERMISSIONS"      'Message' 'FilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                  'Message' 'User'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                 'Message' 'Group'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_HOSTNAME"              'Message' 'HostName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PACKAGE_FILE_NAME"         'Message' 'PackageFileName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_OPATCH_FILE_NAME"          'Message' 'OPatchFileName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"   'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
@@ -2087,10 +2096,10 @@ installDatabase() {
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS" 'Message' 'ResponseFilePermissions' 'ResponseFilePermissionsDescription'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_BASE"                      'Message' 'BaseDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"                      'Message' 'HomeDirectory' 'HomeDirectoryDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP"       'Message' 'DBAGroup'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_DATA"                      'Message' 'DataDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RECOVERY"                  'Message' 'RecoveryDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                      'Message' 'DatabaseName'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP"       'Message' 'DBAGroup'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"                  'Message' 'Password'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"                    'Message' 'SystemdService' 'SystemdServiceDescription'
   local -i Retcode=$?
@@ -2110,6 +2119,7 @@ installDatabase() {
   local -r MarkerOratabModified="${HomeDirectory}/INSTALLATION_STEP_ORATAB_MODIFIED"
   local -r MarkerDatabasePrepared="${HomeDirectory}/INSTALLATION_STEP_DATABASE_PREPARED"
   local -i bResponseCreated=$VALUE_FALSE
+  local PatchNumber=''
   local PatchHome=''
   local PatchMarker=''
 
@@ -2131,9 +2141,9 @@ installDatabase() {
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseInstalled" '-a' '-f' "$MarkerDatabaseConfigured"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already installed and configured"
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already installed and configured" "$HomeDirectory"
     else
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been installed or configured"
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been installed and configured"
       echoInfo "a ${DESCRIPTION_DATABASE_RESPONSE_FILE} will be generated" "$ResponseFileName"
       local FileContent=''
       read -d '' FileContent <<EOF
@@ -2144,9 +2154,9 @@ UNIX_GROUP_NAME=${Group}
 INVENTORY_LOCATION=${InventoryDirectory}
 ORACLE_HOME=${HomeDirectory}
 ORACLE_BASE=${BaseDirectory}
-# ORACLE_HOSTNAME=
-# SECURITY_UPDATES_VIA_MYORACLESUPPORT=false
-# DECLINE_SECURITY_UPDATES=true
+ORACLE_HOSTNAME=${HostName}
+SECURITY_UPDATES_VIA_MYORACLESUPPORT=false
+DECLINE_SECURITY_UPDATES=true
 oracle.install.db.InstallEdition=EE
 oracle.install.db.OSDBA_GROUP=${DBAGroup}
 oracle.install.db.OSBACKUPDBA_GROUP=${DBAGroup}
@@ -2154,107 +2164,27 @@ oracle.install.db.OSDGDBA_GROUP=${DBAGroup}
 oracle.install.db.OSKMDBA_GROUP=${DBAGroup}
 oracle.install.db.OSRACDBA_GROUP=${DBAGroup}
 oracle.install.db.rootconfig.executeRootScript=false
-oracle.install.db.rootconfig.configMethod=SUDO
-oracle.install.db.rootconfig.sudoPath=`which sudo`
-oracle.install.db.rootconfig.sudoUserName=${User}
 oracle.install.db.config.starterdb.type=GENERAL_PURPOSE
 oracle.install.db.config.starterdb.globalDBName=${DatabaseName}
 oracle.install.db.config.starterdb.SID=${DatabaseName}
-oracle.install.db.ConfigureAsContainerDB=true
-oracle.install.db.config.PDBName=${DatabaseName}
+oracle.install.db.ConfigureAsContainerDB=false
 oracle.install.db.config.starterdb.characterSet=AL32UTF8
-oracle.install.db.config.starterdb.memoryOption=true
+oracle.install.db.config.starterdb.memoryOption=false
 oracle.install.db.config.starterdb.memoryLimit=8192
 oracle.install.db.config.starterdb.installExampleSchemas=false
 oracle.install.db.config.starterdb.password.ALL=${Password}
-oracle.install.db.config.starterdb.password.PDBADMIN=${Password}
 oracle.install.db.config.starterdb.managementOption=DEFAULT
 oracle.install.db.config.starterdb.enableRecovery=true
 oracle.install.db.config.starterdb.storageType=FILE_SYSTEM_STORAGE
 oracle.install.db.config.starterdb.fileSystemStorage.dataLocation=${DataDirectory}
 oracle.install.db.config.starterdb.fileSystemStorage.recoveryLocation=${RecoveryDirectory}
 EOF
+#oracle.install.db.config.starterdb.password.PDBADMIN=${Password}
       local -r FileContent
       createFile $Retcode "$User" "$Group" "$ResponseFilePermissions" "$DESCRIPTION_DATABASE_RESPONSE_FILE" "$ResponseFileName" 'FileContent' $VALUE_TRUE 'bResponseCreated'
       Retcode=$?
     fi
   fi
-
-#  ######################################
-#  # Copy the Oracle Database software. #
-#  ######################################
-
-#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#    echoSection "Extraction of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} software"
-#  fi
-
-#  ### Validate that the Oracle Database home directory can be written. ###
-
-#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$HomeDirectory" '-a' '-w' "$HomeDirectory"
-#    processCommandCode $? "the ${HomeDirectoryDescription} does not exist, is inaccessible, or is not writable" "$HomeDirectory"
-#    Retcode=$?
-#  fi
-
-#  ### Unzip the Oracle Database software package to the Oracle Database home directory. ###
-
-#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseInstalled"
-#    if [[ 0 -eq $? ]] ; then
-#      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already installed" "$HomeDirectory"
-#      echoInfo "Skipping extraction the ${DESCRIPTION_DATABASE_PACKAGE_FILE}" "$HomeDirectory"
-#      Retcode=$?
-#    else
-#      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been installed" "$HomeDirectory"
-#      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseExtracted"
-#      if [[ 0 -eq $? ]] ; then
-#        echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} is already unzipped" "$PackageFileName" "$HomeDirectory"
-#        Retcode=$?
-#      else
-#        echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} has not been unzipped" "$PackageFileName" "$HomeDirectory"
-#        executeCommand 'sudo' 'test' '-f' "$PackageFileName" '-a' '-r' "$PackageFileName"
-#        processCommandCode $? "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} does not exist, is inaccessible, or cannot be read" "$PackageFileName"
-#        Retcode=$?
-#        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#          executeCommand 'sudo' 'unzip' '-d' "$HomeDirectory" "$PackageFileName"
-#          processCommandCode $? "failed to unzip the ${DESCRIPTION_DATABASE_PACKAGE_FILE}" "$PackageFileName" "${HomeDirectory}"
-#          setDirectoryAttributes $? "$User" "$Group" "$HomeDirectoryDescription" "$HomeDirectory"
-#          createMarker $? "$User" "$Group" "$MarkerDatabaseExtracted"
-#          Retcode=$?
-#        fi
-#      fi
-#    fi
-#  fi
-
-#  updatePatcher \
-#    $Retcode \
-#    "$User" \
-#    "$Group" \
-#    "$DESCRIPTION_DATABASE_OPATCH" \
-#    "$DESCRIPTION_DATABASE_OPATCH_FILE" \
-#    "$OPatchFileName" \
-#    "$DESCRIPTION_DATABASE_OPATCH_HOME" \
-#    "${HomeDirectory}/OPatch" \
-#    "$MarkerOPatchUpdated"
-#  Retcode=$?
-
-#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#    extractPatch \
-#      'PatchHome' \
-#      '' \
-#      'PatchMarker' \
-#      "$User" \
-#      "$Group" \
-#      "$FilePermissions" \
-#      "$DESCRIPTION_DATABASE_UPGRADE_PATCH" \
-#      "$DESCRIPTION_DATABASE_UPGRADE_PATCH_FILE" \
-#      "$UpgradePatchFileName" \
-#      "$UpgradePatchFileNameDescription" \
-#      "$StagingPatchesDirectoryDescription" \
-#      "$StagingPatchesDirectory" \
-#      "$MarkerPatchApplied"
-#    Retcode=$?
-#  fi
 
   ########################################
   # Installation of the Oracle Database. #
@@ -2305,7 +2235,6 @@ EOF
     Retcode=$?
   fi
 
-return $Retcode
   ### Install the Oracle Database. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -2314,22 +2243,32 @@ return $Retcode
       echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already installed" "$HomeDirectory"
     else
       echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been installed" "$HomeDirectory"
-      echoInfo "installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} with a ${DESCRIPTION_DATABASE_RESPONSE_FILE}" "$ResponseFileName"
-      if [[ -n "$PatchHome" ]] ; then
-        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$ResponseFileName" '-applyRU' "$PatchHome"
-      else
-        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$ResponseFileName"
+      if [[ -n "$UpgradePatchFileName" ]] ; then
+        determinePatchNumber 'PatchNumber' "$UpgradePatchFileName" "$UpgradePatchFileNameDescription"
+        Retcode=$?
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchNumber" ]] ; then
+          PatchHome="${StagingPatchesDirectory}/${PatchNumber}"
+          PatchMarker="${MarkerPatchApplied}_${PatchNumber}"
+        fi
       fi
-      processCommandCode $? "an error occurred when running the ${DatabaseInstallerDescription}" "$DatabaseInstaller"
-      createMarker $? "$User" "$Group" "$PatchMarker"
-      createMarker $? "$User" "$Group" "$MarkerDatabaseInstalled"
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        echoInfo "installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} with a ${DESCRIPTION_DATABASE_RESPONSE_FILE}" "$ResponseFileName"
+        if [[ -n "$PatchHome" ]] ; then
+          executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$ResponseFileName" '-applyRU' "$PatchHome"
+        else
+          executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$ResponseFileName"
+        fi
+        processCommandCode $? "an error occurred when running the ${DatabaseInstallerDescription}" "$DatabaseInstaller"
+        createMarker $? "$User" "$Group" "$PatchMarker"
+        createMarker $? "$User" "$Group" "$MarkerDatabaseInstalled"
+      fi
     fi
     Retcode=$?
   fi
 
-  #######################################
-  # Perform the post-installation steps #
-  #######################################
+  ########################################
+  # Perform the post-installation steps. #
+  ########################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "Post-installation steps"
@@ -2378,14 +2317,14 @@ return $Retcode
     fi
   fi
 
-  ### Configure the Oracle Database network settings using the installation user. ###
+  ### Configure the Oracle Database. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseConfigured"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the network information of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already configured"
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already configured" "$HomeDirectory"
     else
-      echoCommandMessage "the network information of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been configured"
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been configured"
       executeCommand 'sudo' '-E' '-u' "$User" "$DatabaseInstaller" '-executeConfigTools' '-silent' '-responseFile' "$ResponseFileName"
       processCommandCode $? "an error occurred when running the ${DatabaseInstallerDescription}" "${DatabaseInstaller} -executeConfigTools"
       createMarker $? "$User" "$Group" "$MarkerDatabaseConfigured"
@@ -2411,7 +2350,7 @@ return $Retcode
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerOratabModified"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the automatic start of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already enabled"
+      echoCommandMessage "the automatic start of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already enabled" "$ORATAB_FILE_NAME"
     else
       echoCommandMessage "the automatic start of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been enabled"
       executeCommand 'sudo' 'test' '-f' "$ORATAB_FILE_NAME"
@@ -2427,21 +2366,21 @@ return $Retcode
     Retcode=$?
   fi
 
-  #########################################
-  # Configuration of the Oracle Database. #
-  #########################################
+  #######################################
+  # Preparation of the Oracle Database. #
+  #######################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Configuration of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
+    echoSection "Preparation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
   fi
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabasePrepared"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already configured" "$DatabaseName"
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already prepared" "$DatabaseName"
       Retcode=$?
     else
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been configured" "$DatabaseName"
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been prepared" "$DatabaseName"
 
       ### Change the current working directory to the Oracle Database home directory. ###
 
@@ -2523,7 +2462,7 @@ installManager() {
   local InventoryDirectory=''
   local User=''
   local Group=''
-  local Hostname=''
+  local HostName=''
   local DatabaseData=''
   local DatabaseName=''
   local DatabasePort=''
@@ -2561,7 +2500,7 @@ installManager() {
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"            'Message' 'InventoryDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                 'Message' 'User'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_HOSTNAME"             'Message' 'Hostname'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_HOSTNAME"             'Message' 'HostName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_DATA"                     'Message' 'DatabaseData'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                     'Message' 'DatabaseName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PORT"                     'Message' 'DatabasePort'
@@ -2721,7 +2660,7 @@ CONFIGURE_ORACLE_SOFTWARE_LIBRARY=false
 INVENTORY_LOCATION=${InventoryDirectory}
 # Weblogic
 ORACLE_MIDDLEWARE_HOME_LOCATION=${HomeDirectory}
-ORACLE_HOSTNAME=${Hostname}
+ORACLE_HOSTNAME=${HostName}
 WLS_ADMIN_SERVER_USERNAME=weblogic
 WLS_ADMIN_SERVER_PASSWORD=${WeblogicPassword}
 WLS_ADMIN_SERVER_CONFIRM_PASSWORD=${WeblogicPassword}
@@ -2729,7 +2668,7 @@ NODE_MANAGER_PASSWORD=${WeblogicPassword}
 NODE_MANAGER_CONFIRM_PASSWORD=${WeblogicPassword}
 ORACLE_INSTANCE_HOME_LOCATION=${InstanceDirectory}
 # Repository
-DATABASE_HOSTNAME=${Hostname}
+DATABASE_HOSTNAME=${HostName}
 LISTENER_PORT=${DatabasePort}
 SERVICENAME_OR_SID=${DatabaseName}
 SYS_PASSWORD=${DatabasePassword}
@@ -3040,7 +2979,7 @@ prepareInstallation() {
   local UserDescription
   local Group
   local GroupDescription
-  local Hostname
+  local HostName
   local DatabaseHome
   local DatabaseHomeDescription
   local DatabaseName
@@ -3059,21 +2998,17 @@ prepareInstallation() {
   local SwapGoalDescription
   local SwapFileName
   local SwapFilePermissions
-  local SwapFilePermissionsDescription
   local SysctlFileName
   local SysctlFilePermissions
-  local SysctlFilePermissionsDescription
-  local LimitsFileName
+  local LimitsDatabaseFileName
+  local LimitsManagerFileName
   local LimitsFilePermissions
-  local LimitsFilePermissionsDescription
   local ControlLerFileName
   local ControlLerFilePermissions
-  local ControlLerFilePermissionsDescription
   local SystemdService
   local SystemdServiceDescription
   local SystemdFileName
   local SystemdFilePermissions
-  local SystemdFilePermissionsDescription
   echoTitle 'Preparing for installation of the Oracle products'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING"          'Message' 'InstallationStaging'        'InstallationStagingDescription'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING_PATCHES"  'Message' 'InstallationStagingPatches' 'InstallationStagingPatchesDescription'
@@ -3082,7 +3017,7 @@ prepareInstallation() {
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_FILE_PERMISSIONS" 'Message' 'InstallationPermissions'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"             'Message' 'User'                       'UserDescription'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"            'Message' 'Group'                      'GroupDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_HOSTNAME"         'Message' 'Hostname'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_HOSTNAME"         'Message' 'HostName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"                 'Message' 'DatabaseHome'               'DatabaseHomeDescription'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                 'Message' 'DatabaseName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP"  'Message' 'DBAGroup'                   'DBAGroupDescription'
@@ -3094,16 +3029,17 @@ prepareInstallation() {
   retrieveOption $? "$1" "$2" "$OPTION_SUDOERS_FILE_PERMISSIONS"      'Message' 'SudoersFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_SWAP_GOAL"                     'Message' 'SwapGoal'                   'SwapGoalDescription'
   retrieveOption $? "$1" "$2" "$OPTION_SWAP_FILE_NAME"                'Message' 'SwapFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SWAP_FILE_PERMISSIONS"         'Message' 'SwapFilePermissions'        'SwapFilePermissionsDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_SWAP_FILE_PERMISSIONS"         'Message' 'SwapFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_SYSCTL_FILE_NAME"              'Message' 'SysctlFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSCTL_FILE_PERMISSIONS"       'Message' 'SysctlFilePermissions'      'SysctlFilePermissionsDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_FILE_NAME"              'Message' 'LimitsFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_FILE_PERMISSIONS"       'Message' 'LimitsFilePermissions'      'LimitsFilePermissionsDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_SYSCTL_FILE_PERMISSIONS"       'Message' 'SysctlFilePermissions'
+  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_DATABASE_FILE_NAME"     'Message' 'LimitsDatabaseFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_MANAGER_FILE_NAME"      'Message' 'LimitsManagerFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_FILE_PERMISSIONS"       'Message' 'LimitsFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_CONTROLLER_FILE_NAME"          'Message' 'ControllerFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_CONTROLLER_FILE_PERMISSIONS"   'Message' 'ControllerFilePermissions'  'ControlLerFilePermissionsDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_CONTROLLER_FILE_PERMISSIONS"   'Message' 'ControllerFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"               'Message' 'SystemdService'             'SystemdServiceDescription'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_FILE_NAME"             'Message' 'SystemdFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_FILE_PERMISSIONS"      'Message' 'SystemdFilePermissions'     'SystemdFilePermissionsDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_FILE_PERMISSIONS"      'Message' 'SystemdFilePermissions'
   local -i Retcode=$?
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
@@ -3135,16 +3071,18 @@ prepareInstallation() {
 
   ### Create the database administrator group. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand2 'Capture' 'sudo' 'getent' 'group' "$DBAGroup"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DBAGroupDescription} already exists" "$DBAGroup" "$Capture"
-    else
-      echoCommandMessage "the ${DBAGroupDescription} does not exist" "$DBAGroup" "$Capture"
-      executeCommand 'sudo' '/usr/sbin/groupadd' '-g' '54322' "$DBAGroup"
-      processCommandCode $? "failed to create the ${DBAGroupDescription}" "$DBAGroup"
+  if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      executeCommand2 'Capture' 'sudo' 'getent' 'group' "$DBAGroup"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandMessage "the ${DBAGroupDescription} already exists" "$DBAGroup" "$Capture"
+      else
+        echoCommandMessage "the ${DBAGroupDescription} does not exist" "$DBAGroup" "$Capture"
+        executeCommand 'sudo' '/usr/sbin/groupadd' '-g' '54322' "$DBAGroup"
+        processCommandCode $? "failed to create the ${DBAGroupDescription}" "$DBAGroup"
+      fi
+      Retcode=$?
     fi
-    Retcode=$?
   fi
 
   ### Create the installation user. ###
@@ -3176,26 +3114,42 @@ prepareInstallation() {
     fi
   fi
 
-  ### Confirm that the installation user is member of the database administrator group. ###
+  if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
+    ### Create the database administrator group. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    local Output3=''
-    local Output4=''
-    echoCommand 'sudo' 'getent' 'group' "$DBAGroup"
-    Output3=$(sudo getent 'group' "$DBAGroup")
-    processCommandCode $? "the ${DBAGroupDescription} does not exist" "$DBAGroup"
-    Retcode=$?
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      echoCommand 'echo' "$Output3" '|' 'awk' '-F' ':' '{ print $4}'
-      Output4=$(echo "$Output3" | awk -F ':' '{ print $4}')
-      if [[ 0 -eq $? ]] && [[ "$User" == "$Output4" ]] ; then
-        echoCommandMessage "the ${UserDescription} '${User}' is already a member of the ${DBAGroupDescription}" "$DBAGroup"
+      executeCommand2 'Capture' 'sudo' 'getent' 'group' "$DBAGroup"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandMessage "the ${DBAGroupDescription} already exists" "$DBAGroup" "$Capture"
       else
-        echoCommandMessage "the ${UserDescription} '${User}' is not a member of the ${DBAGroupDescription}" "$DBAGroup" "$Output4"
-        executeCommand 'sudo' 'usermod' '-a' '-G' "$DBAGroup" "$User"
-        processCommandCode $? "failed to add the ${UserDescription} '${User}' to the ${DBAGroupDescription}" "$DBAGroup"
+        echoCommandMessage "the ${DBAGroupDescription} does not exist" "$DBAGroup" "$Capture"
+        executeCommand 'sudo' '/usr/sbin/groupadd' '-g' '54322' "$DBAGroup"
+        processCommandCode $? "failed to create the ${DBAGroupDescription}" "$DBAGroup"
       fi
       Retcode=$?
+    fi
+
+    ### Confirm that the installation user is member of the database administrator group. ###
+
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      local Output3=''
+      local Output4=''
+      echoCommand 'sudo' 'getent' 'group' "$DBAGroup"
+      Output3=$(sudo getent 'group' "$DBAGroup")
+      processCommandCode $? "the ${DBAGroupDescription} does not exist" "$DBAGroup"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        echoCommand 'echo' "$Output3" '|' 'awk' '-F' ':' '{ print $4}'
+        Output4=$(echo "$Output3" | awk -F ':' '{ print $4}')
+        if [[ 0 -eq $? ]] && [[ "$User" == "$Output4" ]] ; then
+          echoCommandMessage "the ${UserDescription} '${User}' is already a member of the ${DBAGroupDescription}" "$DBAGroup"
+        else
+          echoCommandMessage "the ${UserDescription} '${User}' is not a member of the ${DBAGroupDescription}" "$DBAGroup" "$Output4"
+          executeCommand 'sudo' 'usermod' '-a' '-G' "$DBAGroup" "$User"
+          processCommandCode $? "failed to add the ${UserDescription} '${User}' to the ${DBAGroupDescription}" "$DBAGroup"
+        fi
+        Retcode=$?
+      fi
     fi
   fi
 
@@ -3225,13 +3179,29 @@ prepareInstallation() {
   ### Update the .bashrc of the new installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    appendLine $Retcode "${UserHome}/.bashrc" 'export PATH="/usr/local/bin:${PATH}"'
-    appendLine $?       "${UserHome}/.bashrc" "export ORACLE_HOSTNAME='${Hostname}'"
-    appendLine $?       "${UserHome}/.bashrc" "export ORACLE_SID='${DatabaseName}'"
-    appendLine $?       "${UserHome}/.bashrc" "export ORACLE_HOME='${DatabaseHome}'"
-    appendLine $?       "${UserHome}/.bashrc" "export OMS_HOME='${ManagerHome}'"
-    appendLine $?       "${UserHome}/.bashrc" "export AGENT_HOME='${AgentBase}/agent_${ManagerVersion}'"
+    appendLine $Retcode "${UserHome}/.bashrc" 'export PATH="/usr/local/bin:${PATH}"' '"'
+    appendLine $?       "${UserHome}/.bashrc" "export ORACLE_HOSTNAME='${HostName}'" "'"
     Retcode=$?
+    if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
+      appendLine $Retcode "${UserHome}/.bashrc" "export ORACLE_SID='${DatabaseName}'" "'"
+      appendLine $?       "${UserHome}/.bashrc" "export DATABASE_HOME='${DatabaseHome}'" "'"
+      Retcode=$?
+    fi
+    if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_MANAGER" == "$Target" ]] ; then
+      appendLine $Retcode "${UserHome}/.bashrc" "export OMS_HOME='${ManagerHome}'" "'"
+      Retcode=$?
+    fi
+    if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_MANAGER" == "$Target" ]] || [[ "$PRODUCT_AGENT" == "$Target" ]] ; then
+      appendLine $Retcode "${UserHome}/.bashrc" "export AGENT_HOME='${AgentBase}/agent_${ManagerVersion}'" "'"
+      Retcode=$?
+    fi
+    if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
+      appendLine $Retcode "${UserHome}/.bashrc" 'export ORACLE_HOME="${DATABASE_HOME}"' '"'
+      Retcode=$?
+    elif [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
+      appendLine $Retcode "${UserHome}/.bashrc" 'export ORACLE_HOME="${MANAGER_HOME}"' '"'
+      Retcode=$?
+    fi
   fi
 
   ### Add the installation user to the operating systems's list of sudoers. ###
@@ -3276,74 +3246,75 @@ EOF
   # Adjustment of the system swap to have at least 16GB. #
   ########################################################
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Adjustment of the ${DESCRIPTION_SWAP} for at least ${SwapGoal}GB"
-  fi
-
-  ### Add an extra system swap file, if needed. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    local SwapString=''
-    echoCommand 'sudo' 'swapon' '--show' '--raw' '--noheadings' '|' 'awk' '-F' "' '" "'BEGIN{ Total = 0 } { if ( ${CHARACTER_DOUBLE_QUOTE}G${CHARACTER_DOUBLE_QUOTE} == substr(\$3,length(\$3),1) ) Total += substr(\$3,1,length(\$3)-1) } END{ print Total }'"
-    SwapString=`sudo swapon '--show' '--raw' '--noheadings' | awk '-F' ' ' 'BEGIN{ Total = 0} { if ( "G" == substr($3,length($3),1) ) Total+=int(substr($3,1,length($3)-1)) } END{ print Total }'`
-    processCommandCode $? "failed to ascertain the ${DESCRIPTION_SWAP} size"
-    if [[ $RETCODE_SUCCESS -eq $? ]] && [[ -n "$SwapString" ]] && [[ "$SwapString" =~ ^[0-9]+$ ]] ; then
-      local -r -i SwapSize=$SwapString
-      echoInfo "${DESCRIPTION_SWAP}" "${SwapSize}GB"
-      echoInfo "${SwapGoalDescription}" "${SwapGoal}GB"
-    else
-      local -r -i SwapSize=0
+  if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      echoSection "Adjustment of the ${DESCRIPTION_SWAP} for at least ${SwapGoal}GB"
     fi
-    if [[ 0 -ge $SwapSize ]] ; then
-      echoInfo "${DESCRIPTION_SWAP} not adjusted: failed to determine current size" '' "$SwapSize"
-    elif [[ $SwapGoal -le $SwapSize ]] ; then
-      echoInfo "${DESCRIPTION_SWAP} not adjusted: already large enough"
-    else
-      local -r -i SwapIncrease=$(($SwapGoal-$SwapSize))
-      local -i bSwapCreated=$VALUE_FALSE
-      local -i bSwapAdded=$VALUE_FALSE
-      echoInfo "${DESCRIPTION_SWAP} increase" "${SwapIncrease}GB"
-      executeCommand 'sudo' 'fallocate' '-l' "${SwapIncrease}G" "$SwapFileName"
-      processCommandCode $? "failed to allocate ${DESCRIPTION_SWAP_FILE}" "$SwapFileName"
-      Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        bSwapCreated=$VALUE_TRUE
-        executeCommand 'sudo' 'chmod' "$SwapFilePermissions" "$SwapFileName"
-        processCommandCode $? "failed to restrict the ${SwapFilePermissionsDescription} to '${SwapFilePermissions}'" "$SwapFileName"
-        Retcode=$?
+
+    ### Add an extra system swap file, if needed. ###
+
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      local SwapString=''
+      echoCommand 'sudo' 'swapon' '--show' '--raw' '--noheadings' '|' 'awk' '-F' "' '" "'BEGIN{ Total = 0 } { if ( ${CHARACTER_DOUBLE_QUOTE}G${CHARACTER_DOUBLE_QUOTE} == substr(\$3,length(\$3),1) ) Total += substr(\$3,1,length(\$3)-1) } END{ print Total }'"
+      SwapString=`sudo swapon '--show' '--raw' '--noheadings' | awk '-F' ' ' 'BEGIN{ Total = 0} { if ( "G" == substr($3,length($3),1) ) Total+=int(substr($3,1,length($3)-1)) } END{ print Total }'`
+      processCommandCode $? "failed to ascertain the ${DESCRIPTION_SWAP} size"
+      if [[ $RETCODE_SUCCESS -eq $? ]] && [[ -n "$SwapString" ]] && [[ "$SwapString" =~ ^[0-9]+$ ]] ; then
+        local -r -i SwapSize=$SwapString
+        echoInfo "${DESCRIPTION_SWAP}" "${SwapSize}GB"
+        echoInfo "${SwapGoalDescription}" "${SwapGoal}GB"
+      else
+        local -r -i SwapSize=0
       fi
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'mkswap' "$SwapFileName"
-        processCommandCode $? "failed to format ${DESCRIPTION_SWAP_FILE}" "$SwapFileName"
-        Retcode=$?
-      fi
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'swapon' "$SwapFileName"
-        processCommandCode $? "failed to add ${DESCRIPTION_SWAP_FILE} to ${DESCRIPTION_SWAP}" "$SwapFileName"
+      if [[ 0 -ge $SwapSize ]] ; then
+        echoInfo "${DESCRIPTION_SWAP} not adjusted: failed to determine current size" '' "$SwapSize"
+      elif [[ $SwapGoal -le $SwapSize ]] ; then
+        echoInfo "${DESCRIPTION_SWAP} not adjusted: already large enough"
+      else
+        local -r -i SwapIncrease=$(($SwapGoal-$SwapSize))
+        local -i bSwapCreated=$VALUE_FALSE
+        local -i bSwapAdded=$VALUE_FALSE
+        echoInfo "${DESCRIPTION_SWAP} increase" "${SwapIncrease}GB"
+        executeCommand 'sudo' 'fallocate' '-l' "${SwapIncrease}G" "$SwapFileName"
+        processCommandCode $? "failed to allocate ${DESCRIPTION_SWAP_FILE}" "$SwapFileName"
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          bSwapAdded=$VALUE_TRUE
+          bSwapCreated=$VALUE_TRUE
         fi
-      fi
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'grep' '-e' "^${SwapFileName}[[:space:]]" "$FSTAB_FILE_NAME"
-        if [[ 0 -eq $? ]] ; then
-          echoCommandMessage "a ${DESCRIPTION_SWAP_FILE} entry already exists in ${FSTAB_FILE_NAME}" "$SwapFileName"
-        else
-          echoCommandSuccess
-          echoCommand 'sudo' 'sh' '-c' "echo '-e' '${SwapFileName}\tnone\tswap\tsw\t0\t0' >> '${FSTAB_FILE_NAME}'"
-          sudo 'sh' '-c' "echo -e '${SwapFileName}\tnone\tswap\tsw\t0\t0' >> '${FSTAB_FILE_NAME}'"
-          processCommandCode $? "failed to add entry to ${FSTAB_FILE_NAME} for the ${DESCRIPTION_SWAP_FILE}" "$SwapFileName"
-        fi
+        setFileAttribute $Retcode 'root' 'root' "$DESCRIPTION_SWAP_FILE" "$SwapFileName" "$SwapFilePermissions"
         Retcode=$?
-      fi
-      if [[ $RETCODE_SUCCESS -ne $Retcode ]] && [[ $VALUE_TRUE -eq $bSwapAdded ]] ; then
-        executeCommand 'sudo' 'swapoff' "$SwapFileName"
-        processCommandCode $? "failed to remove ${DESCRIPTION_SWAP_FILE}" "$SwapFileName"
-      fi
-      if [[ $RETCODE_SUCCESS -ne $Retcode ]] && [[ $VALUE_TRUE -eq $bSwapCreated ]] ; then
-        executeCommand 'sudo' 'rm' "$SwapFileName"
-        processCommandCode $? "failed to delete ${DESCRIPTION_SWAP_FILE}" "$SwapFileName"
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' 'mkswap' "$SwapFileName"
+          processCommandCode $? "failed to format ${DESCRIPTION_SWAP_FILE}" "$SwapFileName"
+          Retcode=$?
+        fi
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' 'swapon' "$SwapFileName"
+          processCommandCode $? "failed to add ${DESCRIPTION_SWAP_FILE} to ${DESCRIPTION_SWAP}" "$SwapFileName"
+          Retcode=$?
+          if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+            bSwapAdded=$VALUE_TRUE
+          fi
+        fi
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'grep' '-e' "^${SwapFileName}[[:space:]]" "$FSTAB_FILE_NAME"
+          if [[ 0 -eq $? ]] ; then
+            echoCommandMessage "a ${DESCRIPTION_SWAP_FILE} entry already exists in ${FSTAB_FILE_NAME}" "$SwapFileName"
+          else
+            echoCommandSuccess
+            echoCommand 'sudo' 'sh' '-c' "echo '-e' '${SwapFileName}\tnone\tswap\tsw\t0\t0' >> '${FSTAB_FILE_NAME}'"
+            sudo 'sh' '-c' "echo -e '${SwapFileName}\tnone\tswap\tsw\t0\t0' >> '${FSTAB_FILE_NAME}'"
+            processCommandCode $? "failed to add entry to ${FSTAB_FILE_NAME} for the ${DESCRIPTION_SWAP_FILE}" "$SwapFileName"
+          fi
+          Retcode=$?
+        fi
+        if [[ $RETCODE_SUCCESS -ne $Retcode ]] && [[ $VALUE_TRUE -eq $bSwapAdded ]] ; then
+          executeCommand 'sudo' 'swapoff' "$SwapFileName"
+          processCommandCode $? "failed to remove ${DESCRIPTION_SWAP_FILE}" "$SwapFileName"
+        fi
+        if [[ $RETCODE_SUCCESS -ne $Retcode ]] && [[ $VALUE_TRUE -eq $bSwapCreated ]] ; then
+          executeCommand 'sudo' 'rm' "$SwapFileName"
+          processCommandCode $? "failed to delete ${DESCRIPTION_SWAP_FILE}" "$SwapFileName"
+        fi
       fi
     fi
   fi
@@ -3391,19 +3362,19 @@ EOF
   fi
 
   ##########################################################################################
-  # Configuration of the limits settings for the installation user of the Oracle Database. #
+  # Configuration of the limits settings for the installation user of the Oracle products. #
   ##########################################################################################
 
   if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      echoSection "Configuration of the ${DESCRIPTION_LIMITS}"
+      echoSection "Configuration of the ${DESCRIPTION_LIMITS_DATABASE}"
     fi
 
     ### Create the limits settings for the installation user of the Oracle Database. ###
 
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      local LimitsContent=''
-      read -d '' LimitsContent <<EOF
+      local LimitsDatabaseContent=''
+      read -d '' LimitsDatabaseContent <<EOF
 # Created by ${PROGRAM} on $(date)
 ${User} soft nofile  1024
 ${User} hard nofile  65536
@@ -3414,8 +3385,30 @@ ${User} hard stack   32768
 ${User} hard memlock 134217728
 ${User} soft memlock 134217728
 EOF
-      local -r LimitsContent
-      createFile $Retcode 'root' 'root' "$LimitsFilePermissions" "$DESCRIPTION_LIMITS_FILE" "$LimitsFileName" 'LimitsContent'
+      local -r LimitsDatabaseContent
+      createFile $Retcode 'root' 'root' "$LimitsFilePermissions" "$DESCRIPTION_LIMITS_DATABASE_FILE" "$LimitsDatabaseFileName" 'LimitsDatabaseContent'
+      Retcode=$?
+    fi
+  fi
+
+  if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_MANAGER" == "$Target" ]] ; then
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      echoSection "Configuration of the ${DESCRIPTION_LIMITS_MANAGER}"
+    fi
+
+    ### Create the limits settings for the installation user of the Oracle Database. ###
+
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      local LimitsManagerContent=''
+      read -d '' LimitsManagerContent <<EOF
+# Created by ${PROGRAM} on $(date)
+${User} soft nofile 30000
+${User} hard nofile 65536
+${User} soft nproc  30000
+${User} hard nproc  30000
+EOF
+      local -r LimitsManagerContent
+      createFile $Retcode 'root' 'root' "$LimitsFilePermissions" "$DESCRIPTION_LIMITS_MANAGER_FILE" "$LimitsManagerFileName" 'LimitsManagerContent'
       Retcode=$?
     fi
   fi
@@ -3492,17 +3485,17 @@ EOF
 
 # Created by ${PROGRAM} on $(date)
 
-declare -r ORIGINAL_PATH=${CHARACTER_DOUBLE_QUOTE}\\\$PATH${CHARACTER_DOUBLE_QUOTE}
+declare -r ORIGINAL_PATH=\"\\\$PATH\"
 
-export TMPDIR='/tmp'
-export TMP='/tmp'
+export TMPDIR=\"/tmp\"
+export TMP=\"/tmp\"
 
 controlAgent() {
-  local -r RESPONSE_FILE='${AgentBase}/agentInstall.rsp'
-  local Log=''
+  local -r RESPONSE_FILE=\"${AgentBase}/agentInstall.rsp\"
+  local Log=\"\"
   local -i Retcode=0
   if [[ -r \"\\\$RESPONSE_FILE\" ]] ; then
-    export ORACLE_HOME=\\\$(grep 'ORACLE_HOME' \"\\\$RESPONSE_FILE\" | awk -F '=' '{print \\\$2}')
+    export ORACLE_HOME=\\\$(grep 'ORACLE_HOME' \"\\\$RESPONSE_FILE\" | awk -F \"=\" \"{print \\\\\$2}"\)
     local -r Command=\"\\\${ORACLE_HOME}/bin/emctl\"
     if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\$Command\" ]] ; then
       export PATH=\"\\\${ORACLE_HOME}/bin:/usr/local/bin:\\\${ORIGINAL_PATH}\"
@@ -3520,9 +3513,9 @@ controlAgent() {
 }
 
 controlDatabase() {
-  export ORACLE_HOME='${DatabaseHome}'
-  local -r Command=\"\\\${ORACLE_HOME}/bin/\\\$1\"
-  local Log=''
+  export ORACLE_HOME=\"${DatabaseHome}\"
+  local -r Command=\"\\\${ORACLE_HOME}/bin/\\\${1}\"
+  local Log=\"\"
   local -i Retcode=0
   if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\$Command\" ]] ; then
     export PATH=\"\\\${ORACLE_HOME}/bin:/usr/local/bin:\\\${ORIGINAL_PATH}\"
@@ -3539,9 +3532,9 @@ controlDatabase() {
 }
 
 controlManager() {
-  export ORACLE_HOME='${ManagerHome}'
+  export ORACLE_HOME=\"${ManagerHome}\"
   local -r Command=\"\\\${ORACLE_HOME}/bin/emctl\"
-  local Log=''
+  local Log=\"\"
   local -i Retcode=0
   if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\$Command\" ]] ; then
     export PATH=\"\\\${ORACLE_HOME}/bin:/usr/local/bin:\\\${ORIGINAL_PATH}\"
@@ -3557,13 +3550,13 @@ controlManager() {
   return \\\$Retcode
 }
 
-declare Log=''
+declare Log=\"\"
 declare -i Retcode=0
 
 if [[ 1 -ne \\\$# ]] ; then
-  Log='Incorrect number of parameters.  Expected the parameters \"start\" or \"stop\" only.'
+  Log=\"Incorrect number of parameters (\\\$#).  Expected the parameters start or stop only.\"
   Retcode=1
-elif [[ 'start' = \"\\\$1\" ]] ; then
+elif [[ \"start\" = \"\\\$1\" ]] ; then
   if [[ 0 -eq \\\$Retcode ]] ; then
     Log=\\\$(controlDatabase 'dbstart')
     Retcode=\\\$?
@@ -3576,7 +3569,7 @@ elif [[ 'start' = \"\\\$1\" ]] ; then
     Log=\\\$(controlAgent 'start' 'agent')
     Retcode=\\\$?
   fi
-elif [[ 'stop' = \"\\\$1\" ]] ; then
+elif [[ \"stop\" = \"\\\$1\" ]] ; then
   if [[ 0 -eq \\\$Retcode ]] ; then
     Log=\\\$(controlManager 'stop' 'oms' '-all')
     Retcode=\\\$?
@@ -3614,18 +3607,19 @@ EOF
 # Created by ${PROGRAM} on $(date)
 
 [Unit]
-Description=${SystemdServiceDescription}
+Description=${DESCRIPTION_SYSTEMD_SERVICE}
 After=syslog.target network.target
 
 [Service]
+Type=oneshot
 LimitMEMLOCK=infinity
 LimitNOFILE=65535
-RemainAfterExit=yes
+RemainAfterExit=true
 User=${User}
 Group=${Group}
 Restart=no
-ExecStart=/usr/bin/bash -c '${ControllerFile} start'
-ExecStop=/usr/bin/bash -c '${ControllerFile} stop'
+ExecStart=/bin/bash ${ControllerFile} start
+ExecStop=/bin/bash ${ControllerFile} stop
 
 [Install]
 WantedBy=multi-user.target
@@ -3781,6 +3775,12 @@ uninstallDatabase() {
     executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$DatabaseDeinstaller" '-silent' '-paramfile' "$ResponseFileName"
     processCommandCode $? "an error occurred when running the ${DatabaseDeinstallerDescription}" "$DatabaseDeinstaller" "$ResponseFileName"
     Retcode=$?
+  fi
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    deleteFile 'oratab file' "$ORATAB_FILE_NAME"
+    deleteFile 'Oracle installation inventory pointer file' "/etc/oraInst.loc"
+#Run 'rm -r /opt/ORCLfmap' as root on node(s) 'oem13cc-ol9-3' at the end of the session.
   fi
 
   return $Retcode
