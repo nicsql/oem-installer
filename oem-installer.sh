@@ -495,6 +495,18 @@ declare -r -i RETCODE_OPERATION_ERROR=1
 declare -r -i RETCODE_PARAMETER_ERROR=2
 declare -r -i RETCODE_INTERNAL_ERROR=100
 
+######################
+# Installation steps #
+######################
+
+declare -r INSTALLATION_STEP_EXTRACTED='INSTALLATION_STEP_EXTRACTED'
+declare -r INSTALLATION_STEP_PROVISIONED='INSTALLATION_STEP_PROVISIONED'
+declare -r INSTALLATION_STEP_INSTALLED='INSTALLATION_STEP_INSTALLED'
+declare -r INSTALLATION_STEP_CONFIGURED='INSTALLATION_STEP_CONFIGURED'
+declare -r INSTALLATION_STEP_PREPARED='INSTALLATION_STEP_PREPARED'
+declare -r INSTALLATION_STEP_MODIFIED='INSTALLATION_STEP_MODIFIED'
+declare -r INSTALLATION_STEP_PATCHED='INSTALLATION_STEP_PATCHED'
+
 ###################
 # Other constants #
 ###################
@@ -505,6 +517,7 @@ declare -r CHARACTER_BACKSLASH='\'
 declare -r -i VALUE_TRUE=0
 declare -r -i VALUE_FALSE=1
 declare -r -i HELP_INDENT_LENGTH=2
+declare -r ORAINST_FILE_NAME='/etc/oraInst.loc'
 declare -r ORATAB_FILE_NAME='/etc/oratab'
 declare -r FSTAB_FILE_NAME='/etc/fstab'
 
@@ -846,7 +859,7 @@ echoTitle() {
 ##
 ## @param[in] ... The command and its parameters.
 ##
-## @return The exit code of the command.
+## @return The return code of the function execution.
 ################################################################################
 executeCommand() {
   echoCommand $@
@@ -864,7 +877,7 @@ executeCommand() {
 ##                    of the command.
 ## @param[in] ...     The command and its parameters.
 ##
-## @return The exit code of the command.
+## @return The return code of the function execution.
 ################################################################################
 executeCommand2() {
   local DummyOutput=''
@@ -889,7 +902,7 @@ executeCommand2() {
 ## @param[in] Parameter2 A second optional parameter for the message that will
 ##                       be displayed between parenthesis.
 ##
-## @return The exit code.
+## @return A return code equivalent to the exit code.
 ################################################################################
 processCommandCode() {
   local -r -i ExitCode=${1:-$RETCODE_INTERNAL_ERROR}
@@ -1274,22 +1287,25 @@ setFileAttributes() {
 ##
 ## @param[in] DirectoryDescription The description of the directory.
 ## @param[in] DirectoryName        The name of the directory to delete.
+## @param[in] User                 An optional user with which to delete the
+##                                 directory.
 ##
 ## @return The return code of the function execution.
 ################################################################################
 deleteDirectory() {
   local -r DirectoryDescription="${1:-directory}"
   local -r DirectoryName="${2:-}"
+  local -r User="${3:-root}"
   local -i Retcode=$RETCODE_SUCCESS
 
   if [[ -n "$DirectoryName" ]] && [[ '/' != "$DirectoryName" ]] ; then
-    executeCommand 'sudo' 'test' '-d' "$DirectoryName"
+    executeCommand 'sudo' '-u' "$User" 'test' '-d' "$DirectoryName"
     if [[ 0 -eq $? ]] ; then
       echoCommandSuccess
-      executeCommand 'sudo' 'rm' '-rf' "$DirectoryName"
+      executeCommand 'sudo' '-u' "$User" 'rm' '-rf' "$DirectoryName"
       processCommandCode $? "failed to delete ${DirectoryDescription}" "$DirectoryName"
     else
-      echoCommandMessage "the ${DirectoryDescription} does not exist" "$DirectoryName"
+      echoCommandMessage "the ${DirectoryDescription} does not exist or is inacessible" "$DirectoryName"
     fi
     Retcode=$?
   fi
@@ -1304,22 +1320,24 @@ deleteDirectory() {
 ##
 ## @param[in] FileDescription The description of the file.
 ## @param[in] FileName        The name of the file to delete.
+## @param[in] User            An optional user with which to delete the file.
 ##
 ## @return The return code of the function execution.
 ################################################################################
 deleteFile() {
   local -r FileDescription="${1:-file}"
   local -r FileName="${2:-}"
+  local -r User="${3:-root}"
   local -i Retcode=$RETCODE_SUCCESS
 
   if [[ -n "$FileName" ]] ; then
-    executeCommand 'sudo' 'test' '-f' "$FileName"
+    executeCommand 'sudo' '-u' "$User" 'test' '-f' "$FileName"
     if [[ 0 -eq $? ]] ; then
       echoCommandSuccess
-      executeCommand 'sudo' 'rm' '-f' "$FileName"
+      executeCommand 'sudo' '-u' "$User" 'rm' '-f' "$FileName"
       processCommandCode $? "failed to delete ${FileDescription}" "$FileName"
     else
-      echoCommandMessage "the ${FileDescription} does not exist" "$FileName"
+      echoCommandMessage "the ${FileDescription} does not exist or is inacessible" "$FileName"
     fi
     Retcode=$?
   fi
@@ -1380,7 +1398,7 @@ createDirectory() {
         if [[ $VALUE_TRUE -eq $bRecreate ]] ; then
           bCreate=$VALUE_TRUE
           echoInfo "the ${DirectoryDescription} will be re-created" "$DirectoryName"
-          deleteDirectory "$DirectoryDescription" "$DirectoryName"
+          deleteDirectory "$DirectoryDescription" "$DirectoryName" "$User"
         else
           echoInfo "the ${DirectoryDescription} is accessible and will not be re-created" "$DirectoryName"
         fi
@@ -1429,7 +1447,8 @@ createDirectory() {
 ## @param[in]  Permissions     The file permissions of the response file.
 ## @param[in]  FileDescription The description of the response file.
 ## @param[in]  FileName        The name of the response file.
-## @param[in]  Content         The content of the response file.
+## @param[in]  Content         The content of the response file.  The content
+##                             content should not contain any single quotes.
 ## @param[in]  bOverwrite      Whether to overwrite the file if it already
 ##                             exists.
 ## @param[out] bCreated        Whether the file was newly created.
@@ -1499,8 +1518,64 @@ createFile() {
   fi
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] && [[ $VALUE_TRUE -eq $bCreated ]] ; then
-    deleteFile "$FileDescription" "$FileName"
+    deleteFile "$FileDescription" "$FileName" "$User"
     bCreated=$VALUE_FALSE
+  fi
+
+  return $Retcode
+}
+
+################################################################################
+## @fn createFileLink
+##
+## @brief Create a symbolic link to a file.
+##
+## @param[in]  Retcode         A return code that causes the function to return
+##                             immediately when the code denotes an error.  The
+##                             default value of this parameter is
+##                             RETCODE_SUCCESS.
+## @param[in]  User            The user to own the symbolic link.
+## @param[in]  Group           The group to own the symbolic link.
+## @param[in]  FileDescription The description of the file.
+## @param[in]  FileName        The name of the file.
+## @param[in]  LinkName        The file name of the symbolic link.
+##
+## @return The value of the parameter Retcode if it denotes an error, or the
+##         return code of the function execution.
+################################################################################
+createFileLink() {
+  local -i Retcode=${1:-$RETCODE_SUCCESS}
+  local -r User="${2:-:root}"
+  local -r Group="${3:-:root}"
+  local -r FileDescription="${4:-file}"
+  local -r FileName="${5:-}"
+  local -r LinkName="${6:-}"
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -z "$LinkName" ]] ; then
+    echoError $RETCODE_INTERNAL_ERROR "the file name for the symbolic link to the ${FileDescription} was not provided"
+    Retcode=$?
+  fi
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    if [[ -z "$FileName" ]] ; then
+      echoError $RETCODE_INTERNAL_ERROR "the source file name for the ${FileDescription} was not provided"
+    else
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$FileName"
+      processCommandCode $? "source file for ${FileDescription} does not exist or is inacessible" "$FileName"
+    fi
+    Retcode=$?
+  fi
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$LinkName"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the destination ${FileDescription} already exists" "$LinkName"
+    else
+      echoCommandMessage "the destination ${FileDescription} does not exist" "$LinkName"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'ln' '-s' "$FileName" "$LinkName"
+      processCommandCode $? "failed to create symbolic link to ${FileDescription}" "$FileName" "$LinkName"
+    fi
+    Retcode=$?
   fi
 
   return $Retcode
@@ -1529,7 +1604,7 @@ createMarker() {
   local -r FileName="${4:-}"
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$FileName" ]] ; then
-    createFile $Retcode "$User" "$Group" '' 'installation progress marker file' "$FileName"
+    createFile $Retcode "$User" "$Group" '644' 'installation progress marker file' "$FileName"
     Retcode=$?
   fi
 
@@ -1635,31 +1710,21 @@ determinePatchNumber() {
 ##
 ## @brief Extract an Oracle patch package zip file.
 ##
-## @param[out] PatchHome            The directory of the extracted patch.  If
-##                                  the patch has already been applied, the
-##                                  value of this variable will be empty.
-## @param[out] PatchNumber          The patch number.
-## @param[out] PatchMarker          The name of a file that denotes whether the
-##                                  patch has been applied.  This function
-##                                  validates the presence of this file but it
-##                                  does not create it.
 ## @param[in]  User                 The installation user.
 ## @param[in]  Group                The installation group.
 ## @param[in]  Permissions          The file permissions for the patch home
 ##                                  directory.
-## @param[in]  Description          The description of the patch.
+## @param[in]  PatchDescription     The description of the patch.
 ## @param[in]  FileDescription      The description of the package zip
 ##                                  file that contains the patch.
 ## @param[in]  FileName             The name of the package zip file that
 ##                                  contains the patch.
 ## @param[in]  FileNameDescription  The description of the name of the
 ##                                  package zip file.
-## @param[in]  DirectoryDescription The description of the directory in which
+## @param[in]  StagingDirectoryDescription The description of the directory in which
 ##                                  the package zip file will be extracted.
-## @param[in]  DirectoryName        The name of the directory in which the
+## @param[in]  StagingDirectoryName        The name of the directory in which the
 ##                                  package zip file will be extracted.
-## @param[in]  MarkerBase           The root portion of the file name of the
-##                                  installation marker.
 ##
 ## @note All product file and directory names should be in the absolute form.
 ##
@@ -1672,36 +1737,20 @@ determinePatchNumber() {
 ## @return The return code of the function execution.
 ################################################################################
 extractPatch() {
-  local ExtractedPatchHomeDummy=''
-  local ExtractedPatchNumberDummy=''
-  local ExtractedPatchMarkerDummy=''
-  local -n _PatchHome="${1:-ExtractedPatchHomeDummy}"
-  local -n _PatchNumber="${2:-ExtractedPatchNumberDummy}"
-  local -n _PatchMarker="${3:-ExtractedPatchMarkerDummy}"
-  local -r User="${4:-}"
-  local -r Group="${5:-}"
-  local -r Permissions="${6:-755}"
-  local -r Description="${7:-patch}"
-  local -r FileDescription="${8:-patch file}"
-  local -r FileName="${9:-}"
-  local -r FileNameDescription="${10:-name of the patch file}"
-  local -r DirectoryDescription="${11:-extraction directory}"
-  local -r DirectoryName="${12:-}"
-  local -r MarkerBase="${13:-}"
+  local -r User="${1:-}"
+  local -r Group="${2:-}"
+  local -r Permissions="${3:-755}"
+  local -r PatchDescription="${4:-patch}"
+  local -r FileDescription="${5:-patch file}"
+  local -r FileName="${6:-}"
+  local -r FileNameDescription="${7:-name of the patch file}"
+  local -r StagingDirectoryDescription="${8:-extraction directory}"
+  local -r StagingDirectoryName="${9:-}"
   local -i Retcode=$RETCODE_SUCCESS
+  local PatchNumber=''
 
-  _PatchHome=''
-  _PatchNumber=''
-  _PatchMarker=''
-
-  if [[ -n "$FileName" ]] && [[ -n "$DirectoryName" ]] ; then
-    local -i bProceed=$VALUE_TRUE
-
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      echoSection "Extraction of the ${Description} '${_PatchNumber}'"
-    fi
-
-    determinePatchNumber '_PatchNumber' "$FileName" "$FileNameDescription"
+  if [[ -n "$FileName" ]] && [[ -n "$StagingDirectoryName" ]] ; then
+    determinePatchNumber 'PatchNumber' "$FileName" "$FileNameDescription"
     Retcode=$?
 
     ### Verify whether the patch package file is valid and can be read. ###
@@ -1715,46 +1764,167 @@ extractPatch() {
     ### Verify whether the staging directory is valid and can be written. ###
 
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$DirectoryName" '-a' '-w' "$DirectoryName"
-      processCommandCode $? "the ${DirectoryDescription} does not exist, is inaccessible, or cannot be written" "$DirectoryName"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$StagingDirectoryName" '-a' '-w' "$StagingDirectoryName"
+      processCommandCode $? "the ${StagingDirectoryDescription} does not exist, is inaccessible, or cannot be written" "$StagingDirectoryName"
       Retcode=$?
     fi
 
-#    ### Verify whether the patch has already been applied. ###
-#
-#    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$MarkerBase" ]] ; then
-#      _PatchMarker="${MarkerBase}_${_PatchNumber}"
-#      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$_PatchMarker"
-#      if [[ 0 -eq $? ]] ; then
-#        bProceed=$VALUE_FALSE
-#        echoCommandMessage "the ${Description} '${_PatchNumber}' is already applied" "$FileName"
-#      else
-#        echoCommandMessage "the ${Description} '${_PatchNumber}' has not been applied" "$FileName"
-#      fi
-#    fi
-
     ### Extract the patch package file to the patch base directory. ###
 
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
-      local -r PatchHomeDescription="home directory for ${Description} '${_PatchNumber}'"
-      _PatchHome="${DirectoryName}/${_PatchNumber}"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "${_PatchHome}/README.txt" '-o' '-f' "${_PatchHome}/README.html"
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      local -r PatchHomeDescription="home directory for ${PatchDescription} '${PatchNumber}'"
+      local -r PatchHome="${StagingDirectoryName}/${PatchNumber}"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "${PatchHome}/README.txt" '-o' '-f' "${PatchHome}/README.html"
       if [[ 0 -eq $? ]] ; then
-        echoCommandMessage "the ${FileDescription} has already been extracted" "$_PatchHome" "$FileName"
+        echoCommandMessage "the ${FileDescription} has already been extracted" "$PatchHome" "$FileName"
       else
-        echoCommandMessage "the ${FileDescription} has not been extracted" "$_PatchHome" "$FileName"
-        extractFile $Retcode "$User" "$Group" "$FileDescription" "$FileName" "$DirectoryDescription" "$DirectoryName"
-        setDirectoryAttributes $? "$User" "$Group" "$PatchHomeDescription" "$_PatchHome"
+        echoCommandMessage "the ${FileDescription} has not been extracted" "$PatchHome" "$FileName"
+        extractFile $Retcode "$User" "$Group" "$FileDescription" "$FileName" "$StagingDirectoryDescription" "$StagingDirectoryName"
+        setDirectoryAttributes $? "$User" "$Group" "$PatchHomeDescription" "$PatchHome"
         Retcode=$?
       fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$_PatchHome" '-a' '-r' "$_PatchHome"
-        processCommandCode $? "the ${PatchHomeDescription} does not exist, is inaccessible, or cannot be read" "$_PatchHome"
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$PatchHome" '-a' '-r' "$PatchHome"
+        processCommandCode $? "the ${PatchHomeDescription} does not exist, is inaccessible, or cannot be read" "$PatchHome"
         Retcode=$?
       else
-        deleteDirectory "$PatchHomeDescription" "$_PatchHome"
-        _PatchHome=''
+        deleteDirectory "$PatchHomeDescription" "$PatchHome" "$User"
       fi
+    fi
+  fi
+
+  return $Retcode
+}
+
+################################################################################
+## @fn applyPatch
+##
+## @brief Apply a patch to an Oracle product.
+##
+## @param[in] User                        The installation user.
+## @param[in] Group                       The installation group.
+## @param[in] Permissions                 The file permissions for the patch
+##                                        directory to be created if the patch
+##                                        has not already been extracted.
+## @param[in] PatchDescription            The description of the patch.
+## @param[in] FileDescription             The description of the package zip
+##                                        file that contains the patch.
+## @param[in] FileName                    The name of the package zip file that
+##                                        contains the patch.
+## @param[in] FileNameDescription         The description of the name of the
+##                                        package zip file.
+## @param[in] StagingDirectoryDescription The description of the directory in
+##                                        which the package zip file has been or
+##                                        will be extracted.
+## @param[in] StagingDirectoryName        The name of the directory in which the
+##                                        package zip file has been or will be
+##                                        extracted.
+## @param[in] HomeDirectoryName           The name of the home directory of the
+##                                        Oracle product to be patched.
+## @param[in] MarkerBase                  The file name to use for the patch
+##                                        installion marker file.  The patch
+##                                        number will be appended to the name
+##                                        of the marker file.
+##
+## @note All product file and directory names should be in the absolute form.
+##
+## @note This function performs the following steps:
+##
+## @li Validate whether the patch has already been applied.
+## @li Validate that the patch has already been extracted.  If not, extract it.
+## @li Apply the patch.
+##
+## @return The return code of the function execution.
+################################################################################
+applyPatch() {
+  local -r User="${1:-}"
+  local -r Group="${2:-}"
+  local -r Permissions="${3:-}"
+  local -r PatchDescription="${4:-patch}"
+  local -r FileDescription="${5:-patch file}"
+  local -r FileName="${6:-}"
+  local -r FileNameDescription="${7:-name of the patch file}"
+  local -r StagingDirectoryDescription="${8:-extraction directory}"
+  local -r StagingDirectoryName="${9:-}"
+  local -r HomeDirectoryName="${10:-}"
+  local -r MarkerBase="${11:-}"
+  local PatchNumber=''
+
+  determinePatchNumber 'PatchNumber' "$FileName" "$FileNameDescription"
+  local -i Retcode=$?
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchNumber" ]] ; then
+    local -r PatchHomeDescription="home directory for ${PatchDescription} '${PatchNumber}'"
+    local -r PatchHome="${StagingDirectoryName}/${PatchNumber}"
+    local -i bProceed=$VALUE_TRUE
+    if [[ -n "$MarkerBase" ]] ; then
+      local -r Marker="${MarkerBase}_${PatchNumber}"
+    else
+      local -r Marker=''
+    fi
+
+    ### Verify whether the patch has already been applied. ###
+
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$Marker" ]] ; then
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$Marker"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandMessage "the ${PatchDescription} '${PatchNumber}' is already applied" "$FileName"
+        bProceed=$VALUE_FALSE
+      else
+        echoCommandMessage "the ${PatchDescription} '${PatchNumber}' has not been applied" "$FileName"
+      fi
+      Retcode=$?
+    fi
+
+    ### Verify that the patch has been extracted, and, if not, extract it. ###
+
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$PatchHome" '-a' '-x' "$PatchHome"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandMessage "the ${PatchHomeDescription} is accessible" "$PatchHome"
+      else
+        processCommandCode $? "the ${PatchHomeDescription} does not exist or is inaccessible" "$PatchHome"
+        extractPatch "$User" "$Group" "$Permissions" "$PatchDescription" "$FileDescription" "$FileName" "$FileNameDescription" "$StagingDirectoryDescription" "$StagingDirectoryName"
+      fi
+      Retcode=$?
+    fi
+
+    ### Change the current directory to the patch home directory. ###
+
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+      if [[ ! -d "$PatchHome" ]] || [[ ! -x "$PatchHome" ]] ; then
+        echoError $RETCODE_OPERATION_ERROR "the ${PatchHomeDescription} does not exist or is inaccessible" "$PatchHome"
+      else
+        echoCommand 'cd' "$PatchHome"
+        cd "$PatchHome"
+        processCommandCode $? "failed to change the current working directory to the ${PatchHomeDescription}" "$PatchHome"
+      fi
+      Retcode=$?
+    fi
+
+    ### Export the ORACLE_HOME environment variable. ###
+
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+      echoCommand 'export' "ORACLE_HOME=${HomeDirectoryName}"
+      export ORACLE_HOME="$HomeDirectoryName"
+      processCommandCode $? 'failed to export the environment variable ORACLE_HOME' "$HomeDirectoryName"
+      Retcode=$?
+    fi
+
+    ### Apply the patch. ###
+
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "${PatchHome}/bundle.xml"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandMessage "the ${PatchDescription} '${PatchNumber}' uses OMSPatcher" "$PatchHome"
+        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${HomeDirectoryName}/OMSPatcher/omspatcher" 'apply' '-bitonly' '-silent' '-invPtrLoc' "${HomeDirectoryName}/oraInst.loc"
+      else
+        echoCommandMessage "the ${PatchDescription} '${PatchNumber}' uses OPatch" "$PatchHome"
+        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${HomeDirectoryName}/OPatch/opatch" 'apply' '-silent' '-invPtrLoc' "${HomeDirectoryName}/oraInst.loc"
+      fi
+      processCommandCode $? "failed to apply ${PatchDescription}" "$PatchHome" "$PatchNumber"
+      createMarker $? "$User" "$Group" "$Marker"
+      Retcode=$?
     fi
   fi
 
@@ -1766,10 +1936,6 @@ extractPatch() {
 ##
 ## @brief Update the Oracle product patching utility.
 ##
-## @param[in] Retcode         A return code that causes the function to return
-##                            immediately when the code denotes an error.
-##                            The default value of this parameter is
-##                            RETCODE_SUCCESS.
 ## @param[in] User            The installation user.
 ## @param[in] Group           The installation group.
 ## @param[in] Description     The description of the patching utility.
@@ -1796,19 +1962,27 @@ extractPatch() {
 ## @li Create a marker file to denote that the patching utility has been
 ##     updated.
 ##
-## @return The value of the parameter Retcode if it denotes an error, or the
-##         return code of the function execution.
+## @return The return code of the function execution.
 ################################################################################
 updatePatcher() {
-  local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -r User="${2:-}"
-  local -r Group="${3:-}"
-  local -r Description="${4:-patcher}"
-  local -r FileDescription="${5:-patch update file}"
-  local -r FileName="${6:-}"
-  local -r HomeDescription="${7:-home directory of the patcher}"
-  local -r HomeName="${8:-}"
-  local -r Marker="${9:-}"
+  local -r User="${1:-}"
+  local -r Group="${2:-}"
+  local -r Description="${3:-patcher}"
+  local -r FileDescription="${4:-patch update file}"
+  local -r FileName="${5:-}"
+  local -r HomeDescription="${6:-home directory of the patcher}"
+  local -r HomeName="${7:-}"
+  local -r Marker="${8:-}"
+  local -i Retcode=$RETCODE_SUCCESS
+
+#echo 'UpdatePatcher'
+#echo '-------------'
+#echo "Description:     ${Description}"
+#echo "FileDescription: ${FileDescription}"
+#echo "FileName:        ${FileName}"
+#echo "HomeDescription: ${HomeDescription}"
+#echo "HomeName:        ${HomeName}"
+#echo "Marker:          ${Marker}"
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$FileName" ]] ; then
     local -r HomeBackup="${HomeName}-backup"
@@ -1816,8 +1990,6 @@ updatePatcher() {
     local -r BaseDescription="base directory of the ${Description}"
     local -i bProceed=$VALUE_TRUE
     local -i bMoved=$VALUE_FALSE
-
-    echoSection "update of the ${Description}"
 
     ### Verify whether the package update file has already been updated. ###
 
@@ -1853,7 +2025,7 @@ updatePatcher() {
     ### Restore the original patcher if an error occurred. ###
 
     if [[ $RETCODE_SUCCESS -ne $Retcode ]] && [[ $VALUE_TRUE -eq $bMoved ]] ; then
-      deleteDirectory "$HomeDescription" "$HomeName"
+      deleteDirectory "$HomeDescription" "$HomeName" "$User"
       if [[ $RETCODE_SUCCESS -eq $? ]] ; then
         executeCommand 'sudo' 'mv' "$HomeBackup" "$HomeName"
         processCommandCode $? "failed to restore the ${HomeDescription}" "$HomeBackup" "$HomeName"
@@ -1865,164 +2037,6 @@ updatePatcher() {
 }
 
 ################################ Database functions ################################
-
-################################################################################
-## @fn provisionDatabase
-##
-## @brief Provision the Oracle Database software.
-##
-## @param[in] Sources The name of the variable that contains the sources of the
-##                    program option values.
-## @param[in] Values  The name of the vatiable that contains the program option
-##                    values.
-##
-## @note This function performs the following steps:
-##
-## @li Extraction of the Oracle Database software to the Oracle Home directory.
-## @li Extraction of the Oracle OPatch utility update, if provided, to the
-##     sub-directory OPatch in the Oracle Home directory.
-## @li Extraction of the Oracle database upgrade patch, if provided, to the
-##     staging directory.
-##
-## @return The return code of the function execution.
-################################################################################
-provisionDatabase() {
-  local Message=''
-  local StagingPatchesDirectory=''
-  local StagingPatchesDirectoryDescription=''
-  local FilePermissions=''
-  local User=''
-  local Group=''
-  local PackageFileName=''
-  local OPatchFileName=''
-  local UpgradePatchFileName=''
-  local UpgradePatchFileNameDescription=''
-  local HomeDirectory=''
-  local HomeDirectoryDescription=''
-  echoTitle "Provisioning the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} software"
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING_PATCHES"     'Message' 'StagingPatchesDirectory' 'StagingPatchesDirectoryDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_FILE_PERMISSIONS"    'Message' 'FilePermissions'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                'Message' 'User'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"               'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PACKAGE_FILE_NAME"       'Message' 'PackageFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_OPATCH_FILE_NAME"        'Message' 'OPatchFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME" 'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"                    'Message' 'HomeDirectory' 'HomeDirectoryDescription'
-  local -i Retcode=$?
-  local -r MarkerDatabaseExtracted="${HomeDirectory}/INSTALLATION_STEP_DATABASE_EXTRACTED"
-  local -r MarkerOPatchUpdated="${HomeDirectory}/INSTALLATION_STEP_OPATCH_UPDATED"
-  local PatchHome=''
-  local PatchMarker=''
-
-  if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
-    echo "$Message"
-    return $Retcode
-  fi
-
-  ######################################
-  # Copy the Oracle Database software. #
-  ######################################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Extraction of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} software"
-  fi
-
-  ### Validate that the Oracle Database home directory can be written. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$HomeDirectory" '-a' '-w' "$HomeDirectory"
-    processCommandCode $? "the ${HomeDirectoryDescription} does not exist, is inaccessible, or is not writable" "$HomeDirectory"
-    Retcode=$?
-  fi
-
-  ### Extract the Oracle Database software package to the Oracle Database home directory. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseExtracted"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} has already been extracted" "$HomeDirectory" "$PackageFileName"
-      Retcode=$?
-    else
-      echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} has not been extracted" "$HomeDirectory" "$PackageFileName"
-      executeCommand 'sudo' 'test' '-f' "$PackageFileName" '-a' '-r' "$PackageFileName"
-      processCommandCode $? "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} does not exist, is inaccessible, or cannot be read" "$PackageFileName"
-      Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'unzip' '-d' "$HomeDirectory" "$PackageFileName"
-        processCommandCode $? "failed to extract the ${DESCRIPTION_DATABASE_PACKAGE_FILE}" "$PackageFileName" "${HomeDirectory}"
-        setDirectoryAttributes $? "$User" "$Group" "$HomeDirectoryDescription" "$HomeDirectory"
-        createMarker $? "$User" "$Group" "$MarkerDatabaseExtracted"
-        Retcode=$?
-      fi
-    fi
-  fi
-
-  ####################################################
-  # Extraction of the Oracle Database OPatch update. #
-  ####################################################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    updatePatcher \
-      $? \
-      "$User" \
-      "$Group" \
-      "$DESCRIPTION_DATABASE_OPATCH" \
-      "$DESCRIPTION_DATABASE_OPATCH_FILE" \
-      "$OPatchFileName" \
-      "$DESCRIPTION_DATABASE_OPATCH_HOME" \
-      "${HomeDirectory}/OPatch" \
-      "$MarkerOPatchUpdated"
-    Retcode=$?
-  fi
-
-  ####################################################
-  # Extraction of the Oracle Database upgrade patch. #
-  ####################################################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    extractPatch \
-      '' \
-      '' \
-      '' \
-      "$User" \
-      "$Group" \
-      "$FilePermissions" \
-      "$DESCRIPTION_DATABASE_UPGRADE_PATCH" \
-      "$DESCRIPTION_DATABASE_UPGRADE_PATCH_FILE" \
-      "$UpgradePatchFileName" \
-      "$UpgradePatchFileNameDescription" \
-      "$StagingPatchesDirectoryDescription" \
-      "$StagingPatchesDirectory"
-    Retcode=$?
-  fi
-
-  return $Retcode
-}
-
-################################ Main program functions ################################
-
-################################################################################
-## @fn displayOptions
-##
-## @brief Display the program options.
-##
-## @param[in] Sources The name of the variable that contains the sources of the
-##                    program option values.
-## @param[in] Values  The name of the vatiable that contains the program option
-##                    values.
-##
-## @return RETCODE_SUCCESS
-################################################################################
-displayOptions() {
-  local -n _Sources="$1"
-  local -n _Values="$2"
-  local Option
-  echoTitle 'Program options'
-  for Option in "${OPTIONS[@]}" ; do
-    echoOption "$Option" "${_Values[${Option}]}" "${_Sources[${Option}]}" 'OPTION'
-  done
-  return $RETCODE_SUCCESS
-}
 
 ################################################################################
 ## @fn installDatabase
@@ -2059,19 +2073,14 @@ displayOptions() {
 installDatabase() {
   local Message=''
   local StagingPatchesDirectory=''
-  local StagingPatchesDirectoryDescription=''
   local InventoryDirectory=''
-  local FilePermissions=''
   local User=''
   local Group=''
   local HostName=''
-  local PackageFileName=''
-  local OPatchFileName=''
   local UpgradePatchFileName=''
   local UpgradePatchFileNameDescription=''
   local ResponseFileName=''
   local ResponseFilePermissions=''
-  local ResponseFilePermissionsDescription=''
   local BaseDirectory=''
   local HomeDirectory=''
   local HomeDirectoryDescription=''
@@ -2082,18 +2091,15 @@ installDatabase() {
   local Password=''
   local SystemdService=''
   local SystemdServiceDescription=''
-  echoTitle "Installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING_PATCHES"       'Message' 'StagingPatchesDirectory' 'StagingPatchesDirectoryDescription'
+  echoTitle "installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING_PATCHES"       'Message' 'StagingPatchesDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"             'Message' 'InventoryDirectory'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_FILE_PERMISSIONS"      'Message' 'FilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                  'Message' 'User'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                 'Message' 'Group'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_HOSTNAME"              'Message' 'HostName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PACKAGE_FILE_NAME"         'Message' 'PackageFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_OPATCH_FILE_NAME"          'Message' 'OPatchFileName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"   'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RESPONSE_FILE_NAME"        'Message' 'ResponseFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS" 'Message' 'ResponseFilePermissions' 'ResponseFilePermissionsDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS" 'Message' 'ResponseFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_BASE"                      'Message' 'BaseDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"                      'Message' 'HomeDirectory' 'HomeDirectoryDescription'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_DATA"                      'Message' 'DataDirectory'
@@ -2109,23 +2115,22 @@ installDatabase() {
   local -r DatabaseInstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} installer program"
   local -r DatabaseRootInstaller="${HomeDirectory}/root.sh"
   local -r DatabaseRootInstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} root installer program"
-  local -r MarkerDatabaseExtracted="${HomeDirectory}/INSTALLATION_STEP_DATABASE_EXTRACTED"
-  local -r MarkerOPatchUpdated="${HomeDirectory}/INSTALLATION_STEP_OPATCH_UPDATED"
-  local -r MarkerPatchApplied="${HomeDirectory}/PATCH_APPLIED"
-  local -r MarkerDatabaseInstalled="${HomeDirectory}/INSTALLATION_STEP_DATABASE_INSTALLED"
-  local -r MarkerInventoryConfigured="${HomeDirectory}/INSTALLATION_STEP_INVENTORY_CONFIGURED"
-  local -r MarkerRootConfigured="${HomeDirectory}/INSTALLATION_STEP_ROOT_CONFIGURED"
-  local -r MarkerDatabaseConfigured="${HomeDirectory}/INSTALLATION_STEP_DATABASE_CONFIGURED"
-  local -r MarkerOratabModified="${HomeDirectory}/INSTALLATION_STEP_ORATAB_MODIFIED"
-  local -r MarkerDatabasePrepared="${HomeDirectory}/INSTALLATION_STEP_DATABASE_PREPARED"
+  local -r MarkerProvisioned="${HomeDirectory}/${INSTALLATION_STEP_PROVISIONED}"
+  local -r MarkerInstalled="${HomeDirectory}/${INSTALLATION_STEP_INSTALLED}"
+  local -r MarkerConfigured="${HomeDirectory}/${INSTALLATION_STEP_CONFIGURED}"
+  local -r MarkerPrepared="${HomeDirectory}/${INSTALLATION_STEP_PREPARED}"
+  local -r MarkerInventoryConfigured="${HomeDirectory}/${INSTALLATION_STEP_CONFIGURED}_INVENTORY"
+  local -r MarkerRootConfigured="${HomeDirectory}/${INSTALLATION_STEP_CONFIGURED}_ROOT"
+  local -r MarkerOratabModified="${HomeDirectory}/${INSTALLATION_STEP_MODIFIED}_ORATAB"
   local -i bResponseCreated=$VALUE_FALSE
   local PatchNumber=''
-  local PatchHome=''
-  local PatchMarker=''
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
     echo "$Message"
-    return $Retcode
+  else
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerProvisioned"
+    processCommandCode $? "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} software is not provisioned" "$HomeDirectory"
+    Retcode=$?
   fi
 
   ###########################################################################
@@ -2133,13 +2138,13 @@ installDatabase() {
   ###########################################################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Generation of the ${DESCRIPTION_DATABASE_RESPONSE_FILE}"
+    echoSection "generation of the ${DESCRIPTION_DATABASE_RESPONSE_FILE}"
   fi
 
   ### Generate the response file. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseInstalled" '-a' '-f' "$MarkerDatabaseConfigured"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalled" '-a' '-f' "$MarkerConfigured"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already installed and configured" "$HomeDirectory"
     else
@@ -2179,7 +2184,6 @@ oracle.install.db.config.starterdb.storageType=FILE_SYSTEM_STORAGE
 oracle.install.db.config.starterdb.fileSystemStorage.dataLocation=${DataDirectory}
 oracle.install.db.config.starterdb.fileSystemStorage.recoveryLocation=${RecoveryDirectory}
 EOF
-#oracle.install.db.config.starterdb.password.PDBADMIN=${Password}
       local -r FileContent
       createFile $Retcode "$User" "$Group" "$ResponseFilePermissions" "$DESCRIPTION_DATABASE_RESPONSE_FILE" "$ResponseFileName" 'FileContent' $VALUE_TRUE 'bResponseCreated'
       Retcode=$?
@@ -2191,7 +2195,7 @@ EOF
   ########################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
+    echoSection "installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
   fi
 
   ### Change the current working directory to the Oracle Database home directory. ###
@@ -2238,7 +2242,7 @@ EOF
   ### Install the Oracle Database. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseInstalled"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalled"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already installed" "$HomeDirectory"
     else
@@ -2246,24 +2250,24 @@ EOF
       if [[ -n "$UpgradePatchFileName" ]] ; then
         determinePatchNumber 'PatchNumber' "$UpgradePatchFileName" "$UpgradePatchFileNameDescription"
         Retcode=$?
-        if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchNumber" ]] ; then
-          PatchHome="${StagingPatchesDirectory}/${PatchNumber}"
-          PatchMarker="${MarkerPatchApplied}_${PatchNumber}"
-        fi
       fi
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         echoInfo "installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} with a ${DESCRIPTION_DATABASE_RESPONSE_FILE}" "$ResponseFileName"
-        if [[ -n "$PatchHome" ]] ; then
-          executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$ResponseFileName" '-applyRU' "$PatchHome"
+        if [[ -n "$PatchNumber" ]] ; then
+          executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$ResponseFileName" '-applyRU' "${StagingPatchesDirectory}/${PatchNumber}"
         else
           executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$ResponseFileName"
         fi
         processCommandCode $? "an error occurred when running the ${DatabaseInstallerDescription}" "$DatabaseInstaller"
-        createMarker $? "$User" "$Group" "$PatchMarker"
-        createMarker $? "$User" "$Group" "$MarkerDatabaseInstalled"
+        Retcode=$?
+        if [[ -n "$PatchNumber" ]] ; then
+          createMarker $Retcode "$User" "$Group" "${HomeDirectory}/${INSTALLATION_STEP_PATCHED}_${PatchNumber}"
+          Retcode=$?
+        fi
+        createMarker $Retcode "$User" "$Group" "$MarkerInstalled"
+        Retcode=$?
       fi
     fi
-    Retcode=$?
   fi
 
   ########################################
@@ -2271,7 +2275,7 @@ EOF
   ########################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Post-installation steps"
+    echoSection "post-installation steps"
   fi
 
   ### Run the Oracle inventory root installer program, if it exists, using the installation user. ###
@@ -2320,14 +2324,14 @@ EOF
   ### Configure the Oracle Database. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabaseConfigured"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerConfigured"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already configured" "$HomeDirectory"
     else
       echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been configured"
       executeCommand 'sudo' '-E' '-u' "$User" "$DatabaseInstaller" '-executeConfigTools' '-silent' '-responseFile' "$ResponseFileName"
       processCommandCode $? "an error occurred when running the ${DatabaseInstallerDescription}" "${DatabaseInstaller} -executeConfigTools"
-      createMarker $? "$User" "$Group" "$MarkerDatabaseConfigured"
+      createMarker $? "$User" "$Group" "$MarkerConfigured"
     fi
     Retcode=$?
   fi
@@ -2371,11 +2375,11 @@ EOF
   #######################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Preparation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
+    echoSection "preparation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
   fi
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerDatabasePrepared"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerPrepared"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already prepared" "$DatabaseName"
       Retcode=$?
@@ -2418,19 +2422,755 @@ EOF
       ### Restart the Oracle Database. ###
 
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'systemctl' 'restart' "$SystemdService"
-        processCommandCode $? "failed to restart the ${SystemdServiceDescription}" "$SystemdService"
+        executeCommand 'sudo' 'systemctl' 'stop' "$SystemdService"
+        processCommandCode $? "failed to stop the ${DESCRIPTION_SYSTEMD_SERVICE}" "$SystemdService"
+        Retcode=$?
+      fi
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' 'systemctl' 'start' "$SystemdService"
+        processCommandCode $? "failed to start the ${DESCRIPTION_SYSTEMD_SERVICE}" "$SystemdService"
         Retcode=$?
       fi
 
       ### Create indicator that the Oracle Database has been configured. ###
 
-      createMarker $Retcode "$User" "$Group" "$MarkerDatabasePrepared"
+      createMarker $Retcode "$User" "$Group" "$MarkerPrepared"
       Retcode=$?
     fi
   fi
 
   return $Retcode
+}
+
+################################################################################
+## @fn provisionDatabase
+##
+## @brief Provision the Oracle Database software.
+##
+## @param[in] Sources The name of the variable that contains the sources of the
+##                    program option values.
+## @param[in] Values  The name of the vatiable that contains the program option
+##                    values.
+##
+## @note This function performs the following steps:
+##
+## @li Extraction of the Oracle Enterprise Manager package files to a temporary
+##     staging location called repository.
+## @li Extraction of the Oracle OPatch utility update, if provided, to the
+##     sub-directory OPatch in the Oracle Database home directory.
+## @li Extraction of the patch package files, if any provided, to the staging
+##     location.
+##
+## @return The return code of the function execution.
+################################################################################
+provisionDatabase() {
+  local Message=''
+  local StagingPatchesDirectory=''
+  local StagingPatchesDirectoryDescription=''
+  local FilePermissions=''
+  local User=''
+  local Group=''
+  local PackageFileName=''
+  local OPatchFileName=''
+  local OPatchFileNameDescription=''
+  local UpgradePatchFileName=''
+  local UpgradePatchFileNameDescription=''
+  local HomeDirectory=''
+  local HomeDirectoryDescription=''
+  echoTitle "provisioning the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} software"
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING_PATCHES"     'Message' 'StagingPatchesDirectory' 'StagingPatchesDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_FILE_PERMISSIONS"    'Message' 'FilePermissions'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                'Message' 'User'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"               'Message' 'Group'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PACKAGE_FILE_NAME"       'Message' 'PackageFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_OPATCH_FILE_NAME"        'Message' 'OPatchFileName' 'OPatchFileNameDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME" 'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"                    'Message' 'HomeDirectory' 'HomeDirectoryDescription'
+  local -i Retcode=$?
+  local -r MarkerProvisioned="${HomeDirectory}/${INSTALLATION_STEP_PROVISIONED}"
+  local -r MarkerInstalled="${HomeDirectory}/${INSTALLATION_STEP_INSTALLED}"
+  local PatchNumber=''
+
+  if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
+    echo "$Message"
+  fi
+
+  ############################################
+  # Extraction the Oracle Database software. #
+  ############################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "extraction of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} software"
+  fi
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerProvisioned" '-o' '-f' "$MarkerInstalled"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} has already been provisioned or installed" "$HomeDirectory" "$PackageFileName"
+      Retcode=$?
+    else
+      echoCommandMessage "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} has not been provisioned" "$HomeDirectory" "$PackageFileName"
+
+      ### Validate that the Oracle Database home directory can be written. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$HomeDirectory" '-a' '-w' "$HomeDirectory"
+        processCommandCode $? "the ${HomeDirectoryDescription} does not exist, is inaccessible, or is not writable" "$HomeDirectory"
+        Retcode=$?
+      fi
+
+      ### Validate that the Oracle Database package file can be read. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' 'test' '-f' "$PackageFileName" '-a' '-r' "$PackageFileName"
+        processCommandCode $? "the ${DESCRIPTION_DATABASE_PACKAGE_FILE} does not exist, is inaccessible, or cannot be read" "$PackageFileName"
+        Retcode=$?
+      fi
+
+      ### Extract the Oracle Database package file to the Oracle Database home directory. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' 'unzip' '-d' "$HomeDirectory" "$PackageFileName"
+        processCommandCode $? "failed to extract the ${DESCRIPTION_DATABASE_PACKAGE_FILE}" "$PackageFileName" "${HomeDirectory}"
+        setDirectoryAttributes $? "$User" "$Group" "$HomeDirectoryDescription" "$HomeDirectory"
+        createMarker $? "$User" "$Group" "$MarkerProvisioned"
+        Retcode=$?
+      fi
+    fi
+  fi
+
+  #################################################
+  # Update of the Oracle Database OPatch utility. #
+  #################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$OPatchFileName" ]] ; then
+    local -r OPatchHomeDirectory="${HomeDirectory}/OPatch"
+    echoSection "update the ${DESCRIPTION_DATABASE_OPATCH}" "$OPatchFileName" "$OPatchHomeDirectory"
+    determinePatchNumber 'PatchNumber' "$OPatchFileName" "$OPatchFileNameDescription"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchNumber" ]] ; then
+      updatePatcher \
+        "$User" \
+        "$Group" \
+        "$DESCRIPTION_DATABASE_OPATCH" \
+        "$DESCRIPTION_DATABASE_OPATCH_FILE" \
+        "$OPatchFileName" \
+        "$DESCRIPTION_DATABASE_OPATCH_HOME" \
+        "$OPatchHomeDirectory" \
+        "${HomeDirectory}/${INSTALLATION_STEP_PATCHED}_${PatchNumber}"
+      Retcode=$?
+    fi
+  fi
+
+  ####################################################
+  # Extraction of the Oracle Database upgrade patch. #
+  ####################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$UpgradePatchFileName" ]] ; then
+    echoSection "extract the ${DESCRIPTION_DATABASE_UPGRADE_PATCH}" "$UpgradePatchFileName" "$StagingPatchesDirectory"
+    extractPatch \
+      "$User" \
+      "$Group" \
+      "$FilePermissions" \
+      "$DESCRIPTION_DATABASE_UPGRADE_PATCH" \
+      "$DESCRIPTION_DATABASE_UPGRADE_PATCH_FILE" \
+      "$UpgradePatchFileName" \
+      "$UpgradePatchFileNameDescription" \
+      "$StagingPatchesDirectoryDescription" \
+      "$StagingPatchesDirectory"
+    Retcode=$?
+  fi
+
+  return $Retcode
+}
+
+################################################################################
+## @fn uninstallDatabase
+##
+## @brief Uninstall the Oracle Database.
+##
+## @param[in] Sources The name of the variable that contains the sources of the
+##                    program option values.
+## @param[in] Values  The name of the vatiable that contains the program option
+##                    values.
+##
+## @note This function performs the following steps:
+##
+## @li Generation of a response file for the automated deinstallation of the
+##     Oracle Database.
+## @li Deinstallation of the Oracle Database.
+##
+## @return The return code of the function execution.
+################################################################################
+uninstallDatabase() {
+  local Message=''
+  local User
+  local Group
+  local BaseDirectory
+  local BaseDirectoryDescription
+  local HomeDirectory
+  local HomeDirectoryDescription
+  echoTitle "de-installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"  'Message' 'User'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP" 'Message' 'Group'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_BASE"      'Message' 'BaseDirectory' 'BaseDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"      'Message' 'HomeDirectory' 'HomeDirectoryDescription'
+  local -i Retcode=$?
+  local -r Deinstaller="${HomeDirectory}/deinstall/deinstall"
+  local -r DeinstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} de-installer program"
+  local ResponseFileName=''
+  local -r ResponseFileNameDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} de-installation response file"
+  local -r MarkerProvisioned="${HomeDirectory}/${INSTALLATION_STEP_PROVISIONED}"
+  local -r MarkerConfigured="${HomeDirectory}/${INSTALLATION_STEP_CONFIGURED}"
+  local -i bProceed=$VALUE_TRUE
+
+  if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
+    echo "$Message"
+  else
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerProvisioned"
+    processCommandCode $? "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} software is not provisioned" "$HomeDirectory"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerConfigured"
+      if [[ 0 -ne $? ]] ; then
+        processCommandCode $? "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} software has not been installed and configured" "$HomeDirectory"
+        echoInfo "deleting the ${BaseDirectoryDescription} instead" "$BaseDirectory"
+        deleteDirectory "$BaseDirectoryDescription" "$BaseDirectory" "$User"
+        bProceed=$VALUE_FALSE
+      fi
+    fi
+  fi
+
+  ###########################################################
+  # Preparation for de-installation of the Oracle Database. #
+  ###########################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    echoSection "preparation for de-installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
+  fi
+
+  ### Validate that the Oracle Database is installed in the provided home directory. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    executeCommand 'sudo' 'test' '-d' "$HomeDirectory"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${HomeDirectoryDescription} exists" "$HomeDirectory"
+      Retcode=$?
+    else
+      echoCommandMessage "the ${HomeDirectoryDescription} does not exit" "$HomeDirectory"
+      return $RETCODE_SUCCESS
+    fi
+  fi
+
+  ### Validate that the Oracle Database de-installer is present and usable by the installation user. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-x' "$Deinstaller"
+    processCommandCode $? "the ${DeinstallerDescription} does not exist or is inaccessible" "$Deinstaller"
+    Retcode=$?
+  fi
+
+  ### Export the CV_ASSUME_DISTID environment variable to enable de-installation of the Oracle databse. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    local -r CV_ASSUME_DISTID_VALUE='OL7'
+    echoCommand 'export' "CV_ASSUME_DISTID=${CV_ASSUME_DISTID_VALUE}"
+    export CV_ASSUME_DISTID="$CV_ASSUME_DISTID_VALUE"
+    processCommandCode $? "failed to export the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} environment variable CV_ASSUME_DISTID" "$CV_ASSUME_DISTID_VALUE"
+    Retcode=$?
+  fi
+
+  ### Generate the automated de-installation response file. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    local Line=''
+    local Left=''
+    local Right=''
+    local Error=''
+    echoCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$Deinstaller" '-silent' '-checkonly'
+    while IFS= read -r Line ; do
+      if [[ -z "$Error" ]] && [[ -z "$Right" ]] ; then
+        Left=$(echo "$Line" | awk -F ':' '{ print $1 }')
+        if [[ 'ERROR' == "$Left" ]] ; then
+          Right=$(echo "$Line" | awk -F ':' '{ print $2 }')
+          Error=$(echo "$Right" | awk '{$1=$1};1')
+        elif [[ 'Location of response file generated' == "$Left" ]] ; then
+          Right=$(echo "$Line" | awk -F ':' '{ print $2 }')
+          ResponseFileName=$(echo "$Right" | awk -F "$CHARACTER_SINGLE_QUOTE" '{ print $2 }')
+        else
+          Left=''
+        fi
+      fi
+    done < <(sudo -E -u "$User" -g "$Group" "$Deinstaller" -silent -checkonly)
+    Retcode=$?
+    if [[ 0 -eq $Retcode ]] && [[ -z "$ResponseFileName" ]] ; then
+      Retcode=1
+    fi
+    if [[ 0 -eq $Retcode ]] ; then
+      echoCommandMessage "$ResponseFileNameDescription" "$ResponseFileName"
+    elif [[ -n "$Error" ]] ; then
+      processCommandCode $Retcode "an error occurred during the execution of the ${DeinstallerDescription}" "$Deinstaller" "$Error"
+    elif [[ -n "$Right" ]] ; then
+      processCommandCode $Retcode "failed to obtain a ${ResponseFileNameDescription} from the ${DeinstallerDescription}" "$Deinstaller"
+    else
+      processCommandCode $Retcode "failed to generate a ${ResponseFileNameDescription} with the ${DeinstallerDescription}" "$Deinstaller"
+    fi
+    Retcode=$?
+  fi
+
+  ### Validate that the automated de-installation response file is present and accessible to the installation user. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$ResponseFileName"
+    processCommandCode $? "the ${ResponseFileNameDescription} does not exist or is inaccessible" "$ResponseFileName"
+    Retcode=$?
+  fi
+
+  ###########################################
+  # De-installation of the Oracle Database. #
+  ###########################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "de-installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
+  fi
+
+  ### De-install the Oracle Database software. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$Deinstaller" '-silent' '-paramfile' "$ResponseFileName"
+    processCommandCode $? "an error occurred when running the ${DeinstallerDescription}" "$Deinstaller" "$ResponseFileName"
+    Retcode=$?
+  fi
+
+  ### Delete any remaining files. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    deleteFile "${OPTION_DESCRIPTIONS[${OPTION_DATABASE_HOME_DIRECTORY}]} environment selector" '/usr/local/bin/dbhome' "$User"
+    deleteFile "C Shell environment conditioner for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}" '/usr/local/bin/coraenv' "$User"
+    deleteFile "Bourne Shell environment conditioner for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}" '/usr/local/bin/oraenv' "$User"
+    deleteFile 'oratab file' "$ORATAB_FILE_NAME"
+    deleteFile 'Oracle installation inventory pointer file' '/etc/oraInst.loc'
+    deleteDirectory "${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} file mapping" '/opt/ORCLfmap'
+  fi
+
+  return $Retcode
+}
+
+################################ Oracle Enterprise Manager functions ################################
+
+################################################################################
+## @fn provisionManager
+##
+## @brief Provision the Oracle Enterprise Manager software.
+##
+## @param[in] Sources The name of the variable that contains the sources of the
+##                    program option values.
+## @param[in] Values  The name of the vatiable that contains the program option
+##                    values.
+##
+## @note This function performs the following steps:
+##
+## @li Extraction of the Oracle Enterprise Manager package files to a temporary
+##     staging location called repository.
+## @li Extraction of the patch package files, if any provided, to the staging
+##     location.
+## @li Execution of the installer with option to only extract the software to
+##     the Oracle Enterprise Manager home directory.
+## @li Execution of the allroot.sh program.
+## @li Extraction of the Oracle OPatch utility update, if provided, to the
+##     sub-directory OPatch in the Oracle Enterprise Manager home directory.
+## @li Extraction of the OMS Patcher utility update, if provided, to the
+##     sub-directory OMSPatcher in the Oracle Enterprise Manager home directory.
+##
+## @return The return code of the function execution.
+################################################################################
+provisionManager() {
+  local Message=''
+  local StagingDirectory=''
+  local StagingDirectoryDescription=''
+  local StagingPatchesDirectory=''
+  local StagingPatchesDirectoryDescription=''
+  local InventoryDirectory=''
+  local User=''
+  local Group=''
+  local Version=''
+  local PackagesFileNames=''
+  local PackagesFileNamesDescription=''
+  local OPatchFileName=''
+  local OPatchFileNameDescription=''
+  local OMSPatcherFileName=''
+  local OMSPatcherFileNameDescription=''
+  local UpgradePatchFileName=''
+  local UpgradePatchFileNameDescription=''
+  local PatchesFileNames=''
+  local PatchesFileNamesDescription=''
+  local ResponseFileName=''
+  local ResponseFilePermissions=''
+  local HomeDirectory=''
+  local AgentBase=''
+  echoTitle "provisioning the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software"
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING"              'Message' 'StagingDirectory' 'StagingDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING_PATCHES"      'Message' 'StagingPatchesDirectory' 'StagingPatchesDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"            'Message' 'InventoryDirectory'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                 'Message' 'User'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                'Message' 'Group'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                   'Message' 'Version'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"       'Message' 'PackagesFileNames' 'PackagesFileNamesDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_OPATCH_FILE_NAME"          'Message' 'OPatchFileName' 'OPatchFileNameDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_OMSPATCHER_FILE_NAME"      'Message' 'OMSPatcherFileName' 'OMSPatcherFileNameDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME"   'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PATCHES_FILE_NAMES"        'Message' 'PatchesFileNames' 'PatchesFileNamesDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_NAME"        'Message' 'ResponseFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS" 'Message' 'ResponseFilePermissions'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"                      'Message' 'HomeDirectory'
+  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"                        'Message' 'AgentBase'
+  local -i Retcode=$?
+  local -r Repository="${StagingDirectory}/manager-${Version}"
+  local -r RepositoryDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} installation repository directory"
+  local -r Extractor="${Repository}/em13500_linux64.bin"
+  local -r ExtractorDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} extraction program"
+  local -r RootInstaller="${HomeDirectory}/allroot.sh"
+  local -r InstantClientLibrary="${AgentBase}/agent_${Version}/instantclient/libclntshcore.so.12.1"
+  local -r RootInstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} root installer program"
+  local -r MarkerExtracted="${Repository}/${INSTALLATION_STEP_EXTRACTED}"
+  local -r MarkerProvisioned="${HomeDirectory}/${INSTALLATION_STEP_PROVISIONED}"
+  local -r MarkerInstalled="${HomeDirectory}/${INSTALLATION_STEP_INSTALLED}"
+  local -r MarkerRootConfigured="${HomeDirectory}/${INSTALLATION_STEP_CONFIGURED}_root"
+  local -i bRepositoryCreated=$VALUE_FALSE
+  local -i bResponseCreated=$VALUE_FALSE
+  local -a FileNames
+  local FileName=''
+  local PatchNumber=''
+
+  if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
+    echo "$Message"
+  fi
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerProvisioned" '-o' '-f' "$MarkerInstalled"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} has already been provisioned or installed" "$HomeDirectory"
+    else
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} has not been provisioned" "$HomeDirectory"
+
+      ##############################################################
+      # Extraction of the Oracle Enterprise Manager package files. #
+      ##############################################################
+
+      echoSection "extraction of the ${DESCRIPTION_MANAGER_FILES}"
+
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerExtracted"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandMessage "the ${DESCRIPTION_MANAGER_FILES} have already been extracted" "$MarkerExtracted"
+      else
+        echoCommandMessage "the ${DESCRIPTION_MANAGER_FILES} have not been extracted" "$MarkerExtracted"
+
+        ### Validate that the staging directory can be written. ###
+
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$StagingDirectory" '-a' '-w' "$StagingDirectory"
+          processCommandCode $? "the ${StagingDirectoryDescription} does not exist, is inaccessible, or is not writable" "$StagingDirectory"
+          Retcode=$?
+        fi
+
+        ### (Re-)create the manager repository directory. ###
+
+        createDirectory $? "$User" "$Group" '755' "$RepositoryDescription" "$Repository" '' '' $VALUE_TRUE
+        Retcode=$?
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          bRepositoryCreated=$VALUE_TRUE
+        fi
+
+        ### Read the names of the the manager package files. ###
+
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          echoCommand "IFS=',' read -ra <<< ${PackagesFileNames}"
+          IFS=',' read -ra FileNames <<< "$PackagesFileNames"
+          processCommandCode $? "failed to read ${PackagesFileNamesDescription}" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"
+          Retcode=$?
+        fi
+
+        ### Validate that the manager package files are accessible. ###
+
+        for FileName in ${FileNames[@]} ; do
+          if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+            executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$FileName" '-a' '-r' "$FileName"
+            processCommandCode $? "the ${DESCRIPTION_MANAGER_FILE} does not exist or is inaccessible" "$FileName"
+            Retcode=$?
+          fi
+        done
+
+        ### Extract the manager package files to the manager repository directory. ###
+
+        for FileName in ${FileNames[@]} ; do
+          extractFile $Retcode "$User" "$Group" "$DESCRIPTION_MANAGER_FILE" "$FileName" "$RepositoryDescription" "$Repository"
+          Retcode=$?
+        done
+
+        ### Change the file ownership of the manager repository directory. ###
+
+        setDirectoryAttributes $Retcode "$User" "$Group" "$RepositoryDescription" "$Repository"
+
+        ### Create indicator that the Oracle Enterprise Manager package zip files have been unzipped. ###
+
+        createMarker $? "$User" "$Group" "$MarkerExtracted"
+        Retcode=$?
+      fi
+
+      ##############################
+      # Extraction of the patches. #
+      ##############################
+
+      ### Extract the release upgrade patch. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$UpgradePatchFileName" ]] ; then
+        echoSection "extraction of the ${DESCRIPTION_MANAGER_UPGRADE_PATCH}" "$UpgradePatchFileName" "$StagingPatchesDirectory"
+        extractPatch \
+          "$User" \
+          "$Group" \
+          '755' \
+          "$DESCRIPTION_MANAGER_UPGRADE_PATCH" \
+          "$DESCRIPTION_MANAGER_UPGRADE_PATCH_FILE" \
+          "$UpgradePatchFileName" \
+          "$UpgradePatchFileNameDescription" \
+          "$StagingPatchesDirectoryDescription" \
+          "$StagingPatchesDirectory"
+        Retcode=$?
+      fi
+
+      ### Extract the patches. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchesFileNames" ]] ; then
+        echoSection "extraction of the ${DESCRIPTION_MANAGER_PATCH_FILES}" "$PatchesFileNames" "$StagingPatchesDirectory"
+        FileNames=()
+        if [[ 0 -eq $Retcode ]] ; then
+          echoCommand "IFS=',' read -ra <<< ${PatchesFileNames}"
+          IFS=',' read -ra FileNames <<< "$PatchesFileNames"
+          processCommandCode $? "failed to read ${PatchesFileNamesDescription}" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"
+          Retcode=$?
+        fi
+        for FileName in ${FileNames[@]} ; do
+          extractPatch \
+            "$User" \
+            "$Group" \
+            '755' \
+            "$DESCRIPTION_MANAGER_PATCH" \
+            "$DESCRIPTION_MANAGER_PATCH_FILE" \
+            "$FileName" \
+            "$PatchesFileNamesDescription" \
+            "$StagingPatchesDirectoryDescription" \
+            "$StagingPatchesDirectory"
+          Retcode=$?
+          if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
+            break
+          fi
+        done
+      fi
+
+      ###############################################
+      # Generation of the extraction response file. #
+      ###############################################
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        echoSection "generation of the extraction ${DESCRIPTION_MANAGER_RESPONSE_FILE}"
+      fi
+
+      ### Generate the response file. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalled" '-a' '-f' "$MarkerInstalled"
+        if [[ 0 -eq $? ]] ; then
+          echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} is already installed and configured" "$HomeDirectory"
+        else
+          echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} has not been installed and configured"
+          echoInfo "a ${DESCRIPTION_MANAGER_RESPONSE_FILE} will be generated" "$ResponseFileName"
+          local FileContent=''
+          read -d '' FileContent <<EOF
+RESPONSEFILE_VERSION=2.2.1.0.0
+UNIX_GROUP_NAME=${Group}
+# Installation
+CONFIGURATION_TYPE=LATER
+b_upgrade=false
+INSTALL_UPDATES_SELECTION=skip
+EM_INSTALL_TYPE=NOSEED
+EMPREREQ_AUTO_CORRECTION=true
+CONFIGURE_ORACLE_SOFTWARE_LIBRARY=false
+INVENTORY_LOCATION=${InventoryDirectory}
+ORACLE_MIDDLEWARE_HOME_LOCATION=${HomeDirectory}
+AGENT_BASE_DIR=${AgentBase}
+EOF
+          local -r FileContent
+          createFile $Retcode "$User" "$Group" "$ResponseFilePermissions" "$DESCRIPTION_MANAGER_RESPONSE_FILE" "$ResponseFileName" 'FileContent' $VALUE_TRUE 'bResponseCreated'
+          Retcode=$?
+        fi
+      fi
+
+      #########################################################
+      # Extraction of the Oracle Enterprise Manager software. #
+      #########################################################
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        echoSection "extraction of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software"
+      fi
+
+      ### Change the current working directory to the Oracle Enterprise Manager software repository. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        if [[ ! -d "$Repository" ]] || [[ ! -x "$Repository" ]] ; then
+          echoError $RETCODE_OPERATION_ERROR "the ${RepositoryDescription} does not exist or is inaccessible" "$Repository"
+        else
+          echoCommand 'cd' "$Repository"
+          cd "$Repository"
+          processCommandCode $? "failed to change the current working directory to the ${RepositoryDescription}" "$Repository"
+        fi
+        Retcode=$?
+      fi
+
+      ### Export the ORACLE_HOME environment variable. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        echoCommand 'export' "ORACLE_HOME=${HomeDirectory}"
+        export ORACLE_HOME="$HomeDirectory"
+        processCommandCode $? 'failed to export the environment variable ORACLE_HOME' "$HomeDirectory"
+        Retcode=$?
+      fi
+
+      ### Export the OMS_INSTANCE_HOME environment variable. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        echoCommand 'export' "OMS_INSTANCE_HOME=${InstanceDirectory}"
+        export OMS_INSTANCE_HOME="$InstanceDirectory"
+        processCommandCode $? 'failed to export the environment variable OMS_INSTANCE_HOME' "$InstanceDirectory"
+        Retcode=$?
+      fi
+
+      ### Extract the Oracle Enterprise Manager. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$Extractor" '-silent' '-responseFile' "$ResponseFileName" "-J-Djava.io.tmpdir=${StagingDirectory}"
+        processCommandCode $? "an error occurred when running the ${ExtractorDescription}" "$Extractor"
+        createMarker $? "$User" "$Group" "$MarkerProvisioned"
+        Retcode=$?
+      fi
+
+      ### Delete the response file. ###
+
+      if [[ $VALUE_TRUE -eq $bResponseCreated ]] ; then
+        deleteFile "$DESCRIPTION_MANAGER_RESPONSE_FILE" "$ResponseFileName" "$User"
+      fi
+    fi
+  fi
+
+  ######################################
+  # Perform the post-extraction steps. #
+  ######################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "Post-extraction steps"
+  fi
+
+  ### Run the Oracle Enterprise Manager root installer program using the root user. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerRootConfigured"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${RootInstallerDescription} has already been run" "$RootInstaller"
+      Retcode=$?
+    else
+      echoCommandMessage "the ${RootInstallerDescription} has not already been run" "$RootInstaller"
+      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$RootInstaller"
+      processCommandCode $? "the ${RootInstallerDescription} does not exist or is inaccessible" "$RootInstaller"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' '-E' "$RootInstaller"
+        processCommandCode $? "an error occurred when running the ${RootInstallerDescription}" "$RootInstaller"
+        createMarker $? "$User" "$Group" "$MarkerRootConfigured"
+        Retcode=$?
+      fi
+    fi
+  fi
+
+
+  ### Correct missing Oracle instant client library. ###
+
+  createFileLink $Retcode "$User" "$Group" 'Oracle Instant Client library' "$InstantClientLibrary" "${HomeDirectory}/lib/libclntshcore.so.12.1"
+  createFileLink $?       "$User" "$Group" 'Oracle Instant Client library' "$InstantClientLibrary" "${HomeDirectory}/lib/libclntshcore.so"
+  createFileLink $?       "$User" "$Group" 'Oracle Instant Client library' "$InstantClientLibrary" "${HomeDirectory}/instantclient/libclntshcore.so.12.1"
+  Retcode=$?
+
+  #########################################
+  # Update the product patcher utilities. #
+  #########################################
+
+  ### Update the OPatch utility. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$OPatchFileName" ]] ; then
+    local -r OPatchHomeDirectory="${HomeDirectory}/OPatch"
+    echoSection "update the ${DESCRIPTION_MANAGER_OPATCH}" "$OPatchFileName" "$OPatchHomeDirectory"
+    determinePatchNumber 'PatchNumber' "$OPatchFileName" "$OPatchFileNameDescription"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchNumber" ]] ; then
+      updatePatcher \
+        "$User" \
+        "$Group" \
+        "$DESCRIPTION_MANAGER_OPATCH" \
+        "$DESCRIPTION_MANAGER_OPATCH_FILE" \
+        "$OPatchFileName" \
+        "$DESCRIPTION_MANAGER_OPATCH_HOME" \
+        "$OPatchHomeDirectory" \
+        "${HomeDirectory}/${INSTALLATION_STEP_PATCHED}_${PatchNumber}"
+      Retcode=$?
+    fi
+  fi
+
+  ### Update the OMSPatcher utility. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$OMSPatcherFileName" ]] ; then
+    local -r OMSPatcherHomeDirectory="${HomeDirectory}/OMSPatcher"
+    echoSection "update the ${DESCRIPTION_MANAGER_OMSPATCHER}" "$OMSPatcherFileName" "$OMSPatcherHomeDirectory"
+    determinePatchNumber 'PatchNumber' "$OMSPatcherFileName" "$OMSPatcherFileNameDescription"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchNumber" ]] ; then
+      updatePatcher \
+        "$User" \
+        "$Group" \
+        "$DESCRIPTION_MANAGER_OMSPATCHER" \
+        "$DESCRIPTION_MANAGER_OMSPATCHER_FILE" \
+        "$OMSPatcherFileName" \
+        "$DESCRIPTION_MANAGER_OMSPATCHER_HOME" \
+        "$OMSPatcherHomeDirectory" \
+        "${HomeDirectory}/${INSTALLATION_STEP_PATCHED}_${PatchNumber}"
+      Retcode=$?
+    fi
+  fi
+
+  return $Retcode
+}
+
+################################ Main program functions ################################
+
+################################################################################
+## @fn displayOptions
+##
+## @brief Display the program options.
+##
+## @param[in] Sources The name of the variable that contains the sources of the
+##                    program option values.
+## @param[in] Values  The name of the vatiable that contains the program option
+##                    values.
+##
+## @return RETCODE_SUCCESS
+################################################################################
+displayOptions() {
+  local -n _Sources="$1"
+  local -n _Values="$2"
+  local Option
+  echoTitle 'Program options'
+  for Option in "${OPTIONS[@]}" ; do
+    echoOption "$Option" "${_Values[${Option}]}" "${_Sources[${Option}]}" 'OPTION'
+  done
+  return $RETCODE_SUCCESS
 }
 
 ###############################################################################
@@ -2457,8 +3197,8 @@ EOF
 ################################################################################
 installManager() {
   local Message=''
-  local StageDirectory=''
-  local StageDirectoryDescription=''
+  local StagingPatchesDirectory=''
+  local StagingPatchesDirectoryDescription=''
   local InventoryDirectory=''
   local User=''
   local Group=''
@@ -2468,19 +3208,15 @@ installManager() {
   local DatabasePort=''
   local DatabasePassword=''
   local Version=''
-  local PackagesFileNames=''
-  local PackagesFileNamesDescription=''
-  local OPatchFileName=''
-  local OMSPatcherFileName=''
   local UpgradePatchFileName=''
   local UpgradePatchFileNameDescription=''
   local PatchesFileNames=''
   local PatchesFileNamesDescription=''
   local ResponseFileName=''
   local ResponseFilePermissions=''
-  local ResponseFilePermissionsDescription=''
   local BaseDirectory=''
   local HomeDirectory=''
+  local HomeDirectoryDescription=''
   local InstanceDirectory=''
   local ManagerPort=''
   local ManagerPortDescription=''
@@ -2496,7 +3232,7 @@ installManager() {
   local WeblogicPassword=''
   local SystemdService=''
   echoTitle "Installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING"              'Message' 'StageDirectory' 'StageDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING_PATCHES"      'Message' 'StagingPatchesDirectory' 'StagingPatchesDirectoryDescription'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"            'Message' 'InventoryDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                 'Message' 'User'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                'Message' 'Group'
@@ -2506,15 +3242,12 @@ installManager() {
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PORT"                     'Message' 'DatabasePort'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"                 'Message' 'DatabasePassword'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                   'Message' 'Version'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"       'Message' 'PackagesFileNames' 'PackagesFileNamesDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_OPATCH_FILE_NAME"          'Message' 'OPatchFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_OMSPATCHER_FILE_NAME"      'Message' 'OMSPatcherFileName'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME"   'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PATCHES_FILE_NAMES"        'Message' 'PatchesFileNames' 'PatchesFileNamesDescription'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_NAME"        'Message' 'ResponseFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS" 'Message' 'ResponseFilePermissions' 'ResponseFilePermissionsDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS" 'Message' 'ResponseFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_BASE"                      'Message' 'BaseDirectory'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"                      'Message' 'HomeDirectory'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"                      'Message' 'HomeDirectory' 'HomeDirectoryDescription'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE"                  'Message' 'InstanceDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PORT"                      'Message' 'ManagerPort' 'ManagerPortDescription'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PASSWORD"                  'Message' 'ManagerPassword'
@@ -2528,136 +3261,94 @@ installManager() {
   retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PASSWORD"                 'Message' 'WeblogicPassword'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"                   'Message' 'SystemdService'
   local -i Retcode=$?
-  local -r Repository="${StageDirectory}/manager-${Version}"
-  local -r RepositoryDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} installation repository directory"
-  local -r Extractor="${Repository}/em13500_linux64.bin"
-  local -r ExtractorDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} extraction program"
-  local -r RootInstaller="${HomeDirectory}/allroot.sh"
-  local -r RootInstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} root installer program"
-  local -r MarkerRepositoryExtracted="${Repository}/INSTALLATION_STEP_REPOSITORY_EXTRACTED"
-  local -r MarkerManagerExtracted="${HomeDirectory}/INSTALLATION_STEP_MANAGER_EXTRACTED"
-  local -r MarkerManagerInstalled="${HomeDirectory}/INSTALLATION_STEP_MANAGER_INSTALLED"
-  local -r MarkerRootConfigured="${HomeDirectory}/INSTALLATION_STEP_ROOT_CONFIGURED"
-  local -r MarkerFirewalldConfigured="${HomeDirectory}/INSTALLATION_STEP_FIREWALLD_CONFIGURED"
-  local -r MarkerOPatchUpdated="${HomeDirectory}/INSTALLATION_STEP_OPATCH_UPDATED"
-  local -r MarkerOMSPatcherUpdated="${HomeDirectory}/INSTALLATION_STEP_OMSPATCHER_UPDATED"
-  local -r MarkerPatchApplied="${HomeDirectory}/PATCH_APPLIED"
-  local -i bRepositoryCreated=$VALUE_FALSE
+  local -r Installer="${HomeDirectory}/sysman/install/ConfigureGC.sh"
+  local -r InstallerDescription="configuration program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+  local -r MarkerProvisioned="${HomeDirectory}/${INSTALLATION_STEP_PROVISIONED}"
+  local -r MarkerInstalled="${HomeDirectory}/${INSTALLATION_STEP_INSTALLED}"
+  local -r MarkerFirewalldConfigured="${HomeDirectory}/${INSTALLATION_STEP_CONFIGURED}_FIREWALLD"
+  local -r MarkerPatched="${HomeDirectory}/${INSTALLATION_STEP_PATCHED}"
   local -i bResponseCreated=$VALUE_FALSE
   local -a FileNames
   local FileName=''
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
     echo "$Message"
-    return $Retcode
+  else
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerProvisioned"
+    processCommandCode $? "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software is not provisioned" "$HomeDirectory"
+    Retcode=$?
   fi
 
-  ########################################
-  # Extraction of the package zip files. #
-  ########################################
+  ###############################
+  # Application of the patches. #
+  ###############################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Extraction of the ${DESCRIPTION_MANAGER_FILES}"
+    echoSection "Application of the patches"
   fi
 
+  ### Export the ORACLE_HOME environment variable. ###
+
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerManagerExtracted"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} is already extracted"
-    else
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} has not been extracted"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerRepositoryExtracted"
-      if [[ 0 -eq $? ]] ; then
-        echoCommandMessage "the ${ExtractorDescription} is already extracted"
-      else
-        echoCommandMessage "the ${ExtractorDescription} has not been extracted"
+    echoCommand 'export' "ORACLE_HOME=${HomeDirectory}"
+    export ORACLE_HOME="$HomeDirectory"
+    processCommandCode $? 'failed to export the environment variable ORACLE_HOME' "$HomeDirectory"
+    Retcode=$?
+  fi
 
-        ### Validate that the staging directory is accessible. ###
+  ### Patch the Oracle Enterprise Manager. ###
 
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-d' "$StageDirectory" '-a' '-w' "$StageDirectory"
-        processCommandCode $? "the ${StageDirectoryDescription} does not exist or is inaccessible" "$StageDirectory"
-
-        ### (Re-)create the manager repository directory. ###
-
-        createDirectory $? "$User" "$Group" '755' "$RepositoryDescription" "$Repository" '' '' $VALUE_TRUE
-        Retcode=$?
-        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          bRepositoryCreated=$VALUE_TRUE
-        fi
-
-        ### Read the names of the the manager package zip files. ###
-
-        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          echoCommand "IFS=',' read -ra <<< ${PackagesFileNames}"
-          IFS=',' read -ra FileNames <<< "$PackagesFileNames"
-          processCommandCode $? "failed to read ${PackagesFileNamesDescription}" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"
-          Retcode=$?
-        fi
-
-        ### Validate that the manager package zip files are accessible. ###
-
-        for FileName in ${FileNames[@]} ; do
-          if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-            executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$FileName" '-a' '-r' "$FileName"
-            processCommandCode $? "the ${DESCRIPTION_MANAGER_FILE} does not exist or is inaccessible" "$FileName"
-            Retcode=$?
-          fi
-        done
-
-        ### Unzip the manager package zip files to the manager repository directory. ###
-
-        for FileName in ${FileNames[@]} ; do
-          extractFile $Retcode "$User" "$Group" "$DESCRIPTION_MANAGER_FILE" "$FileName" "$RepositoryDescription" "$Repository"
-          Retcode=$?
-        done
-
-        ### Change the file ownership of the manager repository directory. ###
-
-        setDirectoryAttributes $Retcode "$User" "$Group" "$RepositoryDescription" "$Repository"
-
-        ### Create indicator that the Oracle Enterprise Manager package zip files have been unzipped. ###
-
-        createMarker $? "$User" "$Group" "$MarkerRepositoryExtracted"
-        Retcode=$?
-      fi
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchesFileNames" ]] ; then
+    FileNames=()
+    if [[ 0 -eq $Retcode ]] ; then
+      echoCommand "IFS=',' read -ra <<< ${PatchesFileNames}"
+      IFS=',' read -ra FileNames <<< "$PatchesFileNames"
+      processCommandCode $? "failed to read ${PatchesFileNamesDescription}" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"
+      Retcode=$?
     fi
-  fi
-
-  #####################################################################################
-  # Generation of the Oracle Enterprise Manager automated installation response file. #
-  #####################################################################################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Generation of the ${DESCRIPTION_MANAGER_RESPONSE_FILE}"
-  fi
-
-  ### Generate the response file. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerManagerInstalled"
-    if [[ 0 -eq $? ]] && false ; then
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} is already installed and configured"
-    else
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} has not been installed or configured"
-      echoInfo "a ${DESCRIPTION_MANAGER_RESPONSE_FILE} will be generated" "$ResponseFileName"
-      executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-r' "$ResponseFileName"
-      if [[ 0 -eq $? ]] ; then
-        echoCommandMessage "The ${DESCRIPTION_MANAGER_RESPONSE_FILE} already exists and will be overwritten" "$ResponseFileName"
-      else
-        echoCommandMessage "The ${DESCRIPTION_MANAGER_RESPONSE_FILE} does not exist" "$ResponseFileName"
+    for FileName in ${FileNames[@]} ; do
+      applyPatch "$User" "$Group" "$Permissions" "$DESCRIPTION_MANAGER_PATCH" "$OPTION_MANAGER_PACKAGES_FILE_NAME" "$FileName" "$FileNameDescription" "$StagingPatchesDirectoryDescription" "$StagingPatchesDirectory" "$HomeDirectory" "$MarkerPatched"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
+        break
       fi
-      echoCommand 'sudo' '-u' "$User" '-g' "$Group" "cat > '${ResponseFileName}' <<EOF ... EOF"
-      echo "cat > '${ResponseFileName}' <<EOF
+    done
+  fi
+
+  ### Upgrade the Oracle Enterprise Manager. ###
+
+  if [[ -n "$UpgradePatchFileName" ]] ; then
+    applyPatch "$User" "$Group" "$Permissions" "$DESCRIPTION_MANAGER_PATCH" "$DESCRIPTION_MANAGER_UPGRADE_PATCH" "$UpgradePatchFileName" "$UpgradePatchFileNameDescription" "$StagingPatchesDirectoryDescription" "$StagingPatchesDirectory" "$HomeDirectory" "$MarkerPatched"
+    Retcode=$?
+  fi
+
+  ##################################################
+  # Installation of the Oracle Enterprise Manager. #
+  ##################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalled"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} is already installed" "$HomeDirectory"
+    else
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} has not been installed"
+
+      ### Generate the response file. ###
+
+      echoInfo "a ${DESCRIPTION_MANAGER_RESPONSE_FILE} will be generated" "$ResponseFileName"
+      local FileContent=''
+      read -d '' FileContent <<EOF
 RESPONSEFILE_VERSION=2.2.1.0.0
 UNIX_GROUP_NAME=${Group}
+INVENTORY_LOCATION=${InventoryDirectory}
 # Installation
-INSTALL_UPDATES_SELECTION=skip
+CONFIGURATION_TYPE=ADVANCED
 b_upgrade=false
+INSTALL_UPDATES_SELECTION=skip
 EM_INSTALL_TYPE=NOSEED
-CONFIGURATION_TYPE=LATER
 EMPREREQ_AUTO_CORRECTION=true
 CONFIGURE_ORACLE_SOFTWARE_LIBRARY=false
-INVENTORY_LOCATION=${InventoryDirectory}
 # Weblogic
 ORACLE_MIDDLEWARE_HOME_LOCATION=${HomeDirectory}
 ORACLE_HOSTNAME=${HostName}
@@ -2689,174 +3380,59 @@ TRUSTSTORE_PASSWORD=${ManagerTruststorePassword}
 TRUSTSTORE_LOCATION=${ManagerTruststoreFileName}
 KEYSTORE_PASSWORD=${ManagerKeystorePassword}
 KEYSTORE_LOCATION=${ManagerKeystoreFileName}
-EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
-      processCommandCode $? "The ${DESCRIPTION_MANAGER_RESPONSE_FILE} was not created" "$ResponseFileName"
+EOF
+      local -r FileContent
+      createFile $Retcode "$User" "$Group" "$ResponseFilePermissions" "$DESCRIPTION_MANAGER_RESPONSE_FILE" "$ResponseFileName" 'FileContent' $VALUE_TRUE 'bResponseCreated'
       Retcode=$?
+
+      ### Export the ORACLE_HOME environment variable. ###
+
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        bResponseCreated=$VALUE_TRUE
-      fi
-      # Restrict the file permissions of the response file.
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' 'chmod' ${ResponseFilePermissions} "$ResponseFileName"
-        processCommandCode $? "Failed to restrict the file permissions to ${ResponseFilePermissionsDescription} on the ${DESCRIPTION_MANAGER_RESPONSE_FILE}" "$ResponseFileName"
-        Retcode=$?
-      fi
-      # Validate that the response file is accessible by the installation user.
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$ResponseFileName"
-        processCommandCode $? "the ${DESCRIPTION_MANAGER_RESPONSE_FILE} is inaccessible" "$ResponseFileName"
-        Retcode=$?
-      fi
-    fi
-  fi
-
-  ##################i#########################################################
-  # Extraction, patching, and installation of the Oracle Enterprise Manager. #
-  ############################################################################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-  fi
-
-  ### Change the current working directory to the Oracle Enterprise Manager software repository. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if [[ ! -d "$Repository" ]] || [[ ! -x "$Repository" ]] ; then
-      echoError $RETCODE_OPERATION_ERROR "the ${RepositoryDescription} does not exist or is inaccessible" "$Repository"
-    else
-      echoCommand 'cd' "$Repository"
-      cd "$Repository"
-      processCommandCode $? "failed to change the current working directory to the ${RepositoryDescription}" "$Repository"
-    fi
-    Retcode=$?
-  fi
-
-  ### Export the ORACLE_HOME environment variable. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoCommand 'export' "ORACLE_HOME=${HomeDirectory}"
-    export ORACLE_HOME="$HomeDirectory"
-    processCommandCode $? 'failed to export the environment variable ORACLE_HOME' "$HomeDirectory"
-    Retcode=$?
-  fi
-
-  ### Export the OMS_INSTANCE_HOME environment variable. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoCommand 'export' "OMS_INSTANCE_HOME=${InstanceDirectory}"
-    export OMS_INSTANCE_HOME="$InstanceDirectory"
-    processCommandCode $? 'failed to export the environment variable OMS_INSTANCE_HOME' "$InstanceDirectory"
-    Retcode=$?
-  fi
-
-  ### Extract the Oracle Enterprise Manager. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerManagerExtracted"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} is already extracted" "$HomeDirectory"
-    else
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} has not been extracted" "$HomeDirectory"
-      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$Extractor" '-silent' '-responseFile' "$ResponseFileName" "-J-Djava.io.tmpdir=${StageDirectory}"
-      processCommandCode $? "an error occurred when running the ${ExtractorDescription}" "$Extractor"
-      createMarker $? "$User" "$Group" "$MarkerManagerExtracted"
-    fi
-    Retcode=$?
-  fi
-
-  ### Update the patchers. ###
-
-  updatePatcher \
-    $Retcode \
-    "$User" \
-    "$Group" \
-    "$DESCRIPTION_MANAGER_OPATCH" \
-    "$DESCRIPTION_MANAGER_OPATCH_FILE" \
-    "$OPatchFileName" \
-    "$DESCRIPTION_MANAGER_OPATCH_HOME" \
-    "${HomeDirectory}/OPatch" \
-    "$MarkerOPatchUpdated"
-  Retcode=$?
-
-  updatePatcher \
-    $Retcode \
-    "$User" \
-    "$Group" \
-    "$DESCRIPTION_MANAGER_OMSPATCHER" \
-    "$DESCRIPTION_MANAGER_OMSPATCHER_FILE" \
-    "$OMSPatcherFileName" \
-    "$DESCRIPTION_MANAGER_OMSPATCHER_HOME" \
-    "${HomeDirectory}/OMSPatcher" \
-    "$MarkerOMSPatcherUpdated"
-  Retcode=$?
-
-  ### Extract and install the patches. ###
-
-  local PatchHome=''
-  local PatchNumber=''
-  local PatchMarker=''
-
-  if [[ -n "$PatchesFileNames" ]] ; then
-    FileNames=()
-    if [[ 0 -eq $Retcode ]] ; then
-      echoCommand "IFS=',' read -ra <<< ${PatchesFileNames}"
-      IFS=',' read -ra FileNames <<< "$PatchesFileNames"
-      processCommandCode $? "failed to read ${PatchesFileNamesDescription}" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"
-      Retcode=$?
-    fi
-    for FileName in ${FileNames[@]} ; do
-      extractPatch \
-        'PatchHome' \
-        'PatchNumber' \
-        'PatchMarker' \
-        "$User" \
-        "$Group" \
-        '755' \
-        "$DESCRIPTION_MANAGER_PATCH" \
-        "$DESCRIPTION_MANAGER_PATCH_FILE" \
-        "$FileName" \
-        "$PatchesFileNamesDescription" \
-        "${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} patch staging directory" \
-        "${StageDirectory}/${PRODUCT_MANAGER}-patches" \
-        "$MarkerPatchApplied"
-      Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchHome" ]] ; then
+        echoCommand 'export' "ORACLE_HOME=${HomeDirectory}"
         export ORACLE_HOME="$HomeDirectory"
-        cd "$PatchHome"
-        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${ORACLE_HOME}/OPatch/opatch" 'apply' '-silent'
-        processCommandCode $? "failed to apply ${DESCRIPTION_MANAGER_PATCH}"  "$PatchNumber"
-        createMarker $? "$User" "$Group" "$PatchMarker"
+        processCommandCode $? 'failed to export the environment variable ORACLE_HOME' "$HomeDirectory"
         Retcode=$?
       fi
-      if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
-        break
+
+      ### Export the OMS_INSTANCE_HOME environment variable. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        echoCommand 'export' "OMS_INSTANCE_HOME=${InstanceDirectory}"
+        export OMS_INSTANCE_HOME="$InstanceDirectory"
+        processCommandCode $? 'failed to export the environment variable OMS_INSTANCE_HOME' "$InstanceDirectory"
+        Retcode=$?
       fi
-    done
-  fi
 
-  ### Upgrade the Oracle Enteprise Manager. ###
+      ### Change the current working directory to the Oracle Enterprise Manager home directory. ###
 
-  if [[ -n "$UpgradePatchFileName" ]] ; then
-    extractPatch \
-      'PatchHome' \
-      'PatchNumber' \
-      'PatchMarker' \
-      "$User" \
-      "$Group" \
-      '755' \
-      "$DESCRIPTION_MANAGER_UPGRADE_PATCH" \
-      "$DESCRIPTION_MANAGER_UPGRADE_PATCH_FILE" \
-      "$UpgradePatchFileName" \
-      "$UpgradePatchFileNameDescription" \
-      "${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} patch staging directory" \
-      "${StageDirectory}/${PRODUCT_MANAGER}-patches" \
-      "$MarkerPatchApplied"
-    Retcode=$?
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchHome" ]] ; then
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" "${HomeDirectory}/OMSPatcher/omspatcher" 'apply' "$PatchHome" '-analyze' '-bitonly' '-silent' '-oh' "$HomeDirectory"
-      processCommandCode $? "failed to apply ${DESCRIPTION_MANAGER_UPGRADE_PATCH}"  "$PatchNumber"
-      createMarker $? "$User" "$Group" "$PatchMarker"
-      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        if [[ ! -d "$HomeDirectory" ]] || [[ ! -x "$HomeDirectory" ]] ; then
+          echoError $RETCODE_OPERATION_ERROR "the ${HomeDirectoryDescription} does not exist or is inaccessible" "$HomeDirectory"
+        else
+          echoCommand 'cd' "$HomeDirectory"
+          cd "$HomeDirectory"
+          processCommandCode $? "failed to change the current working directory to the ${HomeDirectoryDescription}" "$HomeDirectory"
+        fi
+        Retcode=$?
+      fi
+
+      ### Export the OMS_INSTANCE_HOME environment variable. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        echoCommand 'export' "OMS_INSTANCE_HOME=${InstanceDirectory}"
+        export OMS_INSTANCE_HOME="$InstanceDirectory"
+        processCommandCode $? 'failed to export the environment variable OMS_INSTANCE_HOME' "$InstanceDirectory"
+        Retcode=$?
+      fi
+
+      ### Install the Oracle Enterprise Manager. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$Installer" '-silent' '-responseFile' "$ResponseFileName"
+        processCommandCode $? "an error occurred while running the ${InstallerDescription}" "$Installer"
+        createMarker $? "$User" "$Group" "$MarkerInstalled"
+        Retcode=$?
+      fi
     fi
   fi
 
@@ -2865,42 +3441,14 @@ EOF" | sudo '-u' "$User" '-g' "$Group" 'sh'
   ########################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Post-installation steps"
+    echoSection "post-installation steps"
   fi
 
   ### Delete the Oracle Enterprise Manager automated installation response file. ###
 
-#  if [[ $VALUE_TRUE -eq $bResponseCreated ]] ; then
-#    executeCommand sudo '-u' "$User" '-g' "$Group" 'test' '-f' "$ResponseFileName"
-#    if [[ 0 -eq $? ]] ; then
-#      echoCommandMessage "the ${DESCRIPTION_MANAGER_RESPONSE_FILE} will be deleted" "$ResponseFileName"
-#      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'rm' "$ResponseFileName"
-#      processCommandCode $? "failed to the delete the ${DESCRIPTION_MANAGER_RESPONSE_FILE}" "$ResponseFileName"
-#    else
-#      echoCommandMessage "the ${DESCRIPTION_MANAGER_RESPONSE_FILE} does not exist" "$ResponseFileName"
-#    fi
-#  fi
-
-  ### Run the Oracle Enterprise Manager root installer program using the root user. ###
-
-#  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerRootConfigured"
-#    if [[ 0 -eq $? ]] ; then
-#      echoCommandMessage "the ${RootInstallerDescription} has already been run" "$RootInstaller"
-#      Retcode=$?
-#    else
-#      echoCommandMessage "the ${RootInstallerDescription} has not already been run" "$RootInstaller"
-#      executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' 'test' '-x' "$RootInstaller"
-#      processCommandCode $? "the ${RootInstallerDescription} does not exist or is inaccessible" "$RootInstaller"
-#      Retcode=$?
-#      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" 'sudo' '-E' "$RootInstaller"
-#        processCommandCode $? "an error occurred when running the ${RootInstallerDescription}" "$RootInstaller"
-#        createMarker $? "$User" "$Group" "$MarkerRootConfigured"
-#        Retcode=$?
-#      fi
-#    fi
-#  fi
+  if [[ $VALUE_TRUE -eq $bResponseCreated ]] ; then
+    deleteFile "$DESCRIPTION_MANAGER_RESPONSE_FILE" "$ResponseFileName" "$User"
+  fi
 
   ### Configure firewalld to allow network access to the Oracle Enterprise Manager. ###
 
@@ -3434,10 +3982,21 @@ EOF
   createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$InstallationBaseDescription" "$InstallationBase"
   Retcode=$?
 
-  ### Create the installation inventory directory. ###
+  ### Create the installation inventory directory and the global pointer file. ###
 
   createDirectory $Retcode "$User" "$Group" "$InstallationPermissions" "$InstallationInventoryDescription" "$InstallationInventory" "$InstallationBaseDescription" "$InstallationBase"
   Retcode=$?
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    local InventoryContent=''
+    read -d '' InventoryContent <<EOF
+# Created by ${PROGRAM} on $(date)
+inventory_loc=${InstallationInventory}
+inst_group=${Group}
+EOF
+    local -r InventoryContent
+    createFile $Retcode "$User" "$Group" "664" "Oracle Central Inventory pointer file" "$ORAINST_FILE_NAME" 'InventoryContent'
+    Retcode=$?
+  fi
 
   ### Create the Oracle Database home directory. ###
 
@@ -3497,7 +4056,7 @@ controlAgent() {
   if [[ -r \"\\\$RESPONSE_FILE\" ]] ; then
     export ORACLE_HOME=\\\$(grep 'ORACLE_HOME' \"\\\$RESPONSE_FILE\" | awk -F \"=\" \"{print \\\\\$2}"\)
     local -r Command=\"\\\${ORACLE_HOME}/bin/emctl\"
-    if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\$Command\" ]] ; then
+    if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -f "${ManagerHome}/${INSTALLATION_STEP_INSTALLED}" ]] && [[ -x \"\\\$Command\" ]] ; then
       export PATH=\"\\\${ORACLE_HOME}/bin:/usr/local/bin:\\\${ORIGINAL_PATH}\"
       export LD_LIBRARY_PATH=\"\\\${ORACLE_HOME}/lib:/lib:/usr/lib\"
       export CLASSPATH=\"\\\${ORACLE_HOME}/jlib\"
@@ -3517,7 +4076,7 @@ controlDatabase() {
   local -r Command=\"\\\${ORACLE_HOME}/bin/\\\${1}\"
   local Log=\"\"
   local -i Retcode=0
-  if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\$Command\" ]] ; then
+  if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -f "\\\${ORACLE_HOME}/${INSTALLATION_STEP_CONFIGURED}" ]] && [[ -x \"\\\$Command\" ]] ; then
     export PATH=\"\\\${ORACLE_HOME}/bin:/usr/local/bin:\\\${ORIGINAL_PATH}\"
     export LD_LIBRARY_PATH=\"\\\${ORACLE_HOME}/lib:/lib:/usr/lib\"
     export CLASSPATH=\"\\\${ORACLE_HOME}/jlib:\\\${ORACLE_HOME}/rdbms/jlib\"
@@ -3536,7 +4095,7 @@ controlManager() {
   local -r Command=\"\\\${ORACLE_HOME}/bin/emctl\"
   local Log=\"\"
   local -i Retcode=0
-  if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -x \"\\\$Command\" ]] ; then
+  if [[ -n \"\\\$ORACLE_HOME\" ]] && [[ -f "\\\${ORACLE_HOME}/${INSTALLATION_STEP_INSTALLED}" ]] && [[ -x \"\\\$Command\" ]] ; then
     export PATH=\"\\\${ORACLE_HOME}/bin:/usr/local/bin:\\\${ORIGINAL_PATH}\"
     export LD_LIBRARY_PATH=\"\\\${ORACLE_HOME}/lib:/lib:/usr/lib\"
     export CLASSPATH=\"\\\${ORACLE_HOME}/jlib:\\\${ORACLE_HOME}/rdbms/jlib\"
@@ -3638,155 +4197,6 @@ EOF
 }
 
 ################################################################################
-## @fn uninstallDatabase
-##
-## @brief Uninstall the Oracle Database.
-##
-## @param[in] Sources The name of the variable that contains the sources of the
-##                    program option values.
-## @param[in] Values  The name of the vatiable that contains the program option
-##                    values.
-##
-## @note This function performs the following steps:
-##
-## @li Generation of a response file for the automated deinstallation of the
-##     Oracle Database.
-## @li Deinstallation of the Oracle Database.
-##
-## @return The return code of the function execution.
-################################################################################
-uninstallDatabase() {
-  local Message=''
-  local User
-  local Group
-  local DatabaseHome
-  local DatabaseHomeDescription
-  echoTitle "Uninstalling the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"  'Message' 'User'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP" 'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME"      'Message' 'DatabaseHome' 'DatabaseHomeDescription'
-  local -i Retcode=$?
-  local -r DatabaseDeinstaller="${DatabaseHome}/deinstall/deinstall"
-  local -r DatabaseDeinstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} de-installer program"
-  local ResponseFileName=''
-  local -r ResponseFileNameDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} de-installation response file"
-
-  if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
-    echo "$Message"
-    return $Retcode
-  fi
-
-  ###########################################################
-  # Preparation for de-installation of the Oracle Database. #
-  ###########################################################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Preparation for de-installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
-  fi
-
-  ### Validate that the Oracle Database is installed in the provided home directory. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'test' '-d' "$DatabaseHome"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DatabaseHomeDescription} exists" "$DatabaseHome"
-      Retcode=$?
-    else
-      echoCommandMessage "the ${DatabaseHomeDescription} does not exit" "$DatabaseHome"
-      return $RETCODE_SUCCESS
-    fi
-  fi
-
-  ### Validate that the Oracle Database de-installer is present and usable by the installation user. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" -g "$Group" 'test' '-x' "$DatabaseDeinstaller"
-    processCommandCode $? "the ${DatabaseDeinstallerDescription} does not exist or is inaccessible" "$DatabaseDeinstaller"
-    Retcode=$?
-  fi
-
-  ### Export the CV_ASSUME_DISTID environment variable to enable de-installation of the Oracle databse. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    local -r CV_ASSUME_DISTID_VALUE='OL7'
-    echoCommand 'export' "CV_ASSUME_DISTID=${CV_ASSUME_DISTID_VALUE}"
-    export CV_ASSUME_DISTID="$CV_ASSUME_DISTID_VALUE"
-    processCommandCode $? "failed to export the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} environment variable CV_ASSUME_DISTID" "$CV_ASSUME_DISTID_VALUE"
-    Retcode=$?
-  fi
-
-  ### Generate the automated uninstallation response file. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    local Line=''
-    local Left=''
-    local Right=''
-    local Error=''
-    echoCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$DatabaseDeinstaller" '-silent' '-checkonly'
-    while IFS= read -r Line ; do
-      if [[ -z "$Error" ]] && [[ -z "$Right" ]] ; then
-        Left=$(echo "$Line" | awk -F ':' '{ print $1 }')
-        if [[ 'ERROR' == "$Left" ]] ; then
-          Right=$(echo "$Line" | awk -F ':' '{ print $2 }')
-          Error=$(echo "$Right" | awk '{$1=$1};1')
-        elif [[ 'Location of response file generated' == "$Left" ]] ; then
-          Right=$(echo "$Line" | awk -F ':' '{ print $2 }')
-          ResponseFileName=$(echo "$Right" | awk -F "$CHARACTER_SINGLE_QUOTE" '{ print $2 }')
-        else
-          Left=''
-        fi
-      fi
-    done < <(sudo -E -u "$User" -g "$Group" "$DatabaseDeinstaller" -silent -checkonly)
-    Retcode=$?
-    if [[ 0 -eq $Retcode ]] && [[ -z "$ResponseFileName" ]] ; then
-      Retcode=1
-    fi
-    if [[ 0 -eq $Retcode ]] ; then
-      echoCommandMessage "$ResponseFileNameDescription" "$ResponseFileName"
-    elif [[ -n "$Error" ]] ; then
-      processCommandCode $Retcode "an error occurred during the execution of the ${DatabaseDeinstallerDescription}" "$DatabaseDeinstaller" "$Error"
-    elif [[ -n "$Right" ]] ; then
-      processCommandCode $Retcode "failed to obtain a ${ResponseFileNameDescription} from the ${DatabaseDeinstallerDescription}" "$DatabaseDeinstaller"
-    else
-      processCommandCode $Retcode "failed to generate a ${ResponseFileNameDescription} with the ${DatabaseDeinstallerDescription}" "$DatabaseDeinstaller"
-    fi
-    Retcode=$?
-  fi
-
-  ### Validate that the automated uninstallation response file is present and accessible to the installation user. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$ResponseFileName"
-    processCommandCode $? "the ${ResponseFileNameDescription} does not exist or is inaccessible" "$ResponseFileName"
-    Retcode=$?
-  fi
-
-  ###########################################
-  # De-installation of the Oracle Database. #
-  ###########################################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "De-installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
-  fi
-
-  ### Uninstall the Oracle Database software. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$DatabaseDeinstaller" '-silent' '-paramfile' "$ResponseFileName"
-    processCommandCode $? "an error occurred when running the ${DatabaseDeinstallerDescription}" "$DatabaseDeinstaller" "$ResponseFileName"
-    Retcode=$?
-  fi
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    deleteFile 'oratab file' "$ORATAB_FILE_NAME"
-    deleteFile 'Oracle installation inventory pointer file' "/etc/oraInst.loc"
-#Run 'rm -r /opt/ORCLfmap' as root on node(s) 'oem13cc-ol9-3' at the end of the session.
-  fi
-
-  return $Retcode
-}
-
-################################################################################
 ## @fn uninstallManager
 ##
 ## @brief Uninstall the Oracle Enterprise Manager.
@@ -3807,100 +4217,129 @@ uninstallDatabase() {
 ################################################################################
 uninstallManager() {
   local Message=''
-  local InstallationStage
+  local StagingDirectory
   local User
   local Group
   local DatabasePassword
-  local ManagerHome
-  local DescriptionManagerHome
+  local BaseDirectory
+  local BaseDirectoryDescription
+  local HomeDirectory
+  local HomeDirectoryDescription
+  local InstanceDirectory
+  local InstanceDirectoryDescription
   local ManagerPassword
+  local AgentBaseDirectory
+  local AgentBaseDirectoryDescription
   local WeblogicPassword
-  echoTitle "Uninstalling the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING" 'Message' 'InstallationStage'
+  echoTitle "de-installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING" 'Message' 'StagingDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"    'Message' 'User'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"   'Message' 'Group'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"    'Message' 'DatabasePassword'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"         'Message' 'ManagerHome' 'DescriptionManagerHome'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_BASE"         'Message' 'BaseDirectory' 'BaseDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"         'Message' 'HomeDirectory' 'HomeDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE"     'Message' 'InstanceDirectory' 'InstanceDirectoryDescription'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PASSWORD"     'Message' 'ManagerPassword'
+  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"           'Message' 'AgentBaseDirectory' 'AgentBaseDirectoryDescription'
   retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PASSWORD"    'Message' 'WeblogicPassword'
   local -i Retcode=$?
-  local -r InstallationStage
-  local -r User
-  local -r Group
-  local -r DatabasePassword
-  local -r ManagerHome
-  local -r DescriptionManagerHome
-  local -r ManagerPassword
-  local -r WeblogicPassword
-  local -r ManagerDeinstaller1="${ManagerHome}/sysman/install/EMDeinstall.pl"
-  local -r ManagerDeinstaller2="${InstallationStage}/EMDeinstall.pl"
-  local -r DescriptionDatabaseDeinstaller="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} de-installer program"
+  local -r Deinstaller1="${HomeDirectory}/sysman/install/EMDeinstall.pl"
+  local -r Deinstaller2="${StagingDirectory}/EMDeinstall.pl"
+  local -r DeinstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} de-installer program"
+  local -r MarkerProvisioned="${HomeDirectory}/${INSTALLATION_STEP_PROVISIONED}"
+  local -r MarkerInstalled="${HomeDirectory}/${INSTALLATION_STEP_INSTALLED}"
+  local -i bProceed=$VALUE_TRUE
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
     echo "$Message"
-    return $Retcode
-  fi
-
-  # Validate that the Oracle Enterprise Manager is installed in the provided home directory. #
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' 'test' '-d' "$ManagerHome"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionManagerHome} exists" "$ManagerHome"
-      Retcode=$?
-    else
-      echoCommandMessage "the ${DescriptionManagerHome} does not exist" "$ManagerHome"
-      return $RETCODE_SUCCESS
-    fi
-  fi
-
-  # Validate that the Oracle Enterprise Manager de-installer program is present. #
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$ManagerDeinstaller1"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DescriptionDatabaseDeinstaller} exists" "$ManagerDeinstaller1"
-      Retcode=$?
-    else
-      echoCommandMessage "the ${DescriptionDatabaseDeinstaller} does not exist or is inaccessible" "$ManagerDeinstaller1"
-      return $RETCODE_SUCCESS
-    fi
-  fi
-
-  # Copy the Oracle Enterprise Manager de-installer program to the staging location. #
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "${User}" '-g' "$Group" 'cp' "$ManagerDeinstaller1" "$ManagerDeinstaller2"
-    processCommandCode $? "the ${DescriptionDatabaseDeinstaller} '${ManagerDeinstaller1}' was not copied to '${ManagerDeinstaller2}'"
-    Retcode=$?
-  fi
-
-  # Uninstall the Oracle Enterprise Manager. #
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoCommand 'printf' "y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n" '|' 'sudo' 'su' '-' "$User" '-s' '/usr/bin/bash' '-c' "${ManagerHome}/perl/bin/perl" "$ManagerDeinstaller2" '-mwHome' "$ManagerHome" '-stageLoc' "$InstallationStage"
-    printf "y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n" | sudo 'su' '-' "${User}" '-s' '/usr/bin/bash' '-c' "${ManagerHome}/perl/bin/perl ${ManagerDeinstaller2} -mwHome ${ManagerHome} -stageLoc ${InstallationStage}"
-    processCommandCode $? "an error occurred when running the ${DescriptionDatabaseDeinstaller}" "$ManagerDeinstaller2"
-    Retcode=$?
-  fi
-
-  # Delete the staged Oracle Enterprise Manager de-installer program. #
-
-  executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$ManagerDeinstaller2"
-  if [[ 0 -eq $? ]] ; then
-    echoCommandMessage "the staged ${DescriptionDatabaseDeinstaller} exists" "$ManagerDeinstaller2"
   else
-    echoCommandMessage "the staged ${DescriptionDatabaseDeinstaller} does not exist" "$ManagerDeinstaller2"
-  fi
-  local -r -i Retcode2=$?
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode2 ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'rm' '-f' "$ManagerDeinstaller2"
-    processCommandCode $? "failed to delete the temporary ${DescriptionDatabaseDeinstaller}" "$ManagerDeinstaller2"
-    local -r -i Retcode3=$?
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerProvisioned"
+    processCommandCode $? "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software is not provisioned" "$HomeDirectory"
+    Retcode=$?
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      Retcode=$Retcode3
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalled"
+      if [[ 0 -ne $? ]] ; then
+        processCommandCode $? "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software has not been installed" "$HomeDirectory"
+        echoInfo "deleting the ${BaseDirectoryDescription} instead" "$BaseDirectory"
+        deleteDirectory "$AgentBaseDirectoryDescription" "$AgentBaseDirectory" "$User"
+        deleteDirectory "$InstanceDirectoryDescription" "$InstanceDirectory" "$User"
+        deleteDirectory "$BaseDirectoryDescription" "$BaseDirectory" "$User"
+        bProceed=$VALUE_FALSE
+      fi
     fi
+  fi
+
+  #####################################################################
+  # Preparation for de-installation of the Oracle Enterprise Manager. #
+  #####################################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    echoSection "Preparation for de-installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+  fi
+
+  ### Validate that the Oracle Enterprise Manager is installed in the provided home directory. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    executeCommand 'sudo' 'test' '-d' "$HomeDirectory"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${HomeDirectoryDescription} exists" "$HomeDirectory"
+      Retcode=$?
+    else
+      echoCommandMessage "the ${HomeDirectoryDescription} does not exist" "$HomeDirectory"
+      return $RETCODE_SUCCESS
+    fi
+  fi
+
+  ### Validate that the Oracle Enterprise Manager de-installer program is present. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$Deinstaller1"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DeinstallerDescription} exists" "$Deinstaller1"
+      Retcode=$?
+    else
+      echoCommandMessage "the ${DeinstallerDescription} does not exist or is inaccessible" "$Deinstaller1"
+      return $RETCODE_SUCCESS
+    fi
+  fi
+
+  ### Copy the Oracle Enterprise Manager de-installer program to the staging location. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    executeCommand 'sudo' '-u' "${User}" '-g' "$Group" 'cp' "$Deinstaller1" "$Deinstaller2"
+    processCommandCode $? "the ${DeinstallerDescription} '${Deinstaller1}' was not copied to '${Deinstaller2}'"
+    Retcode=$?
+  fi
+
+  #####################################################
+  # De-installation of the Oracle Enterprise Manager. #
+  #####################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "De-installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+  fi
+
+  ### De-install the Oracle Enterprise Manager. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    echoCommand 'printf' "y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n" '|' 'sudo' 'su' '-' "$User" '-s' '/usr/bin/bash' '-c' "${HomeDirectory}/perl/bin/perl" "$Deinstaller2" '-mwHome' "$HomeDirectory" '-stageLoc' "$StagingDirectory"
+    printf "y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n" | sudo 'su' '-' "${User}" '-s' '/usr/bin/bash' '-c' "${HomeDirectory}/perl/bin/perl ${Deinstaller2} -mwHome ${HomeDirectory} -stageLoc ${StagingDirectory}"
+    processCommandCode $? "an error occurred when running the ${DeinstallerDescription}" "$Deinstaller2"
+    Retcode=$?
+  fi
+
+  ### Delete the staged Oracle Enterprise Manager de-installer program. ###
+
+  deleteFile "$DeinstallerDescription" "$Deinstaller2" "$User"
+  local -r -i Retcode2=$?
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    Retcode=$Retcode2
+  fi
+
+  ### Delete any remaining files. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    deleteFile 'Oracle Grid Control homes file' "/etc/oragchomelist"
   fi
 
   return $Retcode
@@ -4034,7 +4473,7 @@ if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         fi
         if [[ "$PRODUCT_ALL" == "$COMMAND_TARGET" ]] || [[ "$PRODUCT_MANAGER" == "$COMMAND_TARGET" ]] ; then
           if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-#            provisionManager 'OptionSources' 'OptionValues'
+            provisionManager 'OptionSources' 'OptionValues'
             Retcode=$?
           fi
         fi
@@ -4085,6 +4524,13 @@ case "$COMMAND" in
       echo 'System preparation successful'
     else
       echo "System preparation failed: ${Retcode}"
+    fi
+    ;;
+  "$COMMAND_PROVISION")
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      echo 'Provisioning successful'
+    else
+      echo "Provisioning failed: ${Retcode}"
     fi
     ;;
   "$COMMAND_INSTALL")
