@@ -138,6 +138,7 @@ declare -r OPTION_MANAGER_KEYSTORE_PASSWORD='keystore-password'
 declare -r OPTION_MANAGER_TRUSTSTORE_FILE_NAME='truststore-file'
 declare -r OPTION_MANAGER_TRUSTSTORE_PASSWORD='truststore-password'
 declare -r OPTION_AGENT_BASE='agent-base'
+declare -r OPTION_AGENT_PORT='agent-port'
 declare -r OPTION_AGENT_PASSWORD='agent-password'
 declare -r OPTION_WEBLOGIC_PORT='weblogic-port'
 declare -r OPTION_WEBLOGIC_PASSWORD='weblogic-password'
@@ -200,6 +201,7 @@ declare -r -a OPTIONS=(
   "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"
   "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"
   "$OPTION_AGENT_BASE"
+  "$OPTION_AGENT_PORT"
   "$OPTION_AGENT_PASSWORD"
   "$OPTION_WEBLOGIC_PORT"
   "$OPTION_WEBLOGIC_PASSWORD"
@@ -296,6 +298,7 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_AGENT_BASE"]=$OPTION_SOURCE_ALL
+  ["$OPTION_AGENT_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_AGENT_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_WEBLOGIC_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_WEBLOGIC_PASSWORD"]=$OPTION_SOURCE_FILE
@@ -352,6 +355,7 @@ declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_MANAGER_PASSWORD"]="$DEFAULT_PASSWORD"
   ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]="$DEFAULT_PASSWORD"
   ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]="$DEFAULT_PASSWORD"
+  ["$OPTION_AGENT_PORT"]='4903'
   ["$OPTION_AGENT_PASSWORD"]="$DEFAULT_PASSWORD"
   ["$OPTION_WEBLOGIC_PORT"]='7102'
   ["$OPTION_WEBLOGIC_PASSWORD"]="$DEFAULT_PASSWORD"
@@ -456,6 +460,7 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]="name of the ${OPTION_MANAGER_TRUSTSTORE_FILE}"
   ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]="password for the ${OPTION_MANAGER_TRUSTSTORE_FILE}"
   ["$OPTION_AGENT_BASE"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} base directory"
+  ["$OPTION_AGENT_PORT"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} upload port"
   ["$OPTION_AGENT_PASSWORD"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} account password"
   ["$OPTION_WEBLOGIC_PORT"]='Weblogic administration port'
   ["$OPTION_WEBLOGIC_PASSWORD"]='Weblogic account password'
@@ -2759,6 +2764,327 @@ uninstallDatabase() {
 
 ################################ Oracle Enterprise Manager functions ################################
 
+###############################################################################
+## @fn installManager
+##
+## @brief Install and launch the Oracle Enterprise Manager.
+##
+## @param[in] Sources The name of the variable that contains the sources of the
+##                    program option values.
+## @param[in] Values  The name of the vatiable that contains the program option
+##                    values.
+##
+## @note This function performs the following steps:
+##
+## @li Generation of a response file for the automated installation of the
+##     Oracle Enterprise Manager.
+## @li Installation of the Oracle Enterprise Manager.
+## @li Deletion of the automated installation response file.
+## @li Execution of the allroot.sh script.
+## @li Configuration of Firewalld to allow external network access to Oracle
+##     Enterprise Manager.
+##
+## @return The return code of the function execution.
+################################################################################
+installManager() {
+  local Message=''
+  local StagingPatchesDirectory=''
+  local StagingPatchesDirectoryDescription=''
+  local InventoryDirectory=''
+  local User=''
+  local Group=''
+  local HostName=''
+  local DatabaseData=''
+  local DatabaseName=''
+  local DatabasePort=''
+  local DatabasePassword=''
+  local Version=''
+  local UpgradePatchFileName=''
+  local UpgradePatchFileNameDescription=''
+  local PatchesFileNames=''
+  local PatchesFileNamesDescription=''
+  local ResponseFileName=''
+  local ResponseFilePermissions=''
+  local BaseDirectory=''
+  local HomeDirectory=''
+  local HomeDirectoryDescription=''
+  local InstanceDirectory=''
+  local ManagerPort=''
+  local ManagerPortDescription=''
+  local ManagerPassword=''
+  local ManagerKeystoreFileName=''
+  local ManagerKeystorePassword=''
+  local ManagerTruststoreFileName=''
+  local ManagerTruststorePassword=''
+  local AgentBase=''
+  local AgentPort=''
+  local AgentPortDescription=''
+  local AgentPassword=''
+  local WeblogicPort=''
+  local WeblogicPortDescription=''
+  local WeblogicPassword=''
+  local SystemdService=''
+  echoTitle "Installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING_PATCHES"      'Message' 'StagingPatchesDirectory' 'StagingPatchesDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"            'Message' 'InventoryDirectory'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                 'Message' 'User'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                'Message' 'Group'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_HOSTNAME"             'Message' 'HostName'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_DATA"                     'Message' 'DatabaseData'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                     'Message' 'DatabaseName'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PORT"                     'Message' 'DatabasePort'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"                 'Message' 'DatabasePassword'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                   'Message' 'Version'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME"   'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PATCHES_FILE_NAMES"        'Message' 'PatchesFileNames' 'PatchesFileNamesDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_NAME"        'Message' 'ResponseFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS" 'Message' 'ResponseFilePermissions'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_BASE"                      'Message' 'BaseDirectory'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"                      'Message' 'HomeDirectory' 'HomeDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE"                  'Message' 'InstanceDirectory'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PORT"                      'Message' 'ManagerPort' 'ManagerPortDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PASSWORD"                  'Message' 'ManagerPassword'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_KEYSTORE_FILE_NAME"        'Message' 'ManagerKeystoreFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_KEYSTORE_PASSWORD"         'Message' 'ManagerKeystorePassword'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"      'Message' 'ManagerTruststoreFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"       'Message' 'ManagerTruststorePassword'
+  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"                        'Message' 'AgentBase'
+  retrieveOption $? "$1" "$2" "$OPTION_AGENT_PORT"                        'Message' 'AgentPort' 'AgentPortDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_AGENT_PASSWORD"                    'Message' 'AgentPassword'
+  retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PORT"                     'Message' 'WeblogicPort' 'WeblogicPortDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PASSWORD"                 'Message' 'WeblogicPassword'
+  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"                   'Message' 'SystemdService'
+  local -i Retcode=$?
+  local -r Installer="${HomeDirectory}/sysman/install/ConfigureGC.sh"
+  local -r InstallerDescription="configuration program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+  local -r MarkerProvisioned="${HomeDirectory}/${INSTALLATION_STEP_PROVISIONED}"
+  local -r MarkerInstalled="${HomeDirectory}/${INSTALLATION_STEP_INSTALLED}"
+  local -r MarkerFirewalldConfigured="${HomeDirectory}/${INSTALLATION_STEP_CONFIGURED}_FIREWALLD"
+  local -r MarkerPatched="${HomeDirectory}/${INSTALLATION_STEP_PATCHED}"
+  local -i bResponseCreated=$VALUE_FALSE
+  local -a FileNames
+  local FileName=''
+
+  if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
+    echo "$Message"
+  else
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerProvisioned"
+    processCommandCode $? "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software is not provisioned" "$HomeDirectory"
+    Retcode=$?
+  fi
+
+  ###############################
+  # Application of the patches. #
+  ###############################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "Application of the patches"
+  fi
+
+  ### Export the ORACLE_HOME environment variable. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoCommand 'export' "ORACLE_HOME=${HomeDirectory}"
+    export ORACLE_HOME="$HomeDirectory"
+    processCommandCode $? 'failed to export the environment variable ORACLE_HOME' "$HomeDirectory"
+    Retcode=$?
+  fi
+
+  ### Patch the Oracle Enterprise Manager. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchesFileNames" ]] ; then
+    FileNames=()
+    if [[ 0 -eq $Retcode ]] ; then
+      echoCommand "IFS=',' read -ra <<< ${PatchesFileNames}"
+      IFS=',' read -ra FileNames <<< "$PatchesFileNames"
+      processCommandCode $? "failed to read ${PatchesFileNamesDescription}" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"
+      Retcode=$?
+    fi
+    for FileName in ${FileNames[@]} ; do
+      applyPatch "$User" "$Group" "$Permissions" "$DESCRIPTION_MANAGER_PATCH" "$OPTION_MANAGER_PACKAGES_FILE_NAME" "$FileName" "$FileNameDescription" "$StagingPatchesDirectoryDescription" "$StagingPatchesDirectory" "$HomeDirectory" "$MarkerPatched"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
+        break
+      fi
+    done
+  fi
+
+  ### Upgrade the Oracle Enterprise Manager. ###
+
+  if [[ -n "$UpgradePatchFileName" ]] ; then
+    applyPatch "$User" "$Group" "$Permissions" "$DESCRIPTION_MANAGER_PATCH" "$DESCRIPTION_MANAGER_UPGRADE_PATCH" "$UpgradePatchFileName" "$UpgradePatchFileNameDescription" "$StagingPatchesDirectoryDescription" "$StagingPatchesDirectory" "$HomeDirectory" "$MarkerPatched"
+    Retcode=$?
+  fi
+
+  ##################################################
+  # Installation of the Oracle Enterprise Manager. #
+  ##################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalled"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} is already installed" "$HomeDirectory"
+    else
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} has not been installed"
+
+      ### Generate the response file. ###
+
+      echoInfo "a ${DESCRIPTION_MANAGER_RESPONSE_FILE} will be generated" "$ResponseFileName"
+      local FileContent=''
+      read -d '' FileContent <<EOF
+RESPONSEFILE_VERSION=2.2.1.0.0
+UNIX_GROUP_NAME=${Group}
+INVENTORY_LOCATION=${InventoryDirectory}
+# Installation
+CONFIGURATION_TYPE=ADVANCED
+b_upgrade=false
+INSTALL_UPDATES_SELECTION=skip
+EM_INSTALL_TYPE=NOSEED
+EMPREREQ_AUTO_CORRECTION=true
+CONFIGURE_ORACLE_SOFTWARE_LIBRARY=false
+# Weblogic
+ORACLE_MIDDLEWARE_HOME_LOCATION=${HomeDirectory}
+ORACLE_HOSTNAME=${HostName}
+WLS_ADMIN_SERVER_USERNAME=weblogic
+WLS_ADMIN_SERVER_PASSWORD=${WeblogicPassword}
+WLS_ADMIN_SERVER_CONFIRM_PASSWORD=${WeblogicPassword}
+NODE_MANAGER_PASSWORD=${WeblogicPassword}
+NODE_MANAGER_CONFIRM_PASSWORD=${WeblogicPassword}
+ORACLE_INSTANCE_HOME_LOCATION=${InstanceDirectory}
+# Repository
+DATABASE_HOSTNAME=${HostName}
+LISTENER_PORT=${DatabasePort}
+SERVICENAME_OR_SID=${DatabaseName}
+SYS_PASSWORD=${DatabasePassword}
+DEPLOYMENT_SIZE=SMALL
+SYSMAN_PASSWORD=${ManagerPassword}
+SYSMAN_CONFIRM_PASSWORD=${ManagerPassword}
+MANAGEMENT_TABLESPACE_LOCATION=${DatabaseData}/mgmt.dbf
+CONFIGURATION_DATA_TABLESPACE_LOCATION=${DatabaseData}/mgmt_ecm_depot1.dbf
+JVM_DIAGNOSTICS_TABLESPACE_LOCATION=${DatabaseData}/mgmt_deepdive.dbf
+# Agent
+AGENT_BASE_DIR=${AgentBase}
+AGENT_REGISTRATION_PASSWORD=${AgentPassword}
+AGENT_REGISTRATION_CONFIRM_PASSWORD=${AgentPassword}
+# TLS
+es_oneWaySSL=false
+Is_twoWaySSL=true
+TRUSTSTORE_PASSWORD=${ManagerTruststorePassword}
+TRUSTSTORE_LOCATION=${ManagerTruststoreFileName}
+KEYSTORE_PASSWORD=${ManagerKeystorePassword}
+KEYSTORE_LOCATION=${ManagerKeystoreFileName}
+EOF
+      local -r FileContent
+      createFile $Retcode "$User" "$Group" "$ResponseFilePermissions" "$DESCRIPTION_MANAGER_RESPONSE_FILE" "$ResponseFileName" 'FileContent' $VALUE_TRUE 'bResponseCreated'
+      Retcode=$?
+
+      ### Export the ORACLE_HOME environment variable. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        echoCommand 'export' "ORACLE_HOME=${HomeDirectory}"
+        export ORACLE_HOME="$HomeDirectory"
+        processCommandCode $? 'failed to export the environment variable ORACLE_HOME' "$HomeDirectory"
+        Retcode=$?
+      fi
+
+      ### Export the OMS_INSTANCE_HOME environment variable. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        echoCommand 'export' "OMS_INSTANCE_HOME=${InstanceDirectory}"
+        export OMS_INSTANCE_HOME="$InstanceDirectory"
+        processCommandCode $? 'failed to export the environment variable OMS_INSTANCE_HOME' "$InstanceDirectory"
+        Retcode=$?
+      fi
+
+      ### Change the current working directory to the Oracle Enterprise Manager home directory. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        if [[ ! -d "$HomeDirectory" ]] || [[ ! -x "$HomeDirectory" ]] ; then
+          echoError $RETCODE_OPERATION_ERROR "the ${HomeDirectoryDescription} does not exist or is inaccessible" "$HomeDirectory"
+        else
+          echoCommand 'cd' "$HomeDirectory"
+          cd "$HomeDirectory"
+          processCommandCode $? "failed to change the current working directory to the ${HomeDirectoryDescription}" "$HomeDirectory"
+        fi
+        Retcode=$?
+      fi
+
+      ### Export the OMS_INSTANCE_HOME environment variable. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        echoCommand 'export' "OMS_INSTANCE_HOME=${InstanceDirectory}"
+        export OMS_INSTANCE_HOME="$InstanceDirectory"
+        processCommandCode $? 'failed to export the environment variable OMS_INSTANCE_HOME' "$InstanceDirectory"
+        Retcode=$?
+      fi
+
+      ### Install the Oracle Enterprise Manager. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$Installer" '-silent' '-responseFile' "$ResponseFileName"
+        processCommandCode $? "an error occurred while running the ${InstallerDescription}" "$Installer"
+        createMarker $? "$User" "$Group" "$MarkerInstalled"
+        Retcode=$?
+      fi
+    fi
+  fi
+
+  ########################################
+  # Perform the post-installation steps. #
+  ########################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "post-installation steps"
+  fi
+
+  ### Delete the Oracle Enterprise Manager automated installation response file. ###
+
+  if [[ $VALUE_TRUE -eq $bResponseCreated ]] ; then
+    deleteFile "$DESCRIPTION_MANAGER_RESPONSE_FILE" "$ResponseFileName" "$User"
+  fi
+
+  ### Configure firewalld to allow network access to the Oracle Enterprise Manager. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerFirewalldConfigured"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "Firewalld has already been configured for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+      Retcode=$?
+    else
+      echoCommandMessage "Firewalld has not already been configured for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+      executeCommand 'sudo' 'systemctl' 'status' 'firewalld'
+      if [[ 0 -eq $? ]] ; then
+        echoCommandSuccess
+        executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${WeblogicPort}/tcp"
+        processCommandCode $? "failed to allow public access to the ${WeblogicPortDescription}" "$WeblogicPort"
+        Retcode=$?
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${ManagerPort}/tcp"
+          processCommandCode $? "failed to allow public access to the ${ManagerPortDescription}" "$ManagerPort"
+          Retcode=$?
+        fi
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${AgentPort}/tcp"
+          processCommandCode $? "failed to allow public access to the ${AgentPortDescription}" "$AgentPort"
+          Retcode=$?
+        fi
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' 'firewall-cmd' '--reload'
+          processCommandCode $? 'failed to reload firewalld'
+          createMarker $? "$User" "$Group" "$MarkerFirewalldConfigured"
+          Retcode=$?
+        fi
+      else
+        echoCommandMessage 'Firewalld may not be running'
+        Retcode=$?
+      fi
+    fi
+  fi
+
+  return $Retcode
+}
+
 ################################################################################
 ## @fn provisionManager
 ##
@@ -3148,6 +3474,155 @@ EOF
   return $Retcode
 }
 
+################################################################################
+## @fn uninstallManager
+##
+## @brief Uninstall the Oracle Enterprise Manager.
+##
+## @param[in] Sources The name of the variable that contains the sources of the
+##                    program option values.
+## @param[in] Values  The name of the vatiable that contains the program option
+##                    values.
+##
+## @note This function performs the following steps:
+##
+## @li Copy of the Oracle Enterprise Manager deinstallation program to a
+##     temporary direcrory.
+## @li Deinstallation the Oracle Enterprise Mananger.
+## @li Deletion of the Oracle Enterprise Manager deinstallation program.
+##
+## @return The return code of the function execution.
+################################################################################
+uninstallManager() {
+  local Message=''
+  local StagingDirectory
+  local User
+  local Group
+  local DatabasePassword
+  local BaseDirectory
+  local BaseDirectoryDescription
+  local HomeDirectory
+  local HomeDirectoryDescription
+  local InstanceDirectory
+  local InstanceDirectoryDescription
+  local ManagerPassword
+  local AgentBaseDirectory
+  local AgentBaseDirectoryDescription
+  local WeblogicPassword
+  echoTitle "de-installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING" 'Message' 'StagingDirectory'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"    'Message' 'User'
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"   'Message' 'Group'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"    'Message' 'DatabasePassword'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_BASE"         'Message' 'BaseDirectory' 'BaseDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"         'Message' 'HomeDirectory' 'HomeDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE"     'Message' 'InstanceDirectory' 'InstanceDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PASSWORD"     'Message' 'ManagerPassword'
+  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"           'Message' 'AgentBaseDirectory' 'AgentBaseDirectoryDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PASSWORD"    'Message' 'WeblogicPassword'
+  local -i Retcode=$?
+  local -r Deinstaller1="${HomeDirectory}/sysman/install/EMDeinstall.pl"
+  local -r Deinstaller2="${StagingDirectory}/EMDeinstall.pl"
+  local -r DeinstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} de-installer program"
+  local -r MarkerProvisioned="${HomeDirectory}/${INSTALLATION_STEP_PROVISIONED}"
+  local -r MarkerInstalled="${HomeDirectory}/${INSTALLATION_STEP_INSTALLED}"
+  local -i bProceed=$VALUE_TRUE
+
+  if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
+    echo "$Message"
+  else
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerProvisioned"
+    processCommandCode $? "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software is not provisioned" "$HomeDirectory"
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalled"
+      if [[ 0 -ne $? ]] ; then
+        processCommandCode $? "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software has not been installed" "$HomeDirectory"
+        echoInfo "deleting the ${BaseDirectoryDescription} instead" "$BaseDirectory"
+        deleteDirectory "$AgentBaseDirectoryDescription" "$AgentBaseDirectory" "$User"
+        deleteDirectory "$InstanceDirectoryDescription" "$InstanceDirectory" "$User"
+        deleteDirectory "$BaseDirectoryDescription" "$BaseDirectory" "$User"
+        bProceed=$VALUE_FALSE
+      fi
+    fi
+  fi
+
+  #####################################################################
+  # Preparation for de-installation of the Oracle Enterprise Manager. #
+  #####################################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    echoSection "Preparation for de-installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+  fi
+
+  ### Validate that the Oracle Enterprise Manager is installed in the provided home directory. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    executeCommand 'sudo' 'test' '-d' "$HomeDirectory"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${HomeDirectoryDescription} exists" "$HomeDirectory"
+      Retcode=$?
+    else
+      echoCommandMessage "the ${HomeDirectoryDescription} does not exist" "$HomeDirectory"
+      return $RETCODE_SUCCESS
+    fi
+  fi
+
+  ### Validate that the Oracle Enterprise Manager de-installer program is present. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$Deinstaller1"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DeinstallerDescription} exists" "$Deinstaller1"
+      Retcode=$?
+    else
+      echoCommandMessage "the ${DeinstallerDescription} does not exist or is inaccessible" "$Deinstaller1"
+      return $RETCODE_SUCCESS
+    fi
+  fi
+
+  ### Copy the Oracle Enterprise Manager de-installer program to the staging location. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    executeCommand 'sudo' '-u' "${User}" '-g' "$Group" 'cp' "$Deinstaller1" "$Deinstaller2"
+    processCommandCode $? "the ${DeinstallerDescription} '${Deinstaller1}' was not copied to '${Deinstaller2}'"
+    Retcode=$?
+  fi
+
+  #####################################################
+  # De-installation of the Oracle Enterprise Manager. #
+  #####################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "De-installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+  fi
+
+  ### De-install the Oracle Enterprise Manager. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    echoCommand 'printf' "y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n" '|' 'sudo' 'su' '-' "$User" '-s' '/usr/bin/bash' '-c' "${HomeDirectory}/perl/bin/perl" "$Deinstaller2" '-mwHome' "$HomeDirectory" '-stageLoc' "$StagingDirectory"
+    printf "y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n" | sudo 'su' '-' "${User}" '-s' '/usr/bin/bash' '-c' "${HomeDirectory}/perl/bin/perl ${Deinstaller2} -mwHome ${HomeDirectory} -stageLoc ${StagingDirectory}"
+    processCommandCode $? "an error occurred when running the ${DeinstallerDescription}" "$Deinstaller2"
+    Retcode=$?
+  fi
+
+  ### Delete the staged Oracle Enterprise Manager de-installer program. ###
+
+  deleteFile "$DeinstallerDescription" "$Deinstaller2" "$User"
+  local -r -i Retcode2=$?
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    Retcode=$Retcode2
+  fi
+
+  ### Delete any remaining files. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    deleteFile 'Oracle Grid Control homes file' "/etc/oragchomelist"
+  fi
+
+  return $Retcode
+}
+
 ################################ Main program functions ################################
 
 ################################################################################
@@ -3171,319 +3646,6 @@ displayOptions() {
     echoOption "$Option" "${_Values[${Option}]}" "${_Sources[${Option}]}" 'OPTION'
   done
   return $RETCODE_SUCCESS
-}
-
-###############################################################################
-## @fn installManager
-##
-## @brief Install and launch the Oracle Enterprise Manager.
-##
-## @param[in] Sources The name of the variable that contains the sources of the
-##                    program option values.
-## @param[in] Values  The name of the vatiable that contains the program option
-##                    values.
-##
-## @note This function performs the following steps:
-##
-## @li Generation of a response file for the automated installation of the
-##     Oracle Enterprise Manager.
-## @li Installation of the Oracle Enterprise Manager.
-## @li Deletion of the automated installation response file.
-## @li Execution of the allroot.sh script.
-## @li Configuration of Firewalld to allow external network access to Oracle
-##     Enterprise Manager.
-##
-## @return The return code of the function execution.
-################################################################################
-installManager() {
-  local Message=''
-  local StagingPatchesDirectory=''
-  local StagingPatchesDirectoryDescription=''
-  local InventoryDirectory=''
-  local User=''
-  local Group=''
-  local HostName=''
-  local DatabaseData=''
-  local DatabaseName=''
-  local DatabasePort=''
-  local DatabasePassword=''
-  local Version=''
-  local UpgradePatchFileName=''
-  local UpgradePatchFileNameDescription=''
-  local PatchesFileNames=''
-  local PatchesFileNamesDescription=''
-  local ResponseFileName=''
-  local ResponseFilePermissions=''
-  local BaseDirectory=''
-  local HomeDirectory=''
-  local HomeDirectoryDescription=''
-  local InstanceDirectory=''
-  local ManagerPort=''
-  local ManagerPortDescription=''
-  local ManagerPassword=''
-  local ManagerKeystoreFileName=''
-  local ManagerKeystorePassword=''
-  local ManagerTruststoreFileName=''
-  local ManagerTruststorePassword=''
-  local AgentBase=''
-  local AgentPassword=''
-  local WeblogicPort=''
-  local WeblogicPortDescription=''
-  local WeblogicPassword=''
-  local SystemdService=''
-  echoTitle "Installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING_PATCHES"      'Message' 'StagingPatchesDirectory' 'StagingPatchesDirectoryDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"            'Message' 'InventoryDirectory'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                 'Message' 'User'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_HOSTNAME"             'Message' 'HostName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_DATA"                     'Message' 'DatabaseData'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                     'Message' 'DatabaseName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PORT"                     'Message' 'DatabasePort'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"                 'Message' 'DatabasePassword'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                   'Message' 'Version'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME"   'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PATCHES_FILE_NAMES"        'Message' 'PatchesFileNames' 'PatchesFileNamesDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_NAME"        'Message' 'ResponseFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS" 'Message' 'ResponseFilePermissions'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_BASE"                      'Message' 'BaseDirectory'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"                      'Message' 'HomeDirectory' 'HomeDirectoryDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE"                  'Message' 'InstanceDirectory'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PORT"                      'Message' 'ManagerPort' 'ManagerPortDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PASSWORD"                  'Message' 'ManagerPassword'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_KEYSTORE_FILE_NAME"        'Message' 'ManagerKeystoreFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_KEYSTORE_PASSWORD"         'Message' 'ManagerKeystorePassword'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"      'Message' 'ManagerTruststoreFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"       'Message' 'ManagerTruststorePassword'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"                        'Message' 'AgentBase'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_PASSWORD"                    'Message' 'AgentPassword'
-  retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PORT"                     'Message' 'WeblogicPort' 'WeblogicPortDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PASSWORD"                 'Message' 'WeblogicPassword'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"                   'Message' 'SystemdService'
-  local -i Retcode=$?
-  local -r Installer="${HomeDirectory}/sysman/install/ConfigureGC.sh"
-  local -r InstallerDescription="configuration program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-  local -r MarkerProvisioned="${HomeDirectory}/${INSTALLATION_STEP_PROVISIONED}"
-  local -r MarkerInstalled="${HomeDirectory}/${INSTALLATION_STEP_INSTALLED}"
-  local -r MarkerFirewalldConfigured="${HomeDirectory}/${INSTALLATION_STEP_CONFIGURED}_FIREWALLD"
-  local -r MarkerPatched="${HomeDirectory}/${INSTALLATION_STEP_PATCHED}"
-  local -i bResponseCreated=$VALUE_FALSE
-  local -a FileNames
-  local FileName=''
-
-  if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
-    echo "$Message"
-  else
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerProvisioned"
-    processCommandCode $? "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software is not provisioned" "$HomeDirectory"
-    Retcode=$?
-  fi
-
-  ###############################
-  # Application of the patches. #
-  ###############################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "Application of the patches"
-  fi
-
-  ### Export the ORACLE_HOME environment variable. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoCommand 'export' "ORACLE_HOME=${HomeDirectory}"
-    export ORACLE_HOME="$HomeDirectory"
-    processCommandCode $? 'failed to export the environment variable ORACLE_HOME' "$HomeDirectory"
-    Retcode=$?
-  fi
-
-  ### Patch the Oracle Enterprise Manager. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchesFileNames" ]] ; then
-    FileNames=()
-    if [[ 0 -eq $Retcode ]] ; then
-      echoCommand "IFS=',' read -ra <<< ${PatchesFileNames}"
-      IFS=',' read -ra FileNames <<< "$PatchesFileNames"
-      processCommandCode $? "failed to read ${PatchesFileNamesDescription}" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"
-      Retcode=$?
-    fi
-    for FileName in ${FileNames[@]} ; do
-      applyPatch "$User" "$Group" "$Permissions" "$DESCRIPTION_MANAGER_PATCH" "$OPTION_MANAGER_PACKAGES_FILE_NAME" "$FileName" "$FileNameDescription" "$StagingPatchesDirectoryDescription" "$StagingPatchesDirectory" "$HomeDirectory" "$MarkerPatched"
-      Retcode=$?
-      if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
-        break
-      fi
-    done
-  fi
-
-  ### Upgrade the Oracle Enterprise Manager. ###
-
-  if [[ -n "$UpgradePatchFileName" ]] ; then
-    applyPatch "$User" "$Group" "$Permissions" "$DESCRIPTION_MANAGER_PATCH" "$DESCRIPTION_MANAGER_UPGRADE_PATCH" "$UpgradePatchFileName" "$UpgradePatchFileNameDescription" "$StagingPatchesDirectoryDescription" "$StagingPatchesDirectory" "$HomeDirectory" "$MarkerPatched"
-    Retcode=$?
-  fi
-
-  ##################################################
-  # Installation of the Oracle Enterprise Manager. #
-  ##################################################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalled"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} is already installed" "$HomeDirectory"
-    else
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} has not been installed"
-
-      ### Generate the response file. ###
-
-      echoInfo "a ${DESCRIPTION_MANAGER_RESPONSE_FILE} will be generated" "$ResponseFileName"
-      local FileContent=''
-      read -d '' FileContent <<EOF
-RESPONSEFILE_VERSION=2.2.1.0.0
-UNIX_GROUP_NAME=${Group}
-INVENTORY_LOCATION=${InventoryDirectory}
-# Installation
-CONFIGURATION_TYPE=ADVANCED
-b_upgrade=false
-INSTALL_UPDATES_SELECTION=skip
-EM_INSTALL_TYPE=NOSEED
-EMPREREQ_AUTO_CORRECTION=true
-CONFIGURE_ORACLE_SOFTWARE_LIBRARY=false
-# Weblogic
-ORACLE_MIDDLEWARE_HOME_LOCATION=${HomeDirectory}
-ORACLE_HOSTNAME=${HostName}
-WLS_ADMIN_SERVER_USERNAME=weblogic
-WLS_ADMIN_SERVER_PASSWORD=${WeblogicPassword}
-WLS_ADMIN_SERVER_CONFIRM_PASSWORD=${WeblogicPassword}
-NODE_MANAGER_PASSWORD=${WeblogicPassword}
-NODE_MANAGER_CONFIRM_PASSWORD=${WeblogicPassword}
-ORACLE_INSTANCE_HOME_LOCATION=${InstanceDirectory}
-# Repository
-DATABASE_HOSTNAME=${HostName}
-LISTENER_PORT=${DatabasePort}
-SERVICENAME_OR_SID=${DatabaseName}
-SYS_PASSWORD=${DatabasePassword}
-DEPLOYMENT_SIZE=SMALL
-SYSMAN_PASSWORD=${ManagerPassword}
-SYSMAN_CONFIRM_PASSWORD=${ManagerPassword}
-MANAGEMENT_TABLESPACE_LOCATION=${DatabaseData}/mgmt.dbf
-CONFIGURATION_DATA_TABLESPACE_LOCATION=${DatabaseData}/mgmt_ecm_depot1.dbf
-JVM_DIAGNOSTICS_TABLESPACE_LOCATION=${DatabaseData}/mgmt_deepdive.dbf
-# Agent
-AGENT_BASE_DIR=${AgentBase}
-AGENT_REGISTRATION_PASSWORD=${AgentPassword}
-AGENT_REGISTRATION_CONFIRM_PASSWORD=${AgentPassword}
-# TLS
-es_oneWaySSL=false
-Is_twoWaySSL=true
-TRUSTSTORE_PASSWORD=${ManagerTruststorePassword}
-TRUSTSTORE_LOCATION=${ManagerTruststoreFileName}
-KEYSTORE_PASSWORD=${ManagerKeystorePassword}
-KEYSTORE_LOCATION=${ManagerKeystoreFileName}
-EOF
-      local -r FileContent
-      createFile $Retcode "$User" "$Group" "$ResponseFilePermissions" "$DESCRIPTION_MANAGER_RESPONSE_FILE" "$ResponseFileName" 'FileContent' $VALUE_TRUE 'bResponseCreated'
-      Retcode=$?
-
-      ### Export the ORACLE_HOME environment variable. ###
-
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        echoCommand 'export' "ORACLE_HOME=${HomeDirectory}"
-        export ORACLE_HOME="$HomeDirectory"
-        processCommandCode $? 'failed to export the environment variable ORACLE_HOME' "$HomeDirectory"
-        Retcode=$?
-      fi
-
-      ### Export the OMS_INSTANCE_HOME environment variable. ###
-
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        echoCommand 'export' "OMS_INSTANCE_HOME=${InstanceDirectory}"
-        export OMS_INSTANCE_HOME="$InstanceDirectory"
-        processCommandCode $? 'failed to export the environment variable OMS_INSTANCE_HOME' "$InstanceDirectory"
-        Retcode=$?
-      fi
-
-      ### Change the current working directory to the Oracle Enterprise Manager home directory. ###
-
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        if [[ ! -d "$HomeDirectory" ]] || [[ ! -x "$HomeDirectory" ]] ; then
-          echoError $RETCODE_OPERATION_ERROR "the ${HomeDirectoryDescription} does not exist or is inaccessible" "$HomeDirectory"
-        else
-          echoCommand 'cd' "$HomeDirectory"
-          cd "$HomeDirectory"
-          processCommandCode $? "failed to change the current working directory to the ${HomeDirectoryDescription}" "$HomeDirectory"
-        fi
-        Retcode=$?
-      fi
-
-      ### Export the OMS_INSTANCE_HOME environment variable. ###
-
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        echoCommand 'export' "OMS_INSTANCE_HOME=${InstanceDirectory}"
-        export OMS_INSTANCE_HOME="$InstanceDirectory"
-        processCommandCode $? 'failed to export the environment variable OMS_INSTANCE_HOME' "$InstanceDirectory"
-        Retcode=$?
-      fi
-
-      ### Install the Oracle Enterprise Manager. ###
-
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$Installer" '-silent' '-responseFile' "$ResponseFileName"
-        processCommandCode $? "an error occurred while running the ${InstallerDescription}" "$Installer"
-        createMarker $? "$User" "$Group" "$MarkerInstalled"
-        Retcode=$?
-      fi
-    fi
-  fi
-
-  ########################################
-  # Perform the post-installation steps. #
-  ########################################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "post-installation steps"
-  fi
-
-  ### Delete the Oracle Enterprise Manager automated installation response file. ###
-
-  if [[ $VALUE_TRUE -eq $bResponseCreated ]] ; then
-    deleteFile "$DESCRIPTION_MANAGER_RESPONSE_FILE" "$ResponseFileName" "$User"
-  fi
-
-  ### Configure firewalld to allow network access to the Oracle Enterprise Manager. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerFirewalldConfigured"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "Firewalld has already been configured for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-      Retcode=$?
-    else
-      echoCommandMessage "Firewalld has not already been configured for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-      executeCommand 'sudo' 'systemctl' 'status' 'firewalld'
-      if [[ 0 -eq $? ]] ; then
-        echoCommandSuccess
-        executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${WeblogicPort}/tcp"
-        processCommandCode $? "failed to allow public access to the ${WeblogicPortDescription}" "$WeblogicPort"
-        Retcode=$?
-        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${ManagerPort}/tcp"
-          processCommandCode $? "failed to allow public access to the ${ManagerPortDescription}" "$ManagerPort"
-          Retcode=$?
-        fi
-        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' 'firewall-cmd' '--reload'
-          processCommandCode $? 'failed to reload firewalld'
-          createMarker $? "$User" "$Group" "$MarkerFirewalldConfigured"
-          Retcode=$?
-        fi
-      else
-        echoCommandMessage 'Firewalld may not be running'
-        Retcode=$?
-      fi
-    fi
-  fi
-
-  return $Retcode
 }
 
 ################################################################################
@@ -4191,155 +4353,6 @@ EOF
       processCommandCode $? "failed to enable the ${DESCRIPTION_SYSTEMD_SERVICE}" "$SystemdService"
       Retcode=$?
     fi
-  fi
-
-  return $Retcode
-}
-
-################################################################################
-## @fn uninstallManager
-##
-## @brief Uninstall the Oracle Enterprise Manager.
-##
-## @param[in] Sources The name of the variable that contains the sources of the
-##                    program option values.
-## @param[in] Values  The name of the vatiable that contains the program option
-##                    values.
-##
-## @note This function performs the following steps:
-##
-## @li Copy of the Oracle Enterprise Manager deinstallation program to a
-##     temporary direcrory.
-## @li Deinstallation the Oracle Enterprise Mananger.
-## @li Deletion of the Oracle Enterprise Manager deinstallation program.
-##
-## @return The return code of the function execution.
-################################################################################
-uninstallManager() {
-  local Message=''
-  local StagingDirectory
-  local User
-  local Group
-  local DatabasePassword
-  local BaseDirectory
-  local BaseDirectoryDescription
-  local HomeDirectory
-  local HomeDirectoryDescription
-  local InstanceDirectory
-  local InstanceDirectoryDescription
-  local ManagerPassword
-  local AgentBaseDirectory
-  local AgentBaseDirectoryDescription
-  local WeblogicPassword
-  echoTitle "de-installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING" 'Message' 'StagingDirectory'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"    'Message' 'User'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"   'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"    'Message' 'DatabasePassword'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_BASE"         'Message' 'BaseDirectory' 'BaseDirectoryDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"         'Message' 'HomeDirectory' 'HomeDirectoryDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE"     'Message' 'InstanceDirectory' 'InstanceDirectoryDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PASSWORD"     'Message' 'ManagerPassword'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"           'Message' 'AgentBaseDirectory' 'AgentBaseDirectoryDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PASSWORD"    'Message' 'WeblogicPassword'
-  local -i Retcode=$?
-  local -r Deinstaller1="${HomeDirectory}/sysman/install/EMDeinstall.pl"
-  local -r Deinstaller2="${StagingDirectory}/EMDeinstall.pl"
-  local -r DeinstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} de-installer program"
-  local -r MarkerProvisioned="${HomeDirectory}/${INSTALLATION_STEP_PROVISIONED}"
-  local -r MarkerInstalled="${HomeDirectory}/${INSTALLATION_STEP_INSTALLED}"
-  local -i bProceed=$VALUE_TRUE
-
-  if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
-    echo "$Message"
-  else
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerProvisioned"
-    processCommandCode $? "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software is not provisioned" "$HomeDirectory"
-    Retcode=$?
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalled"
-      if [[ 0 -ne $? ]] ; then
-        processCommandCode $? "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software has not been installed" "$HomeDirectory"
-        echoInfo "deleting the ${BaseDirectoryDescription} instead" "$BaseDirectory"
-        deleteDirectory "$AgentBaseDirectoryDescription" "$AgentBaseDirectory" "$User"
-        deleteDirectory "$InstanceDirectoryDescription" "$InstanceDirectory" "$User"
-        deleteDirectory "$BaseDirectoryDescription" "$BaseDirectory" "$User"
-        bProceed=$VALUE_FALSE
-      fi
-    fi
-  fi
-
-  #####################################################################
-  # Preparation for de-installation of the Oracle Enterprise Manager. #
-  #####################################################################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
-    echoSection "Preparation for de-installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-  fi
-
-  ### Validate that the Oracle Enterprise Manager is installed in the provided home directory. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
-    executeCommand 'sudo' 'test' '-d' "$HomeDirectory"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${HomeDirectoryDescription} exists" "$HomeDirectory"
-      Retcode=$?
-    else
-      echoCommandMessage "the ${HomeDirectoryDescription} does not exist" "$HomeDirectory"
-      return $RETCODE_SUCCESS
-    fi
-  fi
-
-  ### Validate that the Oracle Enterprise Manager de-installer program is present. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-r' "$Deinstaller1"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DeinstallerDescription} exists" "$Deinstaller1"
-      Retcode=$?
-    else
-      echoCommandMessage "the ${DeinstallerDescription} does not exist or is inaccessible" "$Deinstaller1"
-      return $RETCODE_SUCCESS
-    fi
-  fi
-
-  ### Copy the Oracle Enterprise Manager de-installer program to the staging location. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
-    executeCommand 'sudo' '-u' "${User}" '-g' "$Group" 'cp' "$Deinstaller1" "$Deinstaller2"
-    processCommandCode $? "the ${DeinstallerDescription} '${Deinstaller1}' was not copied to '${Deinstaller2}'"
-    Retcode=$?
-  fi
-
-  #####################################################
-  # De-installation of the Oracle Enterprise Manager. #
-  #####################################################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "De-installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-  fi
-
-  ### De-install the Oracle Enterprise Manager. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
-    echoCommand 'printf' "y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n" '|' 'sudo' 'su' '-' "$User" '-s' '/usr/bin/bash' '-c' "${HomeDirectory}/perl/bin/perl" "$Deinstaller2" '-mwHome' "$HomeDirectory" '-stageLoc' "$StagingDirectory"
-    printf "y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n" | sudo 'su' '-' "${User}" '-s' '/usr/bin/bash' '-c' "${HomeDirectory}/perl/bin/perl ${Deinstaller2} -mwHome ${HomeDirectory} -stageLoc ${StagingDirectory}"
-    processCommandCode $? "an error occurred when running the ${DeinstallerDescription}" "$Deinstaller2"
-    Retcode=$?
-  fi
-
-  ### Delete the staged Oracle Enterprise Manager de-installer program. ###
-
-  deleteFile "$DeinstallerDescription" "$Deinstaller2" "$User"
-  local -r -i Retcode2=$?
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    Retcode=$Retcode2
-  fi
-
-  ### Delete any remaining files. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    deleteFile 'Oracle Grid Control homes file' "/etc/oragchomelist"
   fi
 
   return $Retcode
