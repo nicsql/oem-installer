@@ -131,16 +131,20 @@ declare -r OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS='manager-response-file-permi
 declare -r OPTION_MANAGER_BASE='manager-base'
 declare -r OPTION_MANAGER_HOME='manager-home'
 declare -r OPTION_MANAGER_INSTANCE='manager-instance'
-declare -r OPTION_MANAGER_PORT='manager-port'
+declare -r OPTION_MANAGER_USER_PORT='manager-user-port'
+declare -r OPTION_MANAGER_UPLOAD_PORT='manager-upload-port'
 declare -r OPTION_MANAGER_PASSWORD='manager-password'
 declare -r OPTION_MANAGER_KEYSTORE_FILE_NAME='keystore-file'
 declare -r OPTION_MANAGER_KEYSTORE_PASSWORD='keystore-password'
 declare -r OPTION_MANAGER_TRUSTSTORE_FILE_NAME='truststore-file'
 declare -r OPTION_MANAGER_TRUSTSTORE_PASSWORD='truststore-password'
 declare -r OPTION_AGENT_BASE='agent-base'
+declare -r OPTION_AGENT_HOME='agent-home'
+declare -r OPTION_AGENT_INSTANCE='agent-instance'
 declare -r OPTION_AGENT_PORT='agent-port'
 declare -r OPTION_AGENT_PASSWORD='agent-password'
 declare -r OPTION_WEBLOGIC_PORT='weblogic-port'
+declare -r OPTION_WEBLOGIC_USER='weblogic-port'
 declare -r OPTION_WEBLOGIC_PASSWORD='weblogic-password'
 declare -r OPTION_SUDOERS_FILE_NAME='sudoers-file-name'
 declare -r OPTION_SUDOERS_FILE_PERMISSIONS='sudoers-file-permissions'
@@ -194,16 +198,20 @@ declare -r -a OPTIONS=(
   "$OPTION_MANAGER_BASE"
   "$OPTION_MANAGER_HOME"
   "$OPTION_MANAGER_INSTANCE"
-  "$OPTION_MANAGER_PORT"
+  "$OPTION_MANAGER_USER_PORT"
+  "$OPTION_MANAGER_UPLOAD_PORT"
   "$OPTION_MANAGER_PASSWORD"
   "$OPTION_MANAGER_KEYSTORE_FILE_NAME"
   "$OPTION_MANAGER_KEYSTORE_PASSWORD"
   "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"
   "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"
   "$OPTION_AGENT_BASE"
+  "$OPTION_AGENT_HOME"
+  "$OPTION_AGENT_INSTANCE"
   "$OPTION_AGENT_PORT"
   "$OPTION_AGENT_PASSWORD"
   "$OPTION_WEBLOGIC_PORT"
+  "$OPTION_WEBLOGIC_USER"
   "$OPTION_WEBLOGIC_PASSWORD"
   "$OPTION_SUDOERS_FILE_NAME"
   "$OPTION_SUDOERS_FILE_PERMISSIONS"
@@ -291,16 +299,20 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_MANAGER_BASE"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_HOME"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_INSTANCE"]=$OPTION_SOURCE_ALL
-  ["$OPTION_MANAGER_PORT"]=$OPTION_SOURCE_ALL
+  ["$OPTION_MANAGER_USER_PORT"]=$OPTION_SOURCE_ALL
+  ["$OPTION_MANAGER_UPLOAD_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_MANAGER_KEYSTORE_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_AGENT_BASE"]=$OPTION_SOURCE_ALL
+  ["$OPTION_AGENT_HOME"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_AGENT_INSTANCE"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_AGENT_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_AGENT_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_WEBLOGIC_PORT"]=$OPTION_SOURCE_ALL
+  ["$OPTION_WEBLOGIC_USER"]=$OPTION_SOURCE_ALL
   ["$OPTION_WEBLOGIC_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_SUDOERS_FILE_NAME"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_SUDOERS_FILE_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
@@ -351,13 +363,15 @@ declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_MANAGER_VERSION"]='13.5.0.0.0'
   ["$OPTION_MANAGER_RESPONSE_FILE_NAME"]='/tmp/em_install.rsp'
   ["$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS"]='640'
-  ["$OPTION_MANAGER_PORT"]='7803'
+  ["$OPTION_MANAGER_USER_PORT"]='7803'
+  ["$OPTION_MANAGER_UPLOAD_PORT"]='4903'
   ["$OPTION_MANAGER_PASSWORD"]="$DEFAULT_PASSWORD"
   ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]="$DEFAULT_PASSWORD"
   ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]="$DEFAULT_PASSWORD"
-  ["$OPTION_AGENT_PORT"]='4903'
+  ["$OPTION_AGENT_PORT"]='3872'
   ["$OPTION_AGENT_PASSWORD"]="$DEFAULT_PASSWORD"
   ["$OPTION_WEBLOGIC_PORT"]='7102'
+  ["$OPTION_WEBLOGIC_USER"]='weblogic'
   ["$OPTION_WEBLOGIC_PASSWORD"]="$DEFAULT_PASSWORD"
   ["$OPTION_SUDOERS_FILE_NAME"]='/etc/sudoers.d/101-oracle-user'
   ["$OPTION_SUDOERS_FILE_PERMISSIONS"]='440'
@@ -452,17 +466,21 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS"]="file permissions on the ${DESCRIPTION_MANAGER_RESPONSE_FILE}"
   ["$OPTION_MANAGER_BASE"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} base directory"
   ["$OPTION_MANAGER_HOME"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} home directory"
-  ["$OPTION_MANAGER_INSTANCE"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} instance home directory"
-  ["$OPTION_MANAGER_PORT"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} network port"
+  ["$OPTION_MANAGER_INSTANCE"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} instance directory"
+  ["$OPTION_MANAGER_USER_PORT"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} port"
+  ["$OPTION_MANAGER_UPLOAD_PORT"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} upload port"
   ["$OPTION_MANAGER_PASSWORD"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} sysman account password"
   ["$OPTION_MANAGER_KEYSTORE_FILE_NAME"]="name of the ${OPTION_MANAGER_KEYSTORE_FILE}"
   ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]="password for the ${OPTION_MANAGER_KEYSTORE_FILE}"
   ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]="name of the ${OPTION_MANAGER_TRUSTSTORE_FILE}"
   ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]="password for the ${OPTION_MANAGER_TRUSTSTORE_FILE}"
   ["$OPTION_AGENT_BASE"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} base directory"
-  ["$OPTION_AGENT_PORT"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} upload port"
+  ["$OPTION_AGENT_HOME"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} home directory"
+  ["$OPTION_AGENT_INSTANCE"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} instance directory"
+  ["$OPTION_AGENT_PORT"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} port"
   ["$OPTION_AGENT_PASSWORD"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} account password"
   ["$OPTION_WEBLOGIC_PORT"]='Weblogic administration port'
+  ["$OPTION_WEBLOGIC_USER"]='Weblogic administration username'
   ["$OPTION_WEBLOGIC_PASSWORD"]='Weblogic account password'
   ["$OPTION_SUDOERS_FILE_NAME"]="name of the ${DESCRIPTION_SUDOERS_FILE}"
   ["$OPTION_SUDOERS_FILE_PERMISSIONS"]="file permissions on the ${DESCRIPTION_SUDOERS_FILE}"
@@ -1555,13 +1573,24 @@ createFileLink() {
   local -r FileDescription="${4:-file}"
   local -r FileName="${5:-}"
   local -r LinkName="${6:-}"
+  local -i bProceed=$VALUE_TRUE
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -z "$LinkName" ]] ; then
-    echoError $RETCODE_INTERNAL_ERROR "the file name for the symbolic link to the ${FileDescription} was not provided"
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    if [[ -z "$LinkName" ]] ; then
+      echoError $RETCODE_INTERNAL_ERROR "the file name for the symbolic link to the ${FileDescription} was not provided"
+    else
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$LinkName"
+      if [[ 0 -eq $? ]] ; then
+        bProceed=$VALUE_FALSE
+        echoCommandMessage "the destination ${FileDescription} already exists" "$LinkName"
+      else
+        echoCommandMessage "the destination ${FileDescription} does not exist" "$LinkName"
+      fi
+    fi
     Retcode=$?
   fi
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
     if [[ -z "$FileName" ]] ; then
       echoError $RETCODE_INTERNAL_ERROR "the source file name for the ${FileDescription} was not provided"
     else
@@ -1571,15 +1600,9 @@ createFileLink() {
     Retcode=$?
   fi
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$LinkName"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the destination ${FileDescription} already exists" "$LinkName"
-    else
-      echoCommandMessage "the destination ${FileDescription} does not exist" "$LinkName"
-      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'ln' '-s' "$FileName" "$LinkName"
-      processCommandCode $? "failed to create symbolic link to ${FileDescription}" "$FileName" "$LinkName"
-    fi
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bProceed ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'ln' '-s' "$FileName" "$LinkName"
+    processCommandCode $? "failed to create symbolic link to ${FileDescription}" "$FileName" "$LinkName"
     Retcode=$?
   fi
 
@@ -2788,6 +2811,7 @@ uninstallDatabase() {
 ################################################################################
 installManager() {
   local Message=''
+  local StagingDirectory=''
   local StagingPatchesDirectory=''
   local StagingPatchesDirectoryDescription=''
   local InventoryDirectory=''
@@ -2809,22 +2833,28 @@ installManager() {
   local HomeDirectory=''
   local HomeDirectoryDescription=''
   local InstanceDirectory=''
-  local ManagerPort=''
-  local ManagerPortDescription=''
+  local UserPort=''
+  local UserPortDescription=''
+  local UploadPort=''
+  local UploadPortDescription=''
   local ManagerPassword=''
-  local ManagerKeystoreFileName=''
-  local ManagerKeystorePassword=''
-  local ManagerTruststoreFileName=''
-  local ManagerTruststorePassword=''
-  local AgentBase=''
+  local KeystoreFileName=''
+  local KeystorePassword=''
+  local TruststoreFileName=''
+  local TruststorePassword=''
+  local AgentBaseDirectory=''
+  local AgentHomeDirectory=''
+  local AgentInstanceDirectory=''
   local AgentPort=''
   local AgentPortDescription=''
   local AgentPassword=''
   local WeblogicPort=''
   local WeblogicPortDescription=''
+  local WeblogicUser=''
   local WeblogicPassword=''
   local SystemdService=''
   echoTitle "Installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING"              'Message' 'StagingDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING_PATCHES"      'Message' 'StagingPatchesDirectory' 'StagingPatchesDirectoryDescription'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY"            'Message' 'InventoryDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                 'Message' 'User'
@@ -2842,23 +2872,30 @@ installManager() {
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_BASE"                      'Message' 'BaseDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"                      'Message' 'HomeDirectory' 'HomeDirectoryDescription'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE"                  'Message' 'InstanceDirectory'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PORT"                      'Message' 'ManagerPort' 'ManagerPortDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_USER_PORT"                 'Message' 'UserPort' 'UserPortDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_UPLOAD_PORT"               'Message' 'UploadPort' 'UploadPortDescription'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PASSWORD"                  'Message' 'ManagerPassword'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_KEYSTORE_FILE_NAME"        'Message' 'ManagerKeystoreFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_KEYSTORE_PASSWORD"         'Message' 'ManagerKeystorePassword'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"      'Message' 'ManagerTruststoreFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"       'Message' 'ManagerTruststorePassword'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"                        'Message' 'AgentBase'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_KEYSTORE_FILE_NAME"        'Message' 'KeystoreFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_KEYSTORE_PASSWORD"         'Message' 'KeystorePassword'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"      'Message' 'TruststoreFileName'
+  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"       'Message' 'TruststorePassword'
+  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"                        'Message' 'AgentBaseDirectory'
+  retrieveOption $? "$1" "$2" "$OPTION_AGENT_HOME"                        'Message' 'AgentHomeDirectory'
+  retrieveOption $? "$1" "$2" "$OPTION_AGENT_INSTANCE"                    'Message' 'AgentInstanceDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_AGENT_PORT"                        'Message' 'AgentPort' 'AgentPortDescription'
   retrieveOption $? "$1" "$2" "$OPTION_AGENT_PASSWORD"                    'Message' 'AgentPassword'
   retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PORT"                     'Message' 'WeblogicPort' 'WeblogicPortDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_USER"                     'Message' 'WeblogicUser'
   retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PASSWORD"                 'Message' 'WeblogicPassword'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE"                   'Message' 'SystemdService'
   local -i Retcode=$?
   local -r Installer="${HomeDirectory}/sysman/install/ConfigureGC.sh"
   local -r InstallerDescription="configuration program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+  local -r AgentInstaller="${AgentHomeDirectory}/sysman/install/agentDeploy.sh"
+  local -r AgentInstallerDescription="installer program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]}"
   local -r MarkerProvisioned="${HomeDirectory}/${INSTALLATION_STEP_PROVISIONED}"
   local -r MarkerInstalled="${HomeDirectory}/${INSTALLATION_STEP_INSTALLED}"
+  local -r MarkerAgent="${HomeDirectory}/${INSTALLATION_STEP_INSTALLED}_AGENT"
   local -r MarkerFirewalldConfigured="${HomeDirectory}/${INSTALLATION_STEP_CONFIGURED}_FIREWALLD"
   local -r MarkerPatched="${HomeDirectory}/${INSTALLATION_STEP_PATCHED}"
   local -i bResponseCreated=$VALUE_FALSE
@@ -2946,7 +2983,7 @@ CONFIGURE_ORACLE_SOFTWARE_LIBRARY=false
 # Weblogic
 ORACLE_MIDDLEWARE_HOME_LOCATION=${HomeDirectory}
 ORACLE_HOSTNAME=${HostName}
-WLS_ADMIN_SERVER_USERNAME=weblogic
+WLS_ADMIN_SERVER_USERNAME=${WeblogicUser}
 WLS_ADMIN_SERVER_PASSWORD=${WeblogicPassword}
 WLS_ADMIN_SERVER_CONFIRM_PASSWORD=${WeblogicPassword}
 NODE_MANAGER_PASSWORD=${WeblogicPassword}
@@ -2964,16 +3001,16 @@ MANAGEMENT_TABLESPACE_LOCATION=${DatabaseData}/mgmt.dbf
 CONFIGURATION_DATA_TABLESPACE_LOCATION=${DatabaseData}/mgmt_ecm_depot1.dbf
 JVM_DIAGNOSTICS_TABLESPACE_LOCATION=${DatabaseData}/mgmt_deepdive.dbf
 # Agent
-AGENT_BASE_DIR=${AgentBase}
+AGENT_BASE_DIR=${AgentBaseDirectory}
 AGENT_REGISTRATION_PASSWORD=${AgentPassword}
 AGENT_REGISTRATION_CONFIRM_PASSWORD=${AgentPassword}
 # TLS
-es_oneWaySSL=false
+Is_oneWaySSL=false
 Is_twoWaySSL=true
-TRUSTSTORE_PASSWORD=${ManagerTruststorePassword}
-TRUSTSTORE_LOCATION=${ManagerTruststoreFileName}
-KEYSTORE_PASSWORD=${ManagerKeystorePassword}
-KEYSTORE_LOCATION=${ManagerKeystoreFileName}
+TRUSTSTORE_PASSWORD=${TruststorePassword}
+TRUSTSTORE_LOCATION=${TruststoreFileName}
+KEYSTORE_PASSWORD=${KeystorePassword}
+KEYSTORE_LOCATION=${KeystoreFileName}
 EOF
       local -r FileContent
       createFile $Retcode "$User" "$Group" "$ResponseFilePermissions" "$DESCRIPTION_MANAGER_RESPONSE_FILE" "$ResponseFileName" 'FileContent' $VALUE_TRUE 'bResponseCreated'
@@ -3030,6 +3067,36 @@ EOF
     fi
   fi
 
+  ########################################################
+  # Installation of the Oracle Enterprise Manager Agent. #
+  ########################################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]}"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerAgent"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} is already installed" "$AgentHomeDirectory"
+    else
+      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} has not been installed"
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" ${AgentInstaller} \
+        '-ignorePrereqs' \
+        "ORACLE_HOSTNAME=${HostName}" \
+        "AGENT_BASE_DIR=${AgentBaseDirectory}" \
+        "AGENT_INSTANCE_HOME=${AgentInstanceDirectory}" \
+        "AGENT_PORT=${AgentPort}" \
+        "AGENT_REGISTRATION_PASSWORD=${AgentPassword}" \
+        "OMS_HOST=${HostName}" \
+        "EM_UPLOAD_PORT=${UploadPort}" \
+        'START_AGENT=true' \
+        "SCRATCHPATH=${StagingDirectory}" \
+        "PROPERTIES_FILE=''" \
+        'b_doDiscovery=true'
+      processCommandCode $? "an error occurred while running the ${AgentInstallerDescription}" "$AgentInstaller"
+      createMarker $? "$User" "$Group" "$MarkerAgent"
+      Retcode=$?
+    fi
+  fi
+
   ########################################
   # Perform the post-installation steps. #
   ########################################
@@ -3060,8 +3127,13 @@ EOF
         processCommandCode $? "failed to allow public access to the ${WeblogicPortDescription}" "$WeblogicPort"
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${ManagerPort}/tcp"
-          processCommandCode $? "failed to allow public access to the ${ManagerPortDescription}" "$ManagerPort"
+          executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${UserPort}/tcp"
+          processCommandCode $? "failed to allow public access to the ${UserPortDescription}" "$UserPort"
+          Retcode=$?
+        fi
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          executeCommand 'sudo' 'firewall-cmd' '--permanent' '--zone=public' "--add-port=${UploadPort}/tcp"
+          processCommandCode $? "failed to allow public access to the ${UploadPortDescription}" "$UploadPort"
           Retcode=$?
         fi
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -3135,6 +3207,7 @@ provisionManager() {
   local ResponseFilePermissions=''
   local HomeDirectory=''
   local AgentBase=''
+  local AgentHome=''
   echoTitle "provisioning the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software"
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING"              'Message' 'StagingDirectory' 'StagingDirectoryDescription'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_STAGING_PATCHES"      'Message' 'StagingPatchesDirectory' 'StagingPatchesDirectoryDescription'
@@ -3151,13 +3224,14 @@ provisionManager() {
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_PERMISSIONS" 'Message' 'ResponseFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"                      'Message' 'HomeDirectory'
   retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"                        'Message' 'AgentBase'
+  retrieveOption $? "$1" "$2" "$OPTION_AGENT_HOME"                        'Message' 'AgentHome'
   local -i Retcode=$?
   local -r Repository="${StagingDirectory}/manager-${Version}"
   local -r RepositoryDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} installation repository directory"
   local -r Extractor="${Repository}/em13500_linux64.bin"
   local -r ExtractorDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} extraction program"
   local -r RootInstaller="${HomeDirectory}/allroot.sh"
-  local -r InstantClientLibrary="${AgentBase}/agent_${Version}/instantclient/libclntshcore.so.12.1"
+  local -r InstantClientLibrary="${AgentHome}/instantclient/libclntshcore.so.12.1"
   local -r RootInstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} root installer program"
   local -r MarkerExtracted="${Repository}/${INSTALLATION_STEP_EXTRACTED}"
   local -r MarkerProvisioned="${HomeDirectory}/${INSTALLATION_STEP_PROVISIONED}"
@@ -3702,6 +3776,7 @@ prepareInstallation() {
   local ManagerInstanceDescription
   local AgentBase
   local AgentBaseDescription
+  local AgentHome
   local SudoersFileName
   local SudoersFilePermissions
   local SwapGoal
@@ -3735,6 +3810,7 @@ prepareInstallation() {
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME"                  'Message' 'ManagerHome'                'ManagerHomeDescription'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE"              'Message' 'ManagerInstance'            'ManagerInstanceDescription'
   retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE"                    'Message' 'AgentBase'                  'AgentBaseDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_AGENT_HOME"                    'Message' 'AgentHome'                  'AgentHomeDescription'
   retrieveOption $? "$1" "$2" "$OPTION_SUDOERS_FILE_NAME"             'Message' 'SudoersFileName'
   retrieveOption $? "$1" "$2" "$OPTION_SUDOERS_FILE_PERMISSIONS"      'Message' 'SudoersFilePermissions'
   retrieveOption $? "$1" "$2" "$OPTION_SWAP_GOAL"                     'Message' 'SwapGoal'                   'SwapGoalDescription'
@@ -3902,7 +3978,7 @@ prepareInstallation() {
       Retcode=$?
     fi
     if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_MANAGER" == "$Target" ]] || [[ "$PRODUCT_AGENT" == "$Target" ]] ; then
-      appendLine $Retcode "${UserHome}/.bashrc" "export AGENT_HOME='${AgentBase}/agent_${ManagerVersion}'" "'"
+      appendLine $Retcode "${UserHome}/.bashrc" "export AGENT_HOME='${AgentHome}'" "'"
       Retcode=$?
     fi
     if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
@@ -4443,6 +4519,8 @@ setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$O
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_MANAGER_KEYSTORE_FILE_NAME"   "${OptionValues[${OPTION_MANAGER_BASE}]}/oradata/ewallet-keystore.p12"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME" "${OptionValues[${OPTION_MANAGER_BASE}]}/oradata/ewallet-truststore.p12"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_AGENT_BASE"                   "${OptionValues[${OPTION_INSTALLATION_BASE}]}/${PRODUCT_AGENT}"
+setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_AGENT_HOME"                   "${OptionValues[${OPTION_AGENT_BASE}]}/agent_${OptionValues[${OPTION_MANAGER_VERSION}]}"
+setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_AGENT_INSTANCE"               "${OptionValues[${OPTION_AGENT_BASE}]}/agent_inst"
 Retcode=$?
 
 # Set all remaining options to their default values.
