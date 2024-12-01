@@ -118,7 +118,7 @@ declare -r OPTION_DATABASE_DATA_DIRECTORY_NAME='database-data'
 declare -r OPTION_DATABASE_RECOVERY_DIRECTORY_NAME='database-recovery'
 declare -r OPTION_DATABASE_NAME='database-name'
 declare -r OPTION_DATABASE_PORT='database-port'
-declare -r OPTION_DATABASE_ADMINISTRATOR_GROUP='dba-group'
+declare -r OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME='dba-group'
 declare -r OPTION_DATABASE_PASSWORD='database-password'
 declare -r OPTION_MANAGER_VERSION='manager-version'
 declare -r OPTION_MANAGER_PACKAGES_FILE_NAMES='manager-packages-file-names'
@@ -187,7 +187,7 @@ declare -r -a OPTIONS=(
   "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"
   "$OPTION_DATABASE_NAME"
   "$OPTION_DATABASE_PORT"
-  "$OPTION_DATABASE_ADMINISTRATOR_GROUP"
+  "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME"
   "$OPTION_DATABASE_PASSWORD"
   "$OPTION_MANAGER_VERSION"
   "$OPTION_MANAGER_PACKAGES_FILE_NAMES"
@@ -286,7 +286,7 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_PORT"]=$OPTION_SOURCE_ALL
-  ["$OPTION_DATABASE_ADMINISTRATOR_GROUP"]=$OPTION_SOURCE_ALL
+  ["$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_PASSWORD"]=$OPTION_SOURCE_FILE
   ["$OPTION_MANAGER_VERSION"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_PACKAGES_FILE_NAMES"]=$OPTION_SOURCE_ALL
@@ -358,7 +358,7 @@ declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS"]='640'
   ["$OPTION_DATABASE_NAME"]='emrep'
   ["$OPTION_DATABASE_PORT"]='1521'
-  ["$OPTION_DATABASE_ADMINISTRATOR_GROUP"]='dba'
+  ["$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME"]='dba'
   ["$OPTION_DATABASE_PASSWORD"]="$DEFAULT_PASSWORD"
   ["$OPTION_MANAGER_VERSION"]='13.5.0.0.0'
   ["$OPTION_MANAGER_RESPONSE_FILE_NAME"]='/tmp/em_install.rsp'
@@ -397,19 +397,6 @@ declare -r DESCRIPTION_PATCHES_DIRECTORY='staging directory for product patches'
 declare -r DESCRIPTION_INSTALLATION_ROOT_DIRECTORY='Oracle installation root directory'
 declare -r DESCRIPTION_INSTALLATION_INVENTORY_DIRECTORY='Oracle central inventory directory'
 declare -r DESCRIPTION_INSTALLATION_BASE_DIRECTORY='Oracle installation base directory'
-declare -r DESCRIPTION_SUDOERS_FILE='installation system user sudoers definition file'
-declare -r DESCRIPTION_SWAP='system swap'
-declare -r DESCRIPTION_SWAP_FILE="additional file for the ${DESCRIPTION_SWAP}"
-declare -r DESCRIPTION_SYSCTL="Systemctl settings for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
-declare -r DESCRIPTION_SYSCTL_FILE="definition file for the ${DESCRIPTION_SYSCTL}"
-declare -r DESCRIPTION_LIMITS_DATABASE="system limits settings for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
-declare -r DESCRIPTION_LIMITS_DATABASE_FILE="definition file for the ${DESCRIPTION_LIMITS_DATABASE}"
-declare -r DESCRIPTION_LIMITS_MANAGER="system limits settings for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-declare -r DESCRIPTION_LIMITS_MANAGER_FILE="definition file for the ${DESCRIPTION_LIMITS_MANAGER}"
-declare -r DESCRIPTION_CONTROLLER='service controller for the Oracle products'
-declare -r DESCRIPTION_CONTROLLER_FILE="program file for ${DESCRIPTION_CONTROLLER}"
-declare -r DESCRIPTION_SYSTEMD_SERVICE='Systemd service for the Oracle products'
-declare -r DESCRIPTION_SYSTEMD_SERVICE_FILE="definition file for the ${DESCRIPTION_SYSTEMD_SERVICE}"
 declare -r DESCRIPTION_DATABASE_PACKAGE_FILE="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} software package zip file"
 declare -r DESCRIPTION_DATABASE_OPATCH="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} OPatch utility"
 declare -r DESCRIPTION_DATABASE_OPATCH_HOME="home of the ${DESCRIPTION_DATABASE_OPATCH}"
@@ -421,6 +408,7 @@ declare -r DESCRIPTION_DATABASE_BASE_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT
 declare -r DESCRIPTION_DATABASE_HOME_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} home directory"
 declare -r DESCRIPTION_DATABASE_DATA_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} data directory"
 declare -r DESCRIPTION_DATABASE_RECOVERY_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} recovery directory"
+declare -r DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} administrator system group"
 declare -r DESCRIPTION_MANAGER_FILE="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} installation zip file"
 declare -r DESCRIPTION_MANAGER_FILES="installation zip files for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
 declare -r DESCRIPTION_MANAGER_OPATCH="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} OPatch utility"
@@ -445,6 +433,19 @@ declare -r DESCRIPTION_MANAGER_TRUSTSTORE_FILE="${DESCRIPTION_MANAGER_TRUSTSTORE
 declare -r DESCRIPTION_AGENT_BASE_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} base directory"
 declare -r DESCRIPTION_AGENT_HOME_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} home directory"
 declare -r DESCRIPTION_AGENT_INSTANCE_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} instance directory"
+declare -r DESCRIPTION_SUDOERS_FILE='installation system user sudoers definition file'
+declare -r DESCRIPTION_SWAP='system swap'
+declare -r DESCRIPTION_SWAP_FILE="additional file for the ${DESCRIPTION_SWAP}"
+declare -r DESCRIPTION_SYSCTL="Systemctl settings for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
+declare -r DESCRIPTION_SYSCTL_FILE="definition file for the ${DESCRIPTION_SYSCTL}"
+declare -r DESCRIPTION_LIMITS_DATABASE="system limits settings for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
+declare -r DESCRIPTION_LIMITS_DATABASE_FILE="definition file for the ${DESCRIPTION_LIMITS_DATABASE}"
+declare -r DESCRIPTION_LIMITS_MANAGER="system limits settings for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+declare -r DESCRIPTION_LIMITS_MANAGER_FILE="definition file for the ${DESCRIPTION_LIMITS_MANAGER}"
+declare -r DESCRIPTION_CONTROLLER='service controller for the Oracle products'
+declare -r DESCRIPTION_CONTROLLER_FILE="program file for ${DESCRIPTION_CONTROLLER}"
+declare -r DESCRIPTION_SYSTEMD_SERVICE='Systemd service for the Oracle products'
+declare -r DESCRIPTION_SYSTEMD_SERVICE_FILE="definition file for the ${DESCRIPTION_SYSTEMD_SERVICE}"
 
 declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_FILE_NAME"]='name of an optional file that contains options to override the default option values of this program'
@@ -469,7 +470,7 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"]="name of the ${DESCRIPTION_DATABASE_RECOVERY_DIRECTORY}"
   ["$OPTION_DATABASE_NAME"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} name"
   ["$OPTION_DATABASE_PORT"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} listener network port"
-  ["$OPTION_DATABASE_ADMINISTRATOR_GROUP"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} administrator system group"
+  ["$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME"]="name of the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}"
   ["$OPTION_DATABASE_PASSWORD"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} sys account password"
   ["$OPTION_MANAGER_VERSION"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} version"
   ["$OPTION_MANAGER_PACKAGES_FILE_NAMES"]="names of the ${DESCRIPTION_MANAGER_FILES}"
@@ -2074,7 +2075,7 @@ installDatabase() {
   local DataDirectoryName=''
   local RecoveryDirectoryName=''
   local DatabaseName=''
-  local DBAGroup=''
+  local DBAGroupName=''
   local Password=''
   local ServiceName=''
   echoTitle "installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
@@ -2091,7 +2092,7 @@ installDatabase() {
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_DATA_DIRECTORY_NAME"          'Message' 'DataDirectoryName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"      'Message' 'RecoveryDirectoryName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                         'Message' 'DatabaseName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP"          'Message' 'DBAGroup'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME"     'Message' 'DBAGroupName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"                     'Message' 'Password'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE_NAME"                  'Message' 'ServiceName'
   local -i Retcode=$?
@@ -2149,11 +2150,11 @@ ORACLE_HOSTNAME=${HostName}
 SECURITY_UPDATES_VIA_MYORACLESUPPORT=false
 DECLINE_SECURITY_UPDATES=true
 oracle.install.db.InstallEdition=EE
-oracle.install.db.OSDBA_GROUP=${DBAGroup}
-oracle.install.db.OSBACKUPDBA_GROUP=${DBAGroup}
-oracle.install.db.OSDGDBA_GROUP=${DBAGroup}
-oracle.install.db.OSKMDBA_GROUP=${DBAGroup}
-oracle.install.db.OSRACDBA_GROUP=${DBAGroup}
+oracle.install.db.OSDBA_GROUP=${DBAGroupName}
+oracle.install.db.OSBACKUPDBA_GROUP=${DBAGroupName}
+oracle.install.db.OSDGDBA_GROUP=${DBAGroupName}
+oracle.install.db.OSKMDBA_GROUP=${DBAGroupName}
+oracle.install.db.OSRACDBA_GROUP=${DBAGroupName}
 oracle.install.db.rootconfig.executeRootScript=false
 oracle.install.db.config.starterdb.type=GENERAL_PURPOSE
 oracle.install.db.config.starterdb.globalDBName=${DatabaseName}
@@ -3704,8 +3705,7 @@ prepareInstallation() {
   local HostName
   local DatabaseHomeDirectoryName
   local DatabaseName
-  local DBAGroup
-  local DBAGroupDescription
+  local DBAGroupName
   local ManagerVersion
   local ManagerHomeDirectoryName
   local ManagerInstanceDirectoryName
@@ -3738,7 +3738,7 @@ prepareInstallation() {
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_HOSTNAME"                 'Message' 'HostName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME_DIRECTORY_NAME"          'Message' 'DatabaseHomeDirectoryName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                         'Message' 'DatabaseName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP"          'Message' 'DBAGroup' 'DBAGroupDescription'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME"     'Message' 'DBAGroupName'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                       'Message' 'ManagerVersion'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME_DIRECTORY_NAME"           'Message' 'ManagerHomeDirectoryName'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME"       'Message' 'ManagerInstanceDirectoryName'
@@ -3788,22 +3788,6 @@ prepareInstallation() {
     Retcode=$?
   fi
 
-  ### Create the database administrator group. ###
-
-  if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      executeCommandOutput 'Capture' 'sudo' 'getent' 'group' "$DBAGroup"
-      if [[ 0 -eq $? ]] ; then
-        echoCommandMessage "the ${DBAGroupDescription} already exists" "$DBAGroup" "$Capture"
-      else
-        echoCommandMessage "the ${DBAGroupDescription} does not exist" "$DBAGroup" "$Capture"
-        executeCommand 'sudo' '/usr/sbin/groupadd' '-g' '54322' "$DBAGroup"
-        processCommandCode $? "failed to create the ${DBAGroupDescription}" "$DBAGroup"
-      fi
-      Retcode=$?
-    fi
-  fi
-
   ### Create the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -3837,13 +3821,13 @@ prepareInstallation() {
     ### Create the database administrator group. ###
 
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      executeCommandOutput 'Capture' 'sudo' 'getent' 'group' "$DBAGroup"
+      executeCommandOutput 'Capture' 'sudo' 'getent' 'group' "$DBAGroupName"
       if [[ 0 -eq $? ]] ; then
-        echoCommandMessage "the ${DBAGroupDescription} already exists" "$DBAGroup" "$Capture"
+        echoCommandMessage "the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP} already exists" "$DBAGroupName" "$Capture"
       else
-        echoCommandMessage "the ${DBAGroupDescription} does not exist" "$DBAGroup" "$Capture"
-        executeCommand 'sudo' '/usr/sbin/groupadd' '-g' '54322' "$DBAGroup"
-        processCommandCode $? "failed to create the ${DBAGroupDescription}" "$DBAGroup"
+        echoCommandMessage "the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP} does not exist" "$DBAGroupName" "$Capture"
+        executeCommand 'sudo' '/usr/sbin/groupadd' '-g' '54322' "$DBAGroupName"
+        processCommandCode $? "failed to create the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}" "$DBAGroupName"
       fi
       Retcode=$?
     fi
@@ -3853,19 +3837,19 @@ prepareInstallation() {
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       local Output3=''
       local Output4=''
-      echoCommand 'sudo' 'getent' 'group' "$DBAGroup"
-      Output3=$(sudo getent 'group' "$DBAGroup")
-      processCommandCode $? "the ${DBAGroupDescription} does not exist" "$DBAGroup"
+      echoCommand 'sudo' 'getent' 'group' "$DBAGroupName"
+      Output3=$(sudo getent 'group' "$DBAGroupName")
+      processCommandCode $? "the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP} does not exist" "$DBAGroupName"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
         echoCommand 'echo' "$Output3" '|' 'awk' '-F' ':' '{ print $4}'
         Output4=$(echo "$Output3" | awk -F ':' '{ print $4}')
         if [[ 0 -eq $? ]] && [[ "$User" == "$Output4" ]] ; then
-          echoCommandMessage "the ${UserDescription} '${User}' is already a member of the ${DBAGroupDescription}" "$DBAGroup"
+          echoCommandMessage "the ${UserDescription} '${User}' is already a member of the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}" "$DBAGroupName"
         else
-          echoCommandMessage "the ${UserDescription} '${User}' is not a member of the ${DBAGroupDescription}" "$DBAGroup" "$Output4"
-          executeCommand 'sudo' 'usermod' '-a' '-G' "$DBAGroup" "$User"
-          processCommandCode $? "failed to add the ${UserDescription} '${User}' to the ${DBAGroupDescription}" "$DBAGroup"
+          echoCommandMessage "the ${UserDescription} '${User}' is not a member of the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}" "$DBAGroupName" "$Output4"
+          executeCommand 'sudo' 'usermod' '-a' '-G' "$DBAGroupName" "$User"
+          processCommandCode $? "failed to add the ${UserDescription} '${User}' to the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}" "$DBAGroupName"
         fi
         Retcode=$?
       fi
