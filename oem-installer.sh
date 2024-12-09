@@ -117,6 +117,7 @@ declare -r OPTION_DATABASE_HOME_DIRECTORY_NAME='database-home'
 declare -r OPTION_DATABASE_DATA_DIRECTORY_NAME='database-data'
 declare -r OPTION_DATABASE_RECOVERY_DIRECTORY_NAME='database-recovery'
 declare -r OPTION_DATABASE_NAME='database-name'
+declare -r OPTION_DATABASE_HOSTNAME='database-hostname'
 declare -r OPTION_DATABASE_PORT='database-port'
 declare -r OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME='dba-group'
 declare -r OPTION_DATABASE_PASSWORD='database-password'
@@ -186,6 +187,7 @@ declare -r -a OPTIONS=(
   "$OPTION_DATABASE_DATA_DIRECTORY_NAME"
   "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"
   "$OPTION_DATABASE_NAME"
+  "$OPTION_DATABASE_HOSTNAME"
   "$OPTION_DATABASE_PORT"
   "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME"
   "$OPTION_DATABASE_PASSWORD"
@@ -285,9 +287,10 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_DATABASE_DATA_DIRECTORY_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_DATABASE_HOSTNAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME"]=$OPTION_SOURCE_ALL
-  ["$OPTION_DATABASE_PASSWORD"]=$OPTION_SOURCE_FILE
+  ["$OPTION_DATABASE_PASSWORD"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_VERSION"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_PACKAGES_FILE_NAMES"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_OPATCH_FILE_NAME"]=$OPTION_SOURCE_ALL
@@ -357,6 +360,7 @@ declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_DATABASE_RESPONSE_FILE_NAME"]='/tmp/db_install.rsp'
   ["$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS"]='640'
   ["$OPTION_DATABASE_NAME"]='emrep'
+  ["$OPTION_DATABASE_HOSTNAME"]=`hostname -f`
   ["$OPTION_DATABASE_PORT"]='1521'
   ["$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME"]='dba'
   ["$OPTION_DATABASE_PASSWORD"]="$DEFAULT_PASSWORD"
@@ -457,7 +461,7 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_INSTALLATION_FILE_PERMISSIONS"]='file permissions of the Oracle installation'
   ["$OPTION_INSTALLATION_USER"]='installation system user'
   ["$OPTION_INSTALLATION_GROUP"]='installation system group'
-  ["$OPTION_INSTALLATION_HOSTNAME"]='host name'
+  ["$OPTION_INSTALLATION_HOSTNAME"]='host name of this computer'
   ["$OPTION_DATABASE_VERSION"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} version"
   ["$OPTION_DATABASE_PACKAGE_FILE_NAME"]="name of the ${DESCRIPTION_DATABASE_PACKAGE_FILE}"
   ["$OPTION_DATABASE_OPATCH_FILE_NAME"]="name of the ${DESCRIPTION_DATABASE_OPATCH_FILE}"
@@ -469,6 +473,7 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_DATABASE_DATA_DIRECTORY_NAME"]="name of the ${DESCRIPTION_DATABASE_DATA_DIRECTORY}"
   ["$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"]="name of the ${DESCRIPTION_DATABASE_RECOVERY_DIRECTORY}"
   ["$OPTION_DATABASE_NAME"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} name"
+  ["$OPTION_DATABASE_HOSTNAME"]="host name of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} listener"
   ["$OPTION_DATABASE_PORT"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} listener network port"
   ["$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME"]="name of the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}"
   ["$OPTION_DATABASE_PASSWORD"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} sys account password"
@@ -2083,7 +2088,7 @@ installDatabase() {
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY_DIRECTORY_NAME" 'Message' 'InventoryDirectoryName'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                     'Message' 'User'
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                    'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_HOSTNAME"                 'Message' 'HostName'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOSTNAME"                     'Message' 'HostName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"      'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RESPONSE_FILE_NAME"           'Message' 'ResponseFileName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RESPONSE_FILE_PERMISSIONS"    'Message' 'ResponseFilePermissions'
@@ -2774,6 +2779,7 @@ installManager() {
   local HostName=''
   local DatabaseData=''
   local DatabaseName=''
+  local DatabaseHostName=''
   local DatabasePort=''
   local DatabasePassword=''
   local Version=''
@@ -2813,6 +2819,7 @@ installManager() {
   retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_HOSTNAME"                 'Message' 'HostName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_DATA_DIRECTORY_NAME"          'Message' 'DatabaseData'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                         'Message' 'DatabaseName'
+  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOSTNAME"                     'Message' 'DatabaseHostName'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PORT"                         'Message' 'DatabasePort'
   retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"                     'Message' 'DatabasePassword'
   retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                       'Message' 'Version'
@@ -2940,7 +2947,7 @@ NODE_MANAGER_PASSWORD=${WeblogicPassword}
 NODE_MANAGER_CONFIRM_PASSWORD=${WeblogicPassword}
 ORACLE_INSTANCE_HOME_LOCATION=${InstanceDirectoryName}
 # Repository
-DATABASE_HOSTNAME=${HostName}
+DATABASE_HOSTNAME=${DatabaseHostName}
 LISTENER_PORT=${DatabasePort}
 SERVICENAME_OR_SID=${DatabaseName}
 SYS_PASSWORD=${DatabasePassword}
@@ -3003,6 +3010,7 @@ EOF
         executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "$Installer" '-silent' '-responseFile' "$ResponseFileName"
         processCommandCode $? "an error occurred while running the ${InstallerDescription}" "$Installer"
         createMarker $? "$User" "$Group" "$MarkerInstalled"
+        createMarker $? "$User" "$Group" "$MarkerAgentInstalled"
         Retcode=$?
       fi
     fi
@@ -3379,15 +3387,6 @@ EOF
         echoCommand 'export' "ORACLE_HOME=${HomeDirectoryName}"
         export ORACLE_HOME="$HomeDirectoryName"
         processCommandCode $? 'failed to export the environment variable ORACLE_HOME' "$HomeDirectoryName"
-        Retcode=$?
-      fi
-
-      ### Export the OMS_INSTANCE_HOME environment variable. ###
-
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        echoCommand 'export' "OMS_INSTANCE_HOME=${InstanceDirectoryName}"
-        export OMS_INSTANCE_HOME="$InstanceDirectoryName"
-        processCommandCode $? 'failed to export the environment variable OMS_INSTANCE_HOME' "$InstanceDirectoryName"
         Retcode=$?
       fi
 
@@ -4424,10 +4423,12 @@ processOptionsFile $Retcode 'Message' 'OptionSources' 'OptionValues'
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_PATCHES_DIRECTORY_NAME"                "${OptionValues[${OPTION_STAGING_DIRECTORY_NAME}]}/patches"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_INSTALLATION_ROOT_DIRECTORY_NAME"      "${OPTION_DEFAULT_VALUES[${OPTION_INSTALLATION_ROOT_DIRECTORY_NAME}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_INSTALLATION_USER"                     "${OPTION_DEFAULT_VALUES[${OPTION_INSTALLATION_USER}]}"
+setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_INSTALLATION_HOSTNAME"                 "${OPTION_DEFAULT_VALUES[${OPTION_INSTALLATION_HOSTNAME}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_INSTALLATION_BASE_DIRECTORY_NAME"      "${OptionValues[${OPTION_INSTALLATION_ROOT_DIRECTORY_NAME}]}/${OptionValues[${OPTION_INSTALLATION_USER}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_INSTALLATION_INVENTORY_DIRECTORY_NAME" "${OptionValues[${OPTION_INSTALLATION_ROOT_DIRECTORY_NAME}]}/oraInventory"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_VERSION"                      "${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_VERSION}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_NAME"                         "${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_NAME}]}"
+setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_HOSTNAME"                     "${OptionValues[${OPTION_INSTALLATION_HOSTNAME}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_BASE_DIRECTORY_NAME"          "${OptionValues[${OPTION_INSTALLATION_BASE_DIRECTORY_NAME}]}/${PRODUCT_DATABASE}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_HOME_DIRECTORY_NAME"          "${OptionValues[${OPTION_DATABASE_BASE_DIRECTORY_NAME}]}/product/${OptionValues[${OPTION_DATABASE_VERSION}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_DATA_DIRECTORY_NAME"          "${OptionValues[${OPTION_DATABASE_BASE_DIRECTORY_NAME}]}/oradata/${OptionValues[${OPTION_DATABASE_NAME}]}"
