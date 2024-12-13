@@ -1695,16 +1695,19 @@ createFileLink() {
 ##
 ## @brief Create the service controller program for the Oracle product.
 ##
-## @param[in] Retcode A return code that causes the function to return
-##                    immediately when the code denotes an error.  The default
-##                    value of this parameter is RETCODE_SUCCESS.
-## @param[in] Sources The name of the variable that contains the sources of the
-##                    program option values.
-## @param[in] Values  The name of the vatiable that contains the program option
-##                    values.
-## @param[in] Product The Oracle product.  PRODUCT_ALL creates a meta service
-##                    controller file, which can be called by the Systemd
-##                    service.
+## @param[in]  Retcode            A return code that causes the function to
+##                                return immediately when the code denotes an
+##                                error.  The default value of this parameter
+##                                is RETCODE_SUCCESS.
+## @param[in]  Sources            The name of the variable that contains the
+##                                sources of the program option values.
+## @param[in]  Values             The name of the vatiable that contains the
+##                                program option values.
+## @param[in]  Product            The Oracle product.  PRODUCT_ALL creates a
+##                                meta service controller file, which can be
+##                                called by the Oracle Systemd service.
+## @param[out] ControllerFileName The file name of the controller program that
+##                                was created.  This parameter is optional.
 ##
 ## @return The value of the parameter Retcode if it denotes an error, or the
 ##         return code of the function execution.
@@ -1713,14 +1716,17 @@ createControllerFile() {
   local COMMAND_START='start'
   local COMMAND_STOP='stop'
   local COMMAND_STATUS='status'
+  local ControllerFileNameDummy=''
   local -i Retcode=${1:-$RETCODE_SUCCESS}
   local -r Product=${4:-}
+  local -n _ControllerFileName=${5:-ControllerFileNameDummy}
   local Message=''
   local User=''
   local UserDescription=''
   local Group=''
   local UserHomeDirectoryName=''
   local HomeDirectoryName=''
+  local ControllerFileDescription=''
   local FileName=''
   local DatabaseFileName=''
   local ManagerFileName=''
@@ -1734,15 +1740,19 @@ createControllerFile() {
   local -a StatusCommandParameters
   local Marker=''
 
+  _ControllerFileName=''
+
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     case "$Product" in
       "$PRODUCT_ALL")
+        ControllerFileDescription="$DESCRIPTION_CONTROLLER_FILE"
         retrieveOption $Retcode "$2" "$3" "$OPTION_CONTROLLER_FILE_NAME"          'Message' 'FileName'
         retrieveOption $?       "$2" "$3" "$OPTION_DATABASE_CONTROLLER_FILE_NAME" 'Message' 'DatabaseFileName'
         retrieveOption $?       "$2" "$3" "$OPTION_MANAGER_CONTROLLER_FILE_NAME"  'Message' 'ManagerFileName'
         retrieveOption $?       "$2" "$3" "$OPTION_AGENT_CONTROLLER_FILE_NAME"    'Message' 'AgentFileName'
         ;;
       "$PRODUCT_DATABASE")
+        ControllerFileDescription="$DESCRIPTION_DATABASE_CONTROLLER_FILE"
         StartCommand='bin/dbstart'
         StartCommandParameters+=("\\\${ORACLE_HOME}")
         StopCommand='bin/dbshut'
@@ -1754,6 +1764,7 @@ createControllerFile() {
         retrieveOption $?       "$2" "$3" "$OPTION_DATABASE_CONTROLLER_FILE_NAME" 'Message' 'FileName'
         ;;
       "$PRODUCT_MANAGER")
+        ControllerFileDescription="$DESCRIPTION_MANAGER_CONTROLLER_FILE"
         StartCommand='bin/emctl'
         StartCommandParameters+=('start')
         StartCommandParameters+=('oms')
@@ -1768,6 +1779,7 @@ createControllerFile() {
         retrieveOption $?       "$2" "$3" "$OPTION_MANAGER_CONTROLLER_FILE_NAME" 'Message' 'FileName'
         ;;
       "$PRODUCT_AGENT")
+        ControllerFileDescription="$DESCRIPTION_AGENT_CONTROLLER_FILE"
         StartCommand='bin/emctl'
         StartCommandParameters+=('start')
         StartCommandParameters+=('agent')
@@ -1824,7 +1836,6 @@ createControllerFile() {
 #echo "Marker:                  ${Marker}"
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$UserHomeDirectoryName" ]] && [[ -n "$FileName" ]] ; then
-    local -r ControllerFileName="${UserHomeDirectoryName}/${FileName}"
     local ControllerContent=''
     if [[ "$PRODUCT_ALL" == "$Product" ]] ; then
       read -d '' ControllerContent <<EOF
@@ -1919,7 +1930,8 @@ fi
 EOF
     fi
     local -r ControllerContent
-    createFile $Retcode "$User" "$Group" "$FilePermissions" "$DESCRIPTION_CONTROLLER_FILE" "$ControllerFileName" 'ControllerContent' $VALUE_TRUE
+    _ControllerFileName="${UserHomeDirectoryName}/${FileName}"
+    createFile $Retcode "$User" "$Group" "$FilePermissions" "$ControllerFileDescription" "$_ControllerFileName" 'ControllerContent' $VALUE_TRUE
     Retcode=$?
   fi
 
@@ -4159,7 +4171,6 @@ prepareInstallation() {
   local LimitsDatabaseFileName
   local LimitsManagerFileName
   local LimitsFilePermissions
-  local ControllerFileName
   local ServiceName
   local SystemdFileName
   local SystemdFilePermissions
@@ -4189,7 +4200,6 @@ prepareInstallation() {
   retrieveOption $? "$1" "$2" "$OPTION_LIMITS_DATABASE_FILE_NAME"             'Message' 'LimitsDatabaseFileName'
   retrieveOption $? "$1" "$2" "$OPTION_LIMITS_MANAGER_FILE_NAME"              'Message' 'LimitsManagerFileName'
   retrieveOption $? "$1" "$2" "$OPTION_LIMITS_FILE_PERMISSIONS"               'Message' 'LimitsFilePermissions'
-  retrieveOption $? "$1" "$2" "$OPTION_CONTROLLER_FILE_NAME"                  'Message' 'ControllerFileName'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE_NAME"                  'Message' 'ServiceName'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_FILE_NAME"                     'Message' 'SystemdFileName'
   retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_FILE_PERMISSIONS"              'Message' 'SystemdFilePermissions'
@@ -4554,8 +4564,9 @@ EOF
   #######################################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    local ControllerFileName=''
     echoSection "Creation of the ${DESCRIPTION_SYSTEMD_SERVICE}"
-    createControllerFile $? "$1" "$2" "$PRODUCT_ALL"
+    createControllerFile $Retcode "$1" "$2" "$PRODUCT_ALL" 'ControllerFileName'
     Retcode=$?
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       local SystemdContent=''
@@ -4575,8 +4586,8 @@ RemainAfterExit=true
 User=${User}
 Group=${Group}
 Restart=no
-ExecStart=/bin/bash ${ControllerFile} start
-ExecStop=/bin/bash ${ControllerFile} stop
+ExecStart=/bin/bash ${ControllerFileName} start
+ExecStop=/bin/bash ${ControllerFileName} stop
 
 [Install]
 WantedBy=multi-user.target
