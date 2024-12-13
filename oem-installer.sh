@@ -667,11 +667,11 @@ echoMessage() {
     if [[ -n "$Parameter1" ]] && [[ -n "$Parameter2" ]] ; then
       echoLog "${Prefix}${Tag}${Message^}:" "'${Parameter1}'" "(${Parameter2})"
     elif [[ -n "$Parameter2" ]] ; then
-      echoLog "${Prefix}${Tag}${Message^}" "(${Parameter2})"
+      echoLog "${Prefix}${Tag}${Message^} (${Parameter2})."
     elif [[ -n "$Parameter1" ]] ; then
       echoLog "${Prefix}${Tag}${Message^}:" "'${Parameter1}'"
     else
-      echoLog "${Prefix}${Tag}${Message^}"
+      echoLog "${Prefix}${Tag}${Message^}."
     fi
   fi
   return $RETCODE_SUCCESS
@@ -1727,8 +1727,11 @@ createControllerFile() {
   local AgentFileName=''
   local FilePermissions=''
   local StartCommand=''
+  local -a StartCommandParameters
   local StopCommand=''
+  local -a StopCommandParameters
   local StatusCommand=''
+  local -a StatusCommandParameters
   local Marker=''
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -1740,25 +1743,40 @@ createControllerFile() {
         retrieveOption $?       "$2" "$3" "$OPTION_AGENT_CONTROLLER_FILE_NAME"    'Message' 'AgentFileName'
         ;;
       "$PRODUCT_DATABASE")
-        StartCommand="bin/dbstart \\\${ORACLE_HOME}"
-        StopCommand="bin/dbshut \\\${ORACLE_HOME}"
-        StatusCommand="bin/lsnrctl status"
+        StartCommand='bin/dbstart'
+        StartCommandParameters+=("\\\${ORACLE_HOME}")
+        StopCommand='bin/dbshut'
+        StopCommandParameters+=("\\\${ORACLE_HOME}")
+        StatusCommand="bin/lsnrctl"
+        StatusCommandParameters+=('status')
         Marker='INSTALLATION_STEP_CONFIGURED'
         retrieveOption $Retcode "$2" "$3" "$OPTION_DATABASE_HOME_DIRECTORY_NAME"  'Message' 'HomeDirectoryName'
         retrieveOption $?       "$2" "$3" "$OPTION_DATABASE_CONTROLLER_FILE_NAME" 'Message' 'FileName'
         ;;
       "$PRODUCT_MANAGER")
-        StartCommand='bin/emctl start oms'
-        StopCommand='bin/emctl stop oms'
-        StatusCommand='bin/emctl status oms'
+        StartCommand='bin/emctl'
+        StartCommandParameters+=('start')
+        StartCommandParameters+=('oms')
+        StopCommand='bin/emctl'
+        StopCommandParameters+=('stop')
+        StopCommandParameters+=('oms')
+        StatusCommand='bin/emctl'
+        StatusCommandParameters+=('status')
+        StatusCommandParameters+=('oms')
         Marker='INSTALLATION_STEP_INSTALLED'
         retrieveOption $Retcode "$2" "$3" "$OPTION_MANAGER_HOME_DIRECTORY_NAME"  'Message' 'HomeDirectoryName'
         retrieveOption $?       "$2" "$3" "$OPTION_MANAGER_CONTROLLER_FILE_NAME" 'Message' 'FileName'
         ;;
       "$PRODUCT_AGENT")
-        StartCommand='bin/emctl start agent'
-        StopCommand='bin/emctl stop agent'
-        StatusCommand='bin/emctl status agent'
+        StartCommand='bin/emctl'
+        StartCommandParameters+=('start')
+        StartCommandParameters+=('agent')
+        StopCommand='bin/emctl'
+        StopCommandParameters+=('stop')
+        StopCommandParameters+=('agent')
+        StatusCommand='bin/emctl'
+        StatusCommandParameters+=('status')
+        StatusCommandParameters+=('agent')
         Marker='INSTALLATION_STEP_INSTALLED'
         retrieveOption $Retcode "$2" "$3" "$OPTION_AGENT_HOME_DIRECTORY_NAME"  'Message' 'HomeDirectoryName'
         retrieveOption $?       "$2" "$3" "$OPTION_AGENT_CONTROLLER_FILE_NAME" 'Message' 'FileName'
@@ -1786,20 +1804,24 @@ createControllerFile() {
 #echo '--------------------'
 #echo "createControllerFile (${Product})"
 #echo '--------------------'
-#echo "Retcode:               ${Retcode}"
-#echo "User:                  ${User}"
-#echo "Group:                 ${Group}"
-#echo "UserHomeDirectoryName: ${UserHomeDirectoryName}"
-#echo "HomeDirectoryName:     ${HomeDirectoryName}"
-#echo "FileName:              ${FileName}"
-#echo "DatabaseFileName:      ${DatabaseFileName}"
-#echo "ManagerFileName:       ${ManagerFileName}"
-#echo "AgentFileName:         ${AgentFileName}"
-#echo "FilePermissions:       ${FilePermissions}"
-#echo "StartCommand:          ${StartCommand}"
-#echo "StopCommand:           ${StopCommand}"
-#echo "StatusCommand:         ${StatusCommand}"
-#echo "Marker:                ${Marker}"
+#echo "Retcode:                 ${Retcode}"
+#echo "User:                    ${User}"
+#echo "UserDescription:         ${UserDescription}"
+#echo "Group:                   ${Group}"
+#echo "UserHomeDirectoryName:   ${UserHomeDirectoryName}"
+#echo "HomeDirectoryName:       ${HomeDirectoryName}"
+#echo "FileName:                ${FileName}"
+#echo "DatabaseFileName:        ${DatabaseFileName}"
+#echo "ManagerFileName:         ${ManagerFileName}"
+#echo "AgentFileName:           ${AgentFileName}"
+#echo "FilePermissions:         ${FilePermissions}"
+#echo "StartCommand:            ${StartCommand}"
+#echo "StartCommandParameters:  ${StartCommandParameters[@]}"
+#echo "StopCommand:             ${StopCommand}"
+#echo "StopCommandParameters:   ${StopCommandParameters[@]}"
+#echo "StatusCommand:           ${StatusCommand}"
+#echo "StatusCommandParameters: ${StatusCommandParameters[@]}"
+#echo "Marker:                  ${Marker}"
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$UserHomeDirectoryName" ]] && [[ -n "$FileName" ]] ; then
     local -r ControllerFileName="${UserHomeDirectoryName}/${FileName}"
@@ -1810,46 +1832,51 @@ createControllerFile() {
 
 # Created by ${PROGRAM} on $(date)
 
+declare Log=\"\"
 declare -i ExitCode=0
 
 if [[ 1 -ne \\\$# ]] ; then
-  echo \"[ERROR] Incorrect number of parameters (\\\$#).  Expected the parameters start, stop, status only.\"
+  Log=\"[ERROR] Incorrect number of parameters (\\\$#).  Expected the parameters start, stop, status only.\"
   ExitCode=1
 else
   case \"\\\$1\" in
     \"${COMMAND_START}\"|\"${COMMAND_STATUS}\")
       if [[ 0 -eq \\\$ExitCode ]] && [[ -x \"\\\${HOME}/${DatabaseFileName}\" ]] ; then
-        \"\\\${HOME}/${DatabaseFileName}\" \"\\\$1\"
+        Log=\$(\"\\\${HOME}/${DatabaseFileName}\" \"\\\$1\")
         ExitCode=\\\$?
       fi
       if [[ 0 -eq \\\$ExitCode ]] && [[ -x \"\\\${HOME}/${ManagerFileName}\" ]] ; then
-        \"\\\${HOME}/${ManagerFileName}\" \"\\\$1\"
+        Log=\$(\"\\\${HOME}/${ManagerFileName}\" \"\\\$1\")
         ExitCode=\\\$?
       fi
       if [[ 0 -eq \\\$ExitCode ]] && [[ -x \"\\\${HOME}/${AgentFileName}\" ]] ; then
-        \"\\\${HOME}/${AgentFileName}\" \"\\\$1\"
+        Log=\$(\"\\\${HOME}/${AgentFileName}\" \"\\\$1\")
         ExitCode=\\\$?
       fi
       ;;
     \"${COMMAND_STOP}\")
       if [[ 0 -eq \\\$ExitCode ]] && [[ -x \"\\\${HOME}/${AgentFileName}\" ]] ; then
-        \"\\\${HOME}/${AgentFileName}\" \"\\\$1\"
+        Log=\$(\"\\\${HOME}/${AgentFileName}\" \"\\\$1\")
         ExitCode=\\\$?
       fi
       if [[ 0 -eq \\\$ExitCode ]] && [[ -x \"\\\${HOME}/${ManagerFileName}\" ]] ; then
-        \"\\\${HOME}/${ManagerFileName}\" \"\\\$1\"
+        Log=\$(\"\\\${HOME}/${ManagerFileName}\" \"\\\$1\")
         ExitCode=\\\$?
       fi
       if [[ 0 -eq \\\$ExitCode ]] && [[ -x \"\\\${HOME}/${DatabaseFileName}\" ]] ; then
-        \"\\\${HOME}/${DatabaseFileName}\" \"\\\$1\"
+        Log=\$(\"\\\${HOME}/${DatabaseFileName}\" \"\\\$1\")
         ExitCode=\\\$?
       fi
       ;;
     *)
-      echo \"[ERROR] Invalid command: \\\${1}\"
+      Log=\"[ERROR] Invalid command: \\\${1}\"
       ExitCode=1
       ;;
   esac
+fi
+
+if [[ 0 -ne \\\$ExitCode ]] ; then
+  echo \"\${Log}\"
 fi
 
 exit \\\$ExitCode
@@ -1865,38 +1892,30 @@ export PATH=\"\\\${ORACLE_HOME}/bin:/usr/local/bin:\\\${PATH}\"
 export LD_LIBRARY_PATH=\"\\\${ORACLE_HOME}/lib:/lib:/usr/lib\"
 export CLASSPATH=\"\\\${ORACLE_HOME}/jlib:\\\${ORACLE_HOME}/rdbms/jlib\"
 
-declare Log=\"\"
-declare -i ExitCode=0
-
 if [[ 1 -ne \\\$# ]] ; then
-  Log=\"[ERROR] Incorrect number of parameters (\\\$#).  Expected the parameters ${COMMAND_START}, ${COMMAND_STOP}, ${COMMAND_STATUS} only.\"
-  ExitCode=1
+  echo \"[ERROR] Incorrect number of parameters (\\\$#).  Expected the parameters ${COMMAND_START}, ${COMMAND_STOP}, ${COMMAND_STATUS} only.\"
+  exit 1
 elif [[ \"${COMMAND_START}\" = \"\\\$1\" ]] ; then
   declare -r Command=\"\\\${ORACLE_HOME}/${StartCommand}\"
+  declare -r -a Parameters=(${StartCommandParameters[@]})
 elif [[ \"${COMMAND_STOP}\" = \"\\\$1\" ]] ; then
   declare -r Command=\"\\\${ORACLE_HOME}/${StopCommand}\"
+  declare -r -a Parameters=(${StopCommandParameters[@]})
 elif [[ \"${COMMAND_STATUS}\" = \"\\\$1\" ]] ; then
   declare -r Command=\"\\\${ORACLE_HOME}/${StatusCommand}\"
+  declare -r -a Parameters=(${StatusCommandParameters[@]})
 else
-  Log=\"[ERROR] Invalid command: \\\${1}\"
-  ExitCode=1
+  echo \"[ERROR] Invalid command: \\\${1}\"
+  exit 1
 fi
 
-if [[ 0 -eq \\\$ExitCode ]] ; then
-  if [[ -f "\\\${ORACLE_HOME}/${Marker}" ]] && [[ -n \"\\\$Command\" ]] && [[ -x \"\\\$Command\" ]] ; then
-    Log=\\\$(\\\$Command)
-    ExitCode=\\\$?
-  else
-    Log=\"[ERROR] The ${PRODUCT_DESCRIPTIONS[${Product}]} is not installed: \\\${ORACLE_HOME}\"
-    ExitCode=1
-  fi
+if [[ -f "\\\${ORACLE_HOME}/${Marker}" ]] && [[ -n \"\\\$Command\" ]] && [[ -x \"\\\$Command\" ]] ; then
+  \\\$Command \"\\\${Parameters[@]}\"
+  exit \\\$?
+else
+  echo \"[ERROR] The ${PRODUCT_DESCRIPTIONS[${Product}]} is not installed: \\\${ORACLE_HOME}\"
+  exit 1
 fi
-
-if [[ 0 -ne \\\$ExitCode ]] ; then
-  echo \"\\\$Log\"
-fi
-
-exit \\\$ExitCode
 EOF
     fi
     local -r ControllerContent
@@ -3092,11 +3111,12 @@ uninstallDatabase() {
   ### Delete any remaining files. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoInfo "deleting the files and directories left behind by the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} installation"
     deleteFile "${DESCRIPTION_DATABASE_HOME_DIRECTORY} environment selector" '/usr/local/bin/dbhome'
     deleteFile "C Shell environment conditioner for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}" '/usr/local/bin/coraenv'
     deleteFile "Bourne Shell environment conditioner for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}" '/usr/local/bin/oraenv'
     deleteFile 'oratab file' "$ORATAB_FILE_NAME"
-    deleteFile 'Oracle installation inventory pointer file' '/etc/oraInst.loc'
+    deleteFile 'Oracle installation inventory pointer file' "$ORAINST_FILE_NAME"
     deleteDirectory "${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} file mapping" '/opt/ORCLfmap'
   fi
 
@@ -4757,46 +4777,46 @@ fi
 case "$COMMAND" in
   "$COMMAND_PREPARE")
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      echoInfo "System preparation successful: ${Retcode}"
+      echoInfo 'system preparation successful' '' $Retcode
     else
-      echoInfo "System preparation failed: ${Retcode}"
+      echoInfo 'system preparation failed' '' $Retcode
     fi
     ;;
   "$COMMAND_PROVISION")
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      echoInfo "Provisioning successful: ${Retcode}"
+      echoInfo 'provisioning successful' '' $Retcode
     else
-      echoInfo "Provisioning failed: ${Retcode}"
+      echoInfo 'provisioning failed' '' $Retcode
     fi
     ;;
   "$COMMAND_INSTALL")
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      echoInfo "Installation successful: ${Retcode}"
+      echoInfo 'installation successful' '' $Retcode
       if [[ -z "$COMMAND_TARGET" ]] || [[ "$PRODUCT_DATABASE" == "$COMMAND_TARGET" ]] ; then
-        echoInfo "Environment variables for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
+        echoInfo "environment variables for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
         echoInfo "ORACLE_BASE=${OptionValues[${OPTION_DATABASE_BASE_DIRECTORY_NAME}]}"
         echoInfo "ORACLE_HOME=${OptionValues[${OPTION_DATABASE_HOME_DIRECTORY_NAME}]}"
       fi
       if [[ -z "$COMMAND_TARGET" ]] || [[ "$PRODUCT_MANAGER" == "$COMMAND_TARGET" ]] ; then
-        echoInfo "Environment variables for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+        echoInfo "environment variables for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
         echoInfo "ORACLE_BASE=${OptionValues[${OPTION_MANAGER_BASE_DIRECTORY_NAME}]}"
         echoInfo "ORACLE_HOME=${OptionValues[${OPTION_MANAGER_HOME_DIRECTORY_NAME}]}"
       fi
     else
-      echoInfo "Installation failed: ${Retcode}"
+      echoInfo 'Installation failed' '' $Retcode
     fi
     ;;
   "$COMMAND_UNINSTALL")
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      echoInfo "Uninstallation successful: ${Retcode}"
+      echoInfo 'uninstallation successful' '' $Retcode
     else
-      echoInfo "Uninstallation failed: ${Retcode}"
+      echoInfo 'uninstallation failed' '' $Retcode
     fi
     ;;
   *)
     ;;
 esac
 
-echoInfo "Log file: ${LogFile}"
+echoInfo 'Log file' "$LogFile"
 
 exit $Retcode
