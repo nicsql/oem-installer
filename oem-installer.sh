@@ -257,14 +257,16 @@ declare -r -i HELP_PADDING_LENGTH
 
 declare -r -i OPTION_SOURCE_UNSET=0
 declare -r -i OPTION_SOURCE_PROGRAM=1
-declare -r -i OPTION_SOURCE_COMMAND=$((OPTION_SOURCE_PROGRAM * 2))
-declare -r -i OPTION_SOURCE_FILE=$((OPTION_SOURCE_COMMAND * 2))
-declare -r -i OPTION_SOURCE_BOTH=$((OPTION_SOURCE_COMMAND + $OPTION_SOURCE_FILE))
-declare -r -i OPTION_SOURCE_ALL=$((OPTION_SOURCE_PROGRAM + $OPTION_SOURCE_BOTH))
+declare -r -i OPTION_SOURCE_COMMAND=$((OPTION_SOURCE_PROGRAM * 2))   # 2
+declare -r -i OPTION_SOURCE_FILE=$((OPTION_SOURCE_COMMAND * 2))      # 4
+declare -r -i OPTION_SOURCE_INSTALLATION=$((OPTION_SOURCE_FILE * 2)) # 8
+declare -r -i OPTION_SOURCE_BOTH=$((OPTION_SOURCE_COMMAND + $OPTION_SOURCE_FILE)) # 6
+declare -r -i OPTION_SOURCE_ALL=$((OPTION_SOURCE_PROGRAM + $OPTION_SOURCE_COMMAND + $OPTION_SOURCE_FILE + $OPTION_SOURCE_INSTALLATION)) # 15
 declare -r -a OPTION_SOURCE_NAMES=(
   [$OPTION_SOURCE_PROGRAM]='program'
   [$OPTION_SOURCE_COMMAND]='command'
   [$OPTION_SOURCE_FILE]='file'
+  [$OPTION_SOURCE_INSTALLATION]='installation'
 )
 
 declare -r -A -i OPTION_SOURCES=(
@@ -380,8 +382,8 @@ declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_DATABASE_RESPONSE_FILE_NAME"]='/tmp/db_install.rsp'
   ["$OPTION_DATABASE_BASE_DIRECTORY_NAME"]="${DEFAULT_BASE_APPLICATIONS_DIRECTORY_NAME}/${PRODUCT_DATABASE}"
   ["$OPTION_DATABASE_HOME_DIRECTORY_NAME"]="${DEFAULT_BASE_APPLICATIONS_DIRECTORY_NAME}/${PRODUCT_DATABASE}/product/${DEFAULT_DATABASE_VERSION}"
-  ["$OPTION_DATABASE_DATA_DIRECTORY_NAME"]="${DEFAULT_BASE_DATA_DIRECTORY_NAME}/${DEFAULT_DATABASE_NAME}"
-  ["$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"]="${DEFAULT_BASE_RECOVERY_DIRECTORY_NAME}/${DEFAULT_DATABASE_NAME}"
+  ["$OPTION_DATABASE_DATA_DIRECTORY_NAME"]="${DEFAULT_BASE_DATA_DIRECTORY_NAME}/${PRODUCT_DATABASE}/${DEFAULT_DATABASE_NAME}"
+  ["$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"]="${DEFAULT_BASE_RECOVERY_DIRECTORY_NAME}/${PRODUCT_DATABASE}/${DEFAULT_DATABASE_NAME}"
   ["$OPTION_DATABASE_NAME"]="$DEFAULT_DATABASE_NAME"
   ["$OPTION_DATABASE_HOSTNAME"]="$DEFAULT_HOSTNAME"
   ["$OPTION_DATABASE_PORT"]='1521'
@@ -580,8 +582,8 @@ declare -r -i RETCODE_INTERNAL_ERROR=100
 # Installation information files #
 ##################################
 
-declare -r INSTALLATION_INFORMATION='INSTALLATION.txt'
-declare -r DESCRIPTION_INSTALLATION_INFORMATION='installation configuration information file'
+declare -r INSTALLATION_INFORMATION_FILE_NAME='INSTALLATION.txt'
+declare -r DESCRIPTION_INSTALLATION_INFORMATION_FILE='installation configuration information file'
 declare -r INSTALLATION_STEP_EXTRACTED='INSTALLATION_STEP_EXTRACTED'
 declare -r INSTALLATION_STEP_PROVISIONED='INSTALLATION_STEP_PROVISIONED'
 declare -r INSTALLATION_STEP_INSTALLED='INSTALLATION_STEP_INSTALLED'
@@ -639,7 +641,7 @@ getSourceName() {
     echo "${OPTION_SOURCE_NAMES[${OPTION_SOURCE_COMMAND}]}, ${OPTION_SOURCE_NAMES[${OPTION_SOURCE_FILE}]}, ${OPTION_SOURCE_NAMES[${OPTION_SOURCE_PROGRAM}]}"
   elif [[ $OPTION_SOURCE_BOTH -eq $Source ]] ; then
     echo "${OPTION_SOURCE_NAMES[${OPTION_SOURCE_COMMAND}]}, ${OPTION_SOURCE_NAMES[${OPTION_SOURCE_FILE}]}"
-  elif [[ $OPTION_SOURCE_COMMAND -eq $Source ]] || [[ $OPTION_SOURCE_FILE -eq $Source ]] || [[ $OPTION_SOURCE_PROGRAM -eq $Source ]] ; then
+  elif [[ $OPTION_SOURCE_COMMAND -eq $Source ]] || [[ $OPTION_SOURCE_FILE -eq $Source ]] || [[ $OPTION_SOURCE_PROGRAM -eq $Source ]] || [[ $OPTION_SOURCE_INSTALLATION -eq $Source ]] ; then
     echo "${OPTION_SOURCE_NAMES[${Source}]}"
   else
     echo
@@ -997,6 +999,27 @@ executeCommandOutput() {
 }
 
 ################################################################################
+## @fn executeSudoShellCommand
+##
+## @brief Execute sudo with a shell command.
+##
+## @param[in] User    The system user with which to execute sudo.
+## @param[in] Group   The system group with which to execute sudo.
+## @param[in] Command The command to execute in the shell.  The command should
+##                    not contain any double-quotes.
+##
+## @return The return code of the function execution.
+################################################################################
+executeSudoShellCommand() {
+  local -r User="${1:-root}"
+  local -r Group="${2:-root}"
+  local -r Command="${3:-root}"
+  echoCommand 'sudo' '-u' "${User}" '-g' "${Group}" 'sh' '-c' "$Command"
+  ( sudo -u "${User}" -g "${Group}" 'sh' '-c' "$Command" ) 2>&1 | tee -a "$LogFile"
+  return $?
+}
+
+################################################################################
 ## @fn processCommandCode
 ##
 ## @brief Process the exit code of a command and display the message if the exit
@@ -1108,6 +1131,7 @@ setOption() {
 ##                        the program option values.
 ## @param[in,out] Values  The name of the variable that contains the program
 ##                        option values.
+## @param[in]     Source  An optional source for any option read from the file.
 ##
 ## @return The value of the parameter Retcode if it denotes an error, or
 ##         otherwise the return code of the function execution.
@@ -1116,8 +1140,9 @@ processOptionsFile() {
   local DummmyMessage=''
   local -i Retcode=${1:-$RETCODE_SUCCESS}
   local -r MessageName="${2:-DummmyMessage}"
-  local -r SourcesName="$3"
-  local -r ValuesName="$4"
+  local -n SourcesName="$3"
+  local -n ValuesName="$4"
+  local -r -i Source=${5:-$OPTION_SOURCE_FILE}
   local -n _Message="$MessageName"
   local -n _Sources="$SourcesName"
   local -n _Values="$ValuesName"
@@ -1156,7 +1181,7 @@ processOptionsFile() {
   while IFS='=' read -r Option Value
   do
     if [[ -n "$Option" ]] ; then
-      setOption $Retcode "$MessageName" "$SourcesName" "$ValuesName" $OPTION_SOURCE_FILE "$Option" "$Value" "${File}:${Line}"
+      setOption $Retcode "$MessageName" "$SourcesName" "$ValuesName" $Source "$Option" "$Value" "${File}:${Line}"
       Retcode=$?
     elif [[ -n "$Value" ]] ; then
       _Message=$(echoError $RETCODE_PARAMETER_ERROR 'Unexpected value' "$Value" "${File}:${Line}")
@@ -1172,6 +1197,59 @@ processOptionsFile() {
 }
 
 ################################################################################
+## @fn processInstallationOptionsFile
+##
+## @brief Read and process the program options in the home directory found
+##        the provided array of values.
+##
+## @param[in]  Retcode       A return code that causes the function to return
+##                           immediately when the code denotes an error.  The
+##                           default value of this parameter is RETCODE_SUCCESS.
+## @param[out] Message       A message when an error has occurred while
+##                           processing the program option.
+## @param[in]  InputSources  The sources relative to the the option for the home
+##                           directory that contains the installation options
+##                           file to read.
+## @param[in]  InputValues   The array of values that contain the name of the
+##                           home directory that contains the installation
+##                           options file to read.
+## @param[out] OutputSources The name of the variable that contains the sources of
+##                           the program option values.
+## @param[out] OutputValues  The name of the variable that contains the program
+##                           option values.
+## @param[in]     Source  An optional source for any option read from the file.
+##
+## @return The value of the parameter Retcode if it denotes an error, or
+##         otherwise the return code of the function execution.
+################################################################################
+processInstallationOptionsFile() {
+  local InstallationFileMessageDummy=''
+  local -i Retcode=${1:-$RETCODE_SUCCESS}
+  local -n _InstallationMessage="${2:-InstallationFileMessageDummy}"
+  local -n _InputSources="$2"
+  local -n _InputValues="$3"
+  local -n _OutputSources="$5"
+  local -n _OutputValues="$6"
+  local -r HomeDirectoryNameOption="${7:-}"
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    local HomeDirectoryName=''
+    retrieveOption $? '_InputSources' '_InputValues' '' '' "$HomeDirectoryNameOption" '_InstallationMessage' 'HomeDirectoryName'
+    Retcode=$?
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$HomeDirectoryName" ]] ; then
+      _OutputSources["$OPTION_FILE_NAME"]="$OPTION_SOURCE_PROGRAM"
+      _OutputValues["$OPTION_FILE_NAME"]="${HomeDirectoryName}/${INSTALLATION_INFORMATION_FILE_NAME}"
+      _OutputSources["$HomeDirectoryName"]=_InputSources["$HomeDirectoryName"]
+      _OutputValues["$HomeDirectoryName"]="$HomeDirectoryName"
+      processOptionsFile $Retcode '_InstallationMessage' '_OutputSources' ''_OutputValues $OPTION_SOURCE_INSTALLATION
+      Retcode=$?
+    fi
+  fi
+  readonly InstallationSources
+  readonly InstallationValues
+  return $Retcode
+}
+
+################################################################################
 ## @fn retrieveOption
 ##
 ## @brief Retrieve the value and, optionally, the description of a program
@@ -1180,10 +1258,14 @@ processOptionsFile() {
 ## @param[in]  Retcode     A return code that causes the function to return
 ##                         immediately when the code denotes an error.  The
 ##                         default value of this parameter is RETCODE_SUCCESS.
-## @param[in]  Sources     The name of the variable that contains the sources of
+## @param[in]  Sources1    The name of the variable that contains the sources of
 ##                         the program option values.
-## @param[in]  Values      The name of the variable that contains the program
+## @param[in]  Values1     The name of the variable that contains the program
 ##                         option values.
+## @param[in]  Sources2    The name of an optional variable that is processed
+##                         in priority of Sources1.
+## @param[in]  Values2     The name of an optional variable that is processed
+##                         in priority of Values1
 ## @param[in]  Option      The option.
 ## @param[out] Message     A message when an error has occurred during the
 ##                         function execution.
@@ -1200,23 +1282,33 @@ processOptionsFile() {
 ################################################################################
 retrieveOption() {
   local MessageDummy=''
+  local -r -A SourcesDummy1=()
+  local -r -A ValuesDummy1=()
+  local -r -A SourcesDummy2=()
+  local -r -A ValuesDummy2=()
   local ValueDummy=''
   local DescriptionDummy=''
   local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -n _RetrieveSources="$2"
-  local -n _RetrieveValues="$3"
-  local -r Option="${4:-${OPTION_UNKNOWN}}"
-  local -n _RetrieveMessage="${5:-MessageDummy}"
-  local -n _Value="${6:-ValueDummy}"
-  local -n _Description="${7:-DescriptionDummy}"
+  local -n _RetrieveSources1="${2:-SourcesDummy1}"
+  local -n _RetrieveValues1="${3:-ValuesDummy1}"
+  local -n _RetrieveSources2="${4:-SourcesDummy2}"
+  local -n _RetrieveValues2="${5:-ValuesDummy2}"
+  local -r Option="${6:-${OPTION_UNKNOWN}}"
+  local -n _RetrieveMessage="${7:-MessageDummy}"
+  local -n _Value="${8:-ValueDummy}"
+  local -n _Description="${9:-DescriptionDummy}"
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     if [[ -z "$Option" ]] || [[ "$OPTION_UNKNOWN" == "$Option" ]] ; then
-      _RetrieveMessage=$(echoError $RETCODE_INTERNAL_ERROR 'option not provided')
+      _RetrieveMessage=$(echoError $RETCODE_INTERNAL_ERROR 'option not provided' "$Option")
       Retcode=$?
     else
-      local -i Source="${_RetrieveSources[${Option}]}"
-      _Value="${_RetrieveValues[${Option}]}"
+      local -i Source="${_RetrieveSources2[${Option}]}"
+      _Value="${_RetrieveValues2[${Option}]}"
       _Description="${OPTION_DESCRIPTIONS[${Option}]}"
+      if [[ -z "$_Value" ]] ; then
+        Source="${_RetrieveSources1[${Option}]}"
+        _Value="${_RetrieveValues1[${Option}]}"
+      fi
       if [[ -z "$_Value" ]] ; then
         if [[ -z "${OPTIONS_OPTIONAL[${Option}]}" ]] ; then
           _RetrieveMessage=$(echoError $RETCODE_INTERNAL_ERROR 'value not provided for option' "$Option")
@@ -1240,6 +1332,7 @@ retrieveOption() {
 ##
 ## @param[out] HomeDirectoryName The name of the home directory.
 ## @param[in]  User              The system user that owns the home directory to
+##                               retrieve.
 ## @param[in]  UserDescription   The description of the system user.
 ##
 ## @return The return code of the function execution.
@@ -1774,10 +1867,10 @@ createControllerFile() {
     case "$Product" in
       "$PRODUCT_ALL")
         ControllerFileDescription="$DESCRIPTION_CONTROLLER_FILE"
-        retrieveOption $Retcode "$2" "$3" "$OPTION_CONTROLLER_FILE_NAME"          'Message' 'FileName'
-        retrieveOption $?       "$2" "$3" "$OPTION_DATABASE_CONTROLLER_FILE_NAME" 'Message' 'DatabaseFileName'
-        retrieveOption $?       "$2" "$3" "$OPTION_MANAGER_CONTROLLER_FILE_NAME"  'Message' 'ManagerFileName'
-        retrieveOption $?       "$2" "$3" "$OPTION_AGENT_CONTROLLER_FILE_NAME"    'Message' 'AgentFileName'
+        retrieveOption $Retcode "$2" "$3" '' '' "$OPTION_CONTROLLER_FILE_NAME"          'Message' 'FileName'
+        retrieveOption $?       "$2" "$3" '' '' "$OPTION_DATABASE_CONTROLLER_FILE_NAME" 'Message' 'DatabaseFileName'
+        retrieveOption $?       "$2" "$3" '' '' "$OPTION_MANAGER_CONTROLLER_FILE_NAME"  'Message' 'ManagerFileName'
+        retrieveOption $?       "$2" "$3" '' '' "$OPTION_AGENT_CONTROLLER_FILE_NAME"    'Message' 'AgentFileName'
         ;;
       "$PRODUCT_DATABASE")
         ControllerFileDescription="$DESCRIPTION_DATABASE_CONTROLLER_FILE"
@@ -1788,8 +1881,8 @@ createControllerFile() {
         StatusCommand="bin/lsnrctl"
         StatusCommandParameters+=('status')
         Marker='INSTALLATION_STEP_CONFIGURED'
-        retrieveOption $Retcode "$2" "$3" "$OPTION_DATABASE_HOME_DIRECTORY_NAME"  'Message' 'HomeDirectoryName'
-        retrieveOption $?       "$2" "$3" "$OPTION_DATABASE_CONTROLLER_FILE_NAME" 'Message' 'FileName'
+        retrieveOption $Retcode "$2" "$3" '' '' "$OPTION_DATABASE_HOME_DIRECTORY_NAME"  'Message' 'HomeDirectoryName'
+        retrieveOption $?       "$2" "$3" '' '' "$OPTION_DATABASE_CONTROLLER_FILE_NAME" 'Message' 'FileName'
         ;;
       "$PRODUCT_MANAGER")
         ControllerFileDescription="$DESCRIPTION_MANAGER_CONTROLLER_FILE"
@@ -1803,8 +1896,8 @@ createControllerFile() {
         StatusCommandParameters+=('status')
         StatusCommandParameters+=('oms')
         Marker='INSTALLATION_STEP_INSTALLED'
-        retrieveOption $Retcode "$2" "$3" "$OPTION_MANAGER_HOME_DIRECTORY_NAME"  'Message' 'HomeDirectoryName'
-        retrieveOption $?       "$2" "$3" "$OPTION_MANAGER_CONTROLLER_FILE_NAME" 'Message' 'FileName'
+        retrieveOption $Retcode "$2" "$3" '' '' "$OPTION_MANAGER_HOME_DIRECTORY_NAME"  'Message' 'HomeDirectoryName'
+        retrieveOption $?       "$2" "$3" '' '' "$OPTION_MANAGER_CONTROLLER_FILE_NAME" 'Message' 'FileName'
         ;;
       "$PRODUCT_AGENT")
         ControllerFileDescription="$DESCRIPTION_AGENT_CONTROLLER_FILE"
@@ -1818,16 +1911,16 @@ createControllerFile() {
         StatusCommandParameters+=('status')
         StatusCommandParameters+=('agent')
         Marker='INSTALLATION_STEP_INSTALLED'
-        retrieveOption $Retcode "$2" "$3" "$OPTION_AGENT_HOME_DIRECTORY_NAME"  'Message' 'HomeDirectoryName'
-        retrieveOption $?       "$2" "$3" "$OPTION_AGENT_CONTROLLER_FILE_NAME" 'Message' 'FileName'
+        retrieveOption $Retcode "$2" "$3" '' '' "$OPTION_AGENT_HOME_DIRECTORY_NAME"  'Message' 'HomeDirectoryName'
+        retrieveOption $?       "$2" "$3" '' '' "$OPTION_AGENT_CONTROLLER_FILE_NAME" 'Message' 'FileName'
         ;;
       *)
         Message=$(echoError $RETCODE_INTERNAL_ERROR 'invalid product' "$Product")
         ;;
     esac
 
-    retrieveOption $? "$2" "$3" "$OPTION_INSTALLATION_USER"  'Message' 'User' 'UserDescription'
-    retrieveOption $? "$2" "$3" "$OPTION_INSTALLATION_GROUP" 'Message' 'Group'
+    retrieveOption $? "$2" "$3" '' '' "$OPTION_INSTALLATION_USER"  'Message' 'User' 'UserDescription'
+    retrieveOption $? "$2" "$3" '' '' "$OPTION_INSTALLATION_GROUP" 'Message' 'Group'
     Retcode=$?
 
     if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
@@ -2459,6 +2552,8 @@ updatePatcher() {
 ## @return The return code of the function execution.
 ################################################################################
 installDatabase() {
+  local -A InstallationSources=()
+  local -A InstallationValues=()
   local Message=''
   local PatchesDirectoryName=''
   local InventoryDirectoryName=''
@@ -2478,22 +2573,31 @@ installDatabase() {
   local Password=''
   local ServiceName=''
   echoTitle "installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
-  retrieveOption $? "$1" "$2" "$OPTION_PATCHES_DIRECTORY_NAME"                'Message' 'PatchesDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY_DIRECTORY_NAME" 'Message' 'InventoryDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                     'Message' 'User' 'UserDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                    'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"      'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RESPONSE_FILE_NAME"           'Message' 'ResponseFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_BASE_DIRECTORY_NAME"          'Message' 'BaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME_DIRECTORY_NAME"          'Message' 'HomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_DATA_DIRECTORY_NAME"          'Message' 'DataDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"      'Message' 'RecoveryDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                         'Message' 'DatabaseName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOSTNAME"                     'Message' 'HostName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME"     'Message' 'DBAGroupName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"                     'Message' 'Password'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE_NAME"                  'Message' 'ServiceName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_HOME_DIRECTORY_NAME" 'Message' 'HomeDirectoryName'
   local -i Retcode=$?
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$HomeDirectoryName" ]] ; then
+    InstallationSources["$OPTION_FILE_NAME"]="$OPTION_SOURCE_PROGRAM"
+    InstallationValues["$OPTION_FILE_NAME"]="${HomeDirectoryName}/${INSTALLATION_INFORMATION_FILE_NAME}"
+    processOptionsFile $Retcode 'Message' 'InstallationSources' 'InstallationValues' $OPTION_SOURCE_INSTALLATION
+    Retcode=$?
+  fi
+  readonly InstallationSources
+  readonly InstallationValues
+  retrieveOption $Retcode "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_PATCHES_DIRECTORY_NAME"            'Message' 'PatchesDirectoryName'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_INVENTORY_DIRECTORY_NAME"          'Message' 'InventoryDirectoryName'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_INSTALLATION_USER"                 'Message' 'User' 'UserDescription'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_INSTALLATION_GROUP"                'Message' 'Group'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"  'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_RESPONSE_FILE_NAME"       'Message' 'ResponseFileName'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_BASE_DIRECTORY_NAME"      'Message' 'BaseDirectoryName'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_DATA_DIRECTORY_NAME"      'Message' 'DataDirectoryName'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"  'Message' 'RecoveryDirectoryName'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_NAME"                     'Message' 'DatabaseName'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_HOSTNAME"                 'Message' 'HostName'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME" 'Message' 'DBAGroupName'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_PASSWORD"                 'Message' 'Password'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_SYSTEMD_SERVICE_NAME"              'Message' 'ServiceName'
+  Retcode=$?
   local -r InventoryInstaller="${InventoryDirectoryName}/orainstRoot.sh"
   local -r InventoryInstallerDescription='Oracle Inventory root installer program'
   local -r DatabaseInstaller="${HomeDirectoryName}/runInstaller"
@@ -2519,17 +2623,15 @@ installDatabase() {
     Retcode=$?
   fi
 
-  ###########################################################################
-  # Generation of the Oracle Database automated installation response file. #
-  ###########################################################################
+  ########################################
+  # Installation of the Oracle Database. #
+  ########################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "generation of the ${DESCRIPTION_DATABASE_RESPONSE_FILE}"
-  fi
+    echoSection "installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
 
-  ### Generate the response file. ###
+    ### Generation of the Oracle Database automated installation response file. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalled" '-a' '-f' "$MarkerConfigured"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already installed and configured" "$HomeDirectoryName"
@@ -2574,90 +2676,47 @@ EOF
       createFile $Retcode "$User" "$Group" '' "$DESCRIPTION_DATABASE_RESPONSE_FILE" "$ResponseFileName" 'FileContent' $VALUE_TRUE 'bResponseCreated'
       Retcode=$?
     fi
-  fi
 
-  ########################################
-  # Installation of the Oracle Database. #
-  ########################################
+    ### Install the Oracle Database. ###
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
-  fi
-
-  ### Change the current working directory to the Oracle Database home directory. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if [[ ! -d "$HomeDirectoryName" ]] || [[ ! -x "$HomeDirectoryName" ]] ; then
-      echoError $RETCODE_OPERATION_ERROR "the ${DESCRIPTION_DATABASE_HOME_DIRECTORY} does not exist or is inaccessible" "$HomeDirectoryName"
-    else
-      echoCommand 'cd' "$HomeDirectoryName"
-      cd "$HomeDirectoryName"
-      processCommandCode $? "failed to change the current working directory to the ${DESCRIPTION_DATABASE_HOME_DIRECTORY}" "$HomeDirectoryName"
-    fi
-    Retcode=$?
-  fi
-
-  ### Export the ORACLE_HOME environment variable. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoCommand 'export' "ORACLE_HOME=${HomeDirectoryName}"
-    export ORACLE_HOME="$HomeDirectoryName"
-    processCommandCode $? "failed to export the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} environment variable ORACLE_HOME" "$HomeDirectoryName"
-    Retcode=$?
-  fi
-
-  ### Export the LD_LIBRARY_PATH environment variable. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoCommand 'export' "LD_LIBRARY_PATH=${HomeDirectoryName}/lib:${LD_LIBRARY_PATH}"
-    export LD_LIBRARY_PATH="${HomeDirectoryName}/lib:${LD_LIBRARY_PATH}"
-    processCommandCode $? "failed to export the environment variable LD_LIBRARY_PATH" "$LD_LIBRARY_PATH"
-    Retcode=$?
-  fi
-
-  ### Export the CV_ASSUME_DISTID environment variable to enable installing on Oracle Linux 8 and 9. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    local -r CV_ASSUME_DISTID_VALUE='OEL8'
-    echoCommand 'export' "CV_ASSUME_DISTID=${CV_ASSUME_DISTID_VALUE}"
-    export CV_ASSUME_DISTID="$CV_ASSUME_DISTID_VALUE"
-    processCommandCode $? "failed to export the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} environment variable CV_ASSUME_DISTID" "$CV_ASSUME_DISTID_VALUE"
-    Retcode=$?
-  fi
-
-  ### Install the Oracle Database. ###
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalled"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already installed" "$HomeDirectoryName"
-    else
-      echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been installed" "$HomeDirectoryName"
-      if [[ -n "$UpgradePatchFileName" ]] ; then
-        determinePatchNumber 'PatchNumber' "$UpgradePatchFileName" "$UpgradePatchFileNameDescription"
-        Retcode=$?
-      fi
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        echoInfo "installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} with a ${DESCRIPTION_DATABASE_RESPONSE_FILE}" "$ResponseFileName"
-        if [[ -n "$PatchNumber" ]] ; then
-          executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$ResponseFileName" '-applyRU' "${PatchesDirectoryName}/${PatchNumber}"
-        else
-          executeCommand 'sudo' '-E' '-u' "$User" '-g' "$Group" "${DatabaseInstaller}" '-silent' '-responseFile' "$ResponseFileName"
-        fi
-        processCommandCode $? "an error occurred when running the ${DatabaseInstallerDescription}" "$DatabaseInstaller"
-        Retcode=$?
-        if [[ -n "$PatchNumber" ]] ; then
-          createMarkerFile $Retcode "$User" "$Group" "${HomeDirectoryName}/${INSTALLATION_STEP_PATCHED}_${PatchNumber}"
+    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalled"
+      if [[ 0 -eq $? ]] ; then
+        echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} is already installed" "$HomeDirectoryName"
+      else
+        echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been installed" "$HomeDirectoryName"
+        if [[ -n "$UpgradePatchFileName" ]] ; then
+          determinePatchNumber 'PatchNumber' "$UpgradePatchFileName" "$UpgradePatchFileNameDescription"
           Retcode=$?
         fi
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          bInstalled
-          createMarkerFile $Retcode "$User" "$Group" "$MarkerInstalled"
+          echoInfo "installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} with a ${DESCRIPTION_DATABASE_RESPONSE_FILE}" "$ResponseFileName"
+          if [[ -n "$PatchNumber" ]] ; then
+            local -r PatchParameter="-applyRU '${PatchesDirectoryName}/${PatchNumber}'"
+          else
+            local -r PatchParameter=''
+          fi
+          executeSudoShellCommand "$User" "$Group" "( export ORACLE_HOME='${HomeDirectoryName}'; export CV_ASSUME_DISTID='OEL8'; export LD_LIBRARY_PATH='${HomeDirectoryName}/lib:\${LD_LIBRARY_PATH}'; cd '$HomeDirectoryName'; ${DatabaseInstaller} -silent -responseFile '$ResponseFileName' ${PatchParameter} )"
+#          local -r CV_ASSUME_DISTID_VALUE='OEL8'
+#          echoCommand 'sudo' '-u' "$User" '-g' "$Group" 'sh' '-c' "\"( export ORACLE_HOME='${HomeDirectoryName}'; export CV_ASSUME_DISTID='${CV_ASSUME_DISTID_VALUE}'; export LD_LIBRARY_PATH='${HomeDirectoryName}/lib:${LD_LIBRARY_PATH}'; cd '$HomeDirectoryName'; ${DatabaseInstaller} -silent -responseFile '$ResponseFileName' ${PatchParameter} )\""
+ #         ( sudo '-u' "$User" '-g' "$Group" 'sh' '-c' "( export ORACLE_HOME='${HomeDirectoryName}'; export CV_ASSUME_DISTID='${CV_ASSUME_DISTID_VALUE}'; export LD_LIBRARY_PATH='${HomeDirectoryName}/lib:${LD_LIBRARY_PATH}'; cd '$HomeDirectoryName'; ${DatabaseInstaller} -silent -responseFile '$ResponseFileName' ${PatchParameter} )" ) | tee -a "$LogFile"
+          processCommandCode $? "an error occurred when running the ${DatabaseInstallerDescription}" "$DatabaseInstaller"
           Retcode=$?
+          if [[ -n "$PatchNumber" ]] ; then
+            createMarkerFile $Retcode "$User" "$Group" "${HomeDirectoryName}/${INSTALLATION_STEP_PATCHED}_${PatchNumber}"
+            Retcode=$?
+          fi
+          if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+            bInstalled=$VALUE_TRUE
+            createMarkerFile $Retcode "$User" "$Group" "$MarkerInstalled"
+            Retcode=$?
+          fi
         fi
       fi
     fi
   fi
+
+return $Retcode
 
   ########################################
   # Perform the post-installation steps. #
@@ -2889,18 +2948,20 @@ provisionDatabase() {
   local HomeDirectoryName=''
   local DataDirectoryName=''
   local RecoveryDirectoryName=''
+  local DBAGroupName=''
   echoTitle "provisioning the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} software"
-  retrieveOption $? "$1" "$2" "$OPTION_PATCHES_DIRECTORY_NAME"           'Message' 'PatchesDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DIRECTORY_PERMISSIONS"            'Message' 'DirectoryPermissions'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                'Message' 'User'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"               'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PACKAGE_FILE_NAME"       'Message' 'PackageFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_OPATCH_FILE_NAME"        'Message' 'OPatchFileName' 'OPatchFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME" 'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_BASE_DIRECTORY_NAME"     'Message' 'BaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME_DIRECTORY_NAME"     'Message' 'HomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_DATA_DIRECTORY_NAME"     'Message' 'DataDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME" 'Message' 'RecoveryDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_PATCHES_DIRECTORY_NAME"            'Message' 'PatchesDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DIRECTORY_PERMISSIONS"             'Message' 'DirectoryPermissions'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INSTALLATION_USER"                 'Message' 'User'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INSTALLATION_GROUP"                'Message' 'Group'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_PACKAGE_FILE_NAME"        'Message' 'PackageFileName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_OPATCH_FILE_NAME"         'Message' 'OPatchFileName' 'OPatchFileNameDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"  'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_BASE_DIRECTORY_NAME"      'Message' 'BaseDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_HOME_DIRECTORY_NAME"      'Message' 'HomeDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_DATA_DIRECTORY_NAME"      'Message' 'DataDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"  'Message' 'RecoveryDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME" 'Message' 'DBAGroupName'
   local -i Retcode=$?
   local -r MarkerProvisioned="${HomeDirectoryName}/${INSTALLATION_STEP_PROVISIONED}"
   local -r MarkerInstalled="${HomeDirectoryName}/${INSTALLATION_STEP_INSTALLED}"
@@ -3012,19 +3073,20 @@ provisionDatabase() {
   ##################################################
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$UpgradePatchFileName" ]] ; then
-    local -r InstallationFile="${HomeDirectoryName}/${INSTALLATION_INFORMATION}"
+    local -r InstallationFile="${HomeDirectoryName}/${INSTALLATION_INFORMATION_FILE_NAME}"
     echoSection "create the installation information file" "$UpgradePatchFileName" "$PatchesDirectoryName"
     local InstallationContent=''
     read -d '' InstallationContent <<EOF
 ${OPTION_INSTALLATION_USER}=${User}
 ${OPTION_INSTALLATION_GROUP}=${Group}
+${OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME}=${DBAGroupName}
 ${OPTION_DATABASE_BASE_DIRECTORY_NAME}=${BaseDirectoryName}
 ${OPTION_DATABASE_HOME_DIRECTORY_NAME}=${HomeDirectoryName}
 ${OPTION_DATABASE_DATA_DIRECTORY_NAME}=${DataDirectoryName}
 ${OPTION_DATABASE_RECOVERY_DIRECTORY_NAME}=${RecoveryDirectoryName}
 EOF
     readonly InstallationContent
-    createFile $Retcode "$User" "$Group" '' "${DESCRIPTION_INSTALLATION_INFORMATION} for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}" "$InstallationFile" 'InstallationContent' $VALUE_TRUE
+    createFile $Retcode "$User" "$Group" '644' "${DESCRIPTION_INSTALLATION_INFORMATION_FILE} for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}" "$InstallationFile" 'InstallationContent' $VALUE_FALSE
     Retcode=$?
   fi
 
@@ -3050,17 +3112,29 @@ EOF
 ## @return The return code of the function execution.
 ################################################################################
 uninstallDatabase() {
+  local -A InstallationSources=()
+  local -A InstallationValues=()
   local Message=''
   local User
   local Group
   local BaseDirectoryName
   local HomeDirectoryName
   echoTitle "de-installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"            'Message' 'User'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"           'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_BASE_DIRECTORY_NAME" 'Message' 'BaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME_DIRECTORY_NAME" 'Message' 'HomeDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_HOME_DIRECTORY_NAME" 'Message' 'HomeDirectoryName'
   local -i Retcode=$?
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$HomeDirectoryName" ]] ; then
+    InstallationSources["$OPTION_FILE_NAME"]="$OPTION_SOURCE_PROGRAM"
+    InstallationValues["$OPTION_FILE_NAME"]="${HomeDirectoryName}/${INSTALLATION_INFORMATION_FILE_NAME}"
+    processOptionsFile $Retcode 'Message' 'InstallationSources' 'InstallationValues' $OPTION_SOURCE_INSTALLATION
+    Retcode=$?
+  fi
+  readonly executeSudoShellCommand
+  readonly InstallationSources
+  readonly InstallationValues
+  retrieveOption $Retcode "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_INSTALLATION_USER"            'Message' 'User'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_INSTALLATION_GROUP"           'Message' 'Group'
+  retrieveOption $?       "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_BASE_DIRECTORY_NAME" 'Message' 'BaseDirectoryName'
+  Retcode=$?
   local -r Deinstaller="${HomeDirectoryName}/deinstall/deinstall"
   local -r DeinstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} de-installer program"
   local ResponseFileName=''
@@ -3275,40 +3349,40 @@ installManager() {
   local WeblogicUser=''
   local WeblogicPassword=''
   echoTitle "installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-  retrieveOption $? "$1" "$2" "$OPTION_STAGING_DIRECTORY_NAME"                'Message' 'StagingDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_PATCHES_DIRECTORY_NAME"                'Message' 'PatchesDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY_DIRECTORY_NAME" 'Message' 'InventoryDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                     'Message' 'User' 'UserDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                    'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_DATA_DIRECTORY_NAME"          'Message' 'DatabaseDataDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                         'Message' 'DatabaseName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOSTNAME"                     'Message' 'DatabaseHostName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PORT"                         'Message' 'DatabasePort'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"                     'Message' 'DatabasePassword'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                       'Message' 'Version'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME"       'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PATCHES_FILE_NAMES"            'Message' 'PatchesFileNames' 'PatchesFileNamesDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_NAME"            'Message' 'ResponseFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PORTS_FILE_NAME"               'Message' 'PortsFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_BASE_DIRECTORY_NAME"           'Message' 'BaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME_DIRECTORY_NAME"           'Message' 'HomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME"       'Message' 'InstanceDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOSTNAME"                      'Message' 'HostName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_USER_PORT"                     'Message' 'UserPort' 'UserPortDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_UPLOAD_PORT"                   'Message' 'UploadPort' 'UploadPortDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PASSWORD"                      'Message' 'ManagerPassword'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_KEYSTORE_FILE_NAME"            'Message' 'KeystoreFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_KEYSTORE_PASSWORD"             'Message' 'KeystorePassword'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"          'Message' 'TruststoreFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"           'Message' 'TruststorePassword'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE_DIRECTORY_NAME"             'Message' 'AgentBaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_HOME_DIRECTORY_NAME"             'Message' 'AgentHomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_INSTANCE_DIRECTORY_NAME"         'Message' 'AgentInstanceDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_PORT"                            'Message' 'AgentPort' 'AgentPortDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_PASSWORD"                        'Message' 'AgentPassword'
-  retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PORT"                         'Message' 'WeblogicPort' 'WeblogicPortDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_USER"                         'Message' 'WeblogicUser'
-  retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PASSWORD"                     'Message' 'WeblogicPassword'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_STAGING_DIRECTORY_NAME"          'Message' 'StagingDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_PATCHES_DIRECTORY_NAME"          'Message' 'PatchesDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INVENTORY_DIRECTORY_NAME"        'Message' 'InventoryDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INSTALLATION_USER"               'Message' 'User' 'UserDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INSTALLATION_GROUP"              'Message' 'Group'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_DATA_DIRECTORY_NAME"    'Message' 'DatabaseDataDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_NAME"                   'Message' 'DatabaseName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_HOSTNAME"               'Message' 'DatabaseHostName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_PORT"                   'Message' 'DatabasePort'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_PASSWORD"               'Message' 'DatabasePassword'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_VERSION"                 'Message' 'Version'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME" 'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_PATCHES_FILE_NAMES"      'Message' 'PatchesFileNames' 'PatchesFileNamesDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_RESPONSE_FILE_NAME"      'Message' 'ResponseFileName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_PORTS_FILE_NAME"         'Message' 'PortsFileName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_BASE_DIRECTORY_NAME"     'Message' 'BaseDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_HOME_DIRECTORY_NAME"     'Message' 'HomeDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME" 'Message' 'InstanceDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_HOSTNAME"                'Message' 'HostName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_USER_PORT"               'Message' 'UserPort' 'UserPortDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_UPLOAD_PORT"             'Message' 'UploadPort' 'UploadPortDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_PASSWORD"                'Message' 'ManagerPassword'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_KEYSTORE_FILE_NAME"      'Message' 'KeystoreFileName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_KEYSTORE_PASSWORD"       'Message' 'KeystorePassword'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"    'Message' 'TruststoreFileName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"     'Message' 'TruststorePassword'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'Message' 'AgentBaseDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_AGENT_HOME_DIRECTORY_NAME"       'Message' 'AgentHomeDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_AGENT_INSTANCE_DIRECTORY_NAME"   'Message' 'AgentInstanceDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_AGENT_PORT"                      'Message' 'AgentPort' 'AgentPortDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_AGENT_PASSWORD"                  'Message' 'AgentPassword'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_WEBLOGIC_PORT"                   'Message' 'WeblogicPort' 'WeblogicPortDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_WEBLOGIC_USER"                   'Message' 'WeblogicUser'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_WEBLOGIC_PASSWORD"               'Message' 'WeblogicPassword'
   local -i Retcode=$?
   local -r Installer="${HomeDirectoryName}/sysman/install/ConfigureGC.sh"
   local -r InstallerDescription="configuration program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
@@ -3658,24 +3732,24 @@ provisionManager() {
   local AgentBaseDirectoryName=''
   local AgentHomeDirectoryName=''
   echoTitle "provisioning the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software"
-  retrieveOption $? "$1" "$2" "$OPTION_STAGING_DIRECTORY_NAME"                'Message' 'StagingDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_PATCHES_DIRECTORY_NAME"                'Message' 'PatchesDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DIRECTORY_PERMISSIONS"                 'Message' 'DirectoryPermissions'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_INVENTORY_DIRECTORY_NAME" 'Message' 'InventoryDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                     'Message' 'User'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                    'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                       'Message' 'Version'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"           'Message' 'PackagesFileNames' 'PackagesFileNamesDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_OPATCH_FILE_NAME"              'Message' 'OPatchFileName' 'OPatchFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_OMSPATCHER_FILE_NAME"          'Message' 'OMSPatcherFileName' 'OMSPatcherFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME"       'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PATCHES_FILE_NAMES"            'Message' 'PatchesFileNames' 'PatchesFileNamesDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_NAME"            'Message' 'ResponseFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_BASE_DIRECTORY_NAME"           'Message' 'BaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME_DIRECTORY_NAME"           'Message' 'HomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME"       'Message' 'InstanceDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE_DIRECTORY_NAME"             'Message' 'AgentBaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_HOME_DIRECTORY_NAME"             'Message' 'AgentHomeDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_STAGING_DIRECTORY_NAME"          'Message' 'StagingDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_PATCHES_DIRECTORY_NAME"          'Message' 'PatchesDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DIRECTORY_PERMISSIONS"           'Message' 'DirectoryPermissions'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INVENTORY_DIRECTORY_NAME"        'Message' 'InventoryDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INSTALLATION_USER"               'Message' 'User'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INSTALLATION_GROUP"              'Message' 'Group'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_VERSION"                 'Message' 'Version'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_PACKAGES_FILE_NAMES"     'Message' 'PackagesFileNames' 'PackagesFileNamesDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_OPATCH_FILE_NAME"        'Message' 'OPatchFileName' 'OPatchFileNameDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_OMSPATCHER_FILE_NAME"    'Message' 'OMSPatcherFileName' 'OMSPatcherFileNameDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME" 'Message' 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_PATCHES_FILE_NAMES"      'Message' 'PatchesFileNames' 'PatchesFileNamesDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_RESPONSE_FILE_NAME"      'Message' 'ResponseFileName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_BASE_DIRECTORY_NAME"     'Message' 'BaseDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_HOME_DIRECTORY_NAME"     'Message' 'HomeDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME" 'Message' 'InstanceDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'Message' 'AgentBaseDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_AGENT_HOME_DIRECTORY_NAME"       'Message' 'AgentHomeDirectoryName'
   local -i Retcode=$?
   local -r Repository="${StagingDirectoryName}/manager-${Version}"
   local -r RepositoryDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} installation repository directory"
@@ -4038,16 +4112,16 @@ uninstallManager() {
   local AgentBaseDirectoryName
   local WeblogicPassword
   echoTitle "de-installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-  retrieveOption $? "$1" "$2" "$OPTION_STAGING_DIRECTORY_NAME"          'Message' 'StagingDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"               'Message' 'User'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"              'Message' 'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PASSWORD"               'Message' 'DatabasePassword'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_BASE_DIRECTORY_NAME"     'Message' 'BaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME_DIRECTORY_NAME"     'Message' 'HomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME" 'Message' 'InstanceDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PASSWORD"                'Message' 'ManagerPassword'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'Message' 'AgentBaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_WEBLOGIC_PASSWORD"               'Message' 'WeblogicPassword'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_STAGING_DIRECTORY_NAME"          'Message' 'StagingDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INSTALLATION_USER"               'Message' 'User'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INSTALLATION_GROUP"              'Message' 'Group'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_PASSWORD"               'Message' 'DatabasePassword'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_BASE_DIRECTORY_NAME"     'Message' 'BaseDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_HOME_DIRECTORY_NAME"     'Message' 'HomeDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME" 'Message' 'InstanceDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_PASSWORD"                'Message' 'ManagerPassword'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'Message' 'AgentBaseDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_WEBLOGIC_PASSWORD"               'Message' 'WeblogicPassword'
   local -i Retcode=$?
   local -r Deinstaller1="${HomeDirectoryName}/sysman/install/EMDeinstall.pl"
   local -r Deinstaller2="${StagingDirectoryName}/EMDeinstall.pl"
@@ -4237,30 +4311,30 @@ prepareInstallation() {
   local ServiceName
   local SystemdFileName
   echoTitle 'preparing for installation of the Oracle products'
-  retrieveOption $? "$1" "$2" "$OPTION_STAGING_DIRECTORY_NAME"            'Message' 'StagingDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_PATCHES_DIRECTORY_NAME"            'Message' 'PatchesDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DIRECTORY_PERMISSIONS"             'Message' 'DirectoryPermissions'
-  retrieveOption $? "$1" "$2" "$OPTION_BASE_APPLICATIONS_DIRECTORY_NAME"  'Message' 'ApplicationsDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_BASE_DATA_DIRECTORY_NAME"          'Message' 'DataDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_BASE_RECOVERY_DIRECTORY_NAME"      'Message' 'RecoveryDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_INVENTORY_DIRECTORY_NAME"          'Message' 'InventoryDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                 'Message' 'User' 'UserDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                'Message' 'Group' 'GroupDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME_DIRECTORY_NAME"      'Message' 'DatabaseHomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                     'Message' 'DatabaseName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME" 'Message' 'DBAGroupName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                   'Message' 'ManagerVersion'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME_DIRECTORY_NAME"       'Message' 'ManagerHomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE_DIRECTORY_NAME"         'Message' 'AgentBaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_HOME_DIRECTORY_NAME"         'Message' 'AgentHomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_SUDOERS_FILE_NAME"                 'Message' 'SudoersFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SWAP_GOAL"                         'Message' 'SwapGoal' 'SwapGoalDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_SWAP_FILE_NAME"                    'Message' 'SwapFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSCTL_FILE_NAME"                  'Message' 'SysctlFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_DATABASE_FILE_NAME"         'Message' 'LimitsDatabaseFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_MANAGER_FILE_NAME"          'Message' 'LimitsManagerFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE_NAME"              'Message' 'ServiceName'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_FILE_NAME"                 'Message' 'SystemdFileName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_STAGING_DIRECTORY_NAME"            'Message' 'StagingDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_PATCHES_DIRECTORY_NAME"            'Message' 'PatchesDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DIRECTORY_PERMISSIONS"             'Message' 'DirectoryPermissions'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_BASE_APPLICATIONS_DIRECTORY_NAME"  'Message' 'ApplicationsDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_BASE_DATA_DIRECTORY_NAME"          'Message' 'DataDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_BASE_RECOVERY_DIRECTORY_NAME"      'Message' 'RecoveryDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INVENTORY_DIRECTORY_NAME"          'Message' 'InventoryDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INSTALLATION_USER"                 'Message' 'User' 'UserDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_INSTALLATION_GROUP"                'Message' 'Group' 'GroupDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_HOME_DIRECTORY_NAME"      'Message' 'DatabaseHomeDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_NAME"                     'Message' 'DatabaseName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME" 'Message' 'DBAGroupName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_VERSION"                   'Message' 'ManagerVersion'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_MANAGER_HOME_DIRECTORY_NAME"       'Message' 'ManagerHomeDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_AGENT_BASE_DIRECTORY_NAME"         'Message' 'AgentBaseDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_AGENT_HOME_DIRECTORY_NAME"         'Message' 'AgentHomeDirectoryName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_SUDOERS_FILE_NAME"                 'Message' 'SudoersFileName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_SWAP_GOAL"                         'Message' 'SwapGoal' 'SwapGoalDescription'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_SWAP_FILE_NAME"                    'Message' 'SwapFileName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_SYSCTL_FILE_NAME"                  'Message' 'SysctlFileName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_LIMITS_DATABASE_FILE_NAME"         'Message' 'LimitsDatabaseFileName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_LIMITS_MANAGER_FILE_NAME"          'Message' 'LimitsManagerFileName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_SYSTEMD_SERVICE_NAME"              'Message' 'ServiceName'
+  retrieveOption $? "$1" "$2" '' '' "$OPTION_SYSTEMD_FILE_NAME"                 'Message' 'SystemdFileName'
   local -i Retcode=$?
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
@@ -4741,8 +4815,8 @@ setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$O
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_NAME"                    "${OPTION_DEFAULT_VALUES[${OPTION_DATABASE_NAME}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_BASE_DIRECTORY_NAME"     "${OptionValues[${OPTION_BASE_APPLICATIONS_DIRECTORY_NAME}]}/${PRODUCT_DATABASE}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_HOME_DIRECTORY_NAME"     "${OptionValues[${OPTION_DATABASE_BASE_DIRECTORY_NAME}]}/product/${OptionValues[${OPTION_DATABASE_VERSION}]}"
-setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_DATA_DIRECTORY_NAME"     "${OptionValues[${OPTION_BASE_DATA_DIRECTORY_NAME}]}/${OptionValues[${OPTION_DATABASE_NAME}]}"
-setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME" "${OptionValues[${OPTION_BASE_RECOVERY_DIRECTORY_NAME}]}/${OptionValues[${OPTION_DATABASE_NAME}]}"
+setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_DATA_DIRECTORY_NAME"     "${OptionValues[${OPTION_BASE_DATA_DIRECTORY_NAME}]}/${PRODUCT_DATABASE}/${OptionValues[${OPTION_DATABASE_NAME}]}"
+setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME" "${OptionValues[${OPTION_BASE_RECOVERY_DIRECTORY_NAME}]}/${PRODUCT_DATABASE}/${OptionValues[${OPTION_DATABASE_NAME}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_MANAGER_VERSION"                  "${OPTION_DEFAULT_VALUES[${OPTION_MANAGER_VERSION}]}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_MANAGER_BASE_DIRECTORY_NAME"      "${OptionValues[${OPTION_BASE_APPLICATIONS_DIRECTORY_NAME}]}/${PRODUCT_MANAGER}"
 setOption $? 'Message' 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_MANAGER_HOME_DIRECTORY_NAME"      "${OptionValues[${OPTION_MANAGER_BASE_DIRECTORY_NAME}]}/product/${OptionValues[${OPTION_MANAGER_VERSION}]}"
