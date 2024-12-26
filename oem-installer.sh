@@ -339,15 +339,105 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_SYSTEMD_FILE_NAME"]=$OPTION_SOURCE_PROGRAM
 )
 
-# Optional options
+# Option targets
 
-declare -r -A OPTIONS_OPTIONAL=(
-  ["$OPTION_DATABASE_OPATCH_FILE_NAME"]='x'
-  ["$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"]='x'
-  ["$OPTION_MANAGER_OPATCH_FILE_NAME"]='x'
-  ["$OPTION_MANAGER_OMSPATCHER_FILE_NAME"]='x'
-  ["$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME"]='x'
-  ["$OPTION_MANAGER_PATCHES_FILE_NAMES"]='x'
+# Foundation options are used to determine the values of other options used by the installer when these values are not provided by the user.  Foundational options are not used otherwise.
+# Mandatory options are used and required by the installer and their values must be provided by the user
+#   - The values of non-mandatory options that are used by the installer may be determined from default values or calculated with foundational options.
+#   - Options not listed as fundational, mandatory, or optional, are those options used by the installer that do not need to be provided by the user.
+# Optional options do not have default values and are not detemined from foundatoinal options.  These may be skipped altogether.
+
+declare -r -i OPTION_TARGET_MULTIPLIER=16
+declare -r -i OPTION_TARGET_FOUNDATIONAL_MULTIPLIER=2
+declare -r -i OPTION_TARGET_MANDATORY_MULTIPLIER=$((OPTION_TARGET_FOUNDATIONAL_MULTIPLIER * 2))
+declare -r -i OPTION_TARGET_OPTIONAL_MULTIPLIER=$((OPTION_TARGET_MANDATORY_MULTIPLIER * 2))
+declare -r -i OPTION_TARGET_NONE=0
+declare -r -i OPTION_TARGET_DATABASE=1                                                                          # 1
+declare -r -i OPTION_TARGET_DATABASE_FOUNDATIONAL=$((OPTION_TARGET_DATABASE + $((OPTION_TARGET_DATABASE * $OPTION_TARGET_FOUNDATIONAL_MULTIPLIER)))) # 3
+declare -r -i OPTION_TARGET_DATABASE_MANDATORY=$((OPTION_TARGET_DATABASE + $((OPTION_TARGET_DATABASE * $OPTION_TARGET_MANDATORY_MULTIPLIER))))       # 5
+declare -r -i OPTION_TARGET_DATABASE_OPTIONAL=$((OPTION_TARGET_DATABASE + $((OPTION_TARGET_DATABASE * $OPTION_TARGET_OPTIONAL_MULTIPLIER))))         # 9
+declare -r -i OPTION_TARGET_MANAGER=$((OPTION_TARGET_DATABASE * $OPTION_TARGET_MULTIPLIER))                                                          # 16
+declare -r -i OPTION_TARGET_MANAGER_FOUNDATIONAL=$((OPTION_TARGET_MANAGER + $((OPTION_TARGET_MANAGER * $OPTION_TARGET_FOUNDATIONAL_MULTIPLIER))))    # 48
+declare -r -i OPTION_TARGET_MANAGER_MANDATORY=$((OPTION_TARGET_MANAGER + $((OPTION_TARGET_MANAGER * $OPTION_TARGET_MANDATORY_MULTIPLIER))))          # 80
+declare -r -i OPTION_TARGET_MANAGER_OPTIONAL=$((OPTION_TARGET_MANAGER + $((OPTION_TARGET_MANAGER * $OPTION_TARGET_OPTIONAL_MULTIPLIER))))            # 144
+declare -r -i OPTION_TARGET_AGENT=$((OPTION_TARGET_MANAGER * $OPTION_TARGET_MULTIPLIER))                                                             # 256
+declare -r -i OPTION_TARGET_AGENT_FOUNDATIONAL=$((OPTION_TARGET_AGENT + $((OPTION_TARGET_AGENT * $OPTION_TARGET_FOUNDATIONAL_MULTIPLIER))))          # 768
+declare -r -i OPTION_TARGET_AGENT_MANDATORY=$((OPTION_TARGET_AGENT + $((OPTION_TARGET_AGENT * $OPTION_TARGET_MANDATORY_MULTIPLIER))))                # 1280
+declare -r -i OPTION_TARGET_AGENT_OPTIONAL=$((OPTION_TARGET_AGENT + $((OPTION_TARGET_AGENT * $OPTION_TARGET_OPTIONAL_MULTIPLIER))))                  # 2304
+declare -r -i OPTION_TARGET_ANY=$((OPTION_TARGET_AGENT * $OPTION_TARGET_MULTIPLIER))                                                                 # 4096
+declare -r -i OPTION_TARGET_ALL=$((OPTION_TARGET_DATABASE + $OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
+declare -r -i OPTION_TARGET_ALL_FOUNDATIONAL=$((OPTION_TARGET_DATABASE_FOUNDATIONAL + $OPTION_TARGET_MANAGER_FOUNDATIONAL + $OPTION_TARGET_AGENT_FOUNDATIONAL))
+declare -r -i OPTION_TARGET_ALL_MANDATORY=$((OPTION_TARGET_DATABASE_MANDATORY + $OPTION_TARGET_MANAGER_MANDATORY + $OPTION_TARGET_AGENT_MANDATORY))
+declare -r -i OPTION_TARGET_ALL_OPTIONAL=$((OPTION_TARGET_DATABASE_OPTIONAL + $OPTION_TARGET_MANAGER_OPTIONAL + $OPTION_TARGET_AGENT_OPTIONAL))
+
+declare -r -A -i OPTION_TARGETS=(
+  ["$OPTION_FILE_NAME"]=$OPTION_TARGET_ALL_OPTIONAL
+  ["$OPTION_STAGING_DIRECTORY_NAME"]=$OPTION_TARGET_ALL_MANDATORY
+  ["$OPTION_PATCHES_DIRECTORY_NAME"]=$OPTION_TARGET_ALL
+  ["$OPTION_DIRECTORY_PERMISSIONS"]=$OPTION_TARGET_ALL
+  ["$OPTION_ROOT_APPLICATIONS_DIRECTORY_NAME"]=$OPTION_TARGET_ALL_FOUNDATIONAL
+  ["$OPTION_ROOT_DATA_DIRECTORY_NAME"]=$OPTION_TARGET_DATABASE_FOUNDATIONAL
+  ["$OPTION_ROOT_RECOVERY_DIRECTORY_NAME"]=$OPTION_TARGET_DATABASE_FOUNDATIONAL
+  ["$OPTION_BASE_APPLICATIONS_DIRECTORY_NAME"]=$OPTION_TARGET_ALL
+  ["$OPTION_BASE_DATA_DIRECTORY_NAME"]=$OPTION_TARGET_DATABASE
+  ["$OPTION_BASE_RECOVERY_DIRECTORY_NAME"]=$OPTION_TARGET_DATABASE
+  ["$OPTION_INVENTORY_DIRECTORY_NAME"]=$OPTION_TARGET_ALL
+  ["$OPTION_INSTALLATION_USER"]=$OPTION_TARGET_ALL
+  ["$OPTION_INSTALLATION_GROUP"]=$OPTION_TARGET_ALL
+  ["$OPTION_DATABASE_VERSION"]=$OPTION_TARGET_DATABASE
+  ["$OPTION_DATABASE_PACKAGE_FILE_NAME"]=$OPTION_TARGET_DATABASE_MANDATORY
+  ["$OPTION_DATABASE_OPATCH_FILE_NAME"]=$OPTION_TARGET_DATABASE_OPTIONAL
+  ["$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"]=$OPTION_TARGET_DATABASE_OPTIONAL
+  ["$OPTION_DATABASE_RESPONSE_FILE_NAME"]=$OPTION_TARGET_DATABASE
+  ["$OPTION_DATABASE_BASE_DIRECTORY_NAME"]=$OPTION_TARGET_DATABASE
+  ["$OPTION_DATABASE_HOME_DIRECTORY_NAME"]=$OPTION_TARGET_DATABASE
+  ["$OPTION_DATABASE_DATA_DIRECTORY_NAME"]=$OPTION_TARGET_DATABASE
+  ["$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"]=$OPTION_TARGET_DATABASE
+  ["$OPTION_DATABASE_NAME"]=$((OPTION_TARGET_DATABASE + $OPTION_TARGET_MANAGER_MANDATORY))
+  ["$OPTION_DATABASE_HOSTNAME"]=$((OPTION_TARGET_DATABASE + $OPTION_TARGET_MANAGER_MANDATORY))
+  ["$OPTION_DATABASE_PORT"]=$((OPTION_TARGET_DATABASE + $OPTION_TARGET_MANAGER_MANDATORY))
+  ["$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME"]=$OPTION_TARGET_DATABASE
+  ["$OPTION_DATABASE_PASSWORD"]=$((OPTION_TARGET_DATABASE + $OPTION_TARGET_MANAGER))
+  ["$OPTION_DATABASE_CONTROLLER_FILE_NAME"]=$OPTION_TARGET_DATABASE
+  ["$OPTION_MANAGER_VERSION"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_MANAGER_PACKAGES_FILE_NAMES"]=$OPTION_TARGET_MANAGER_MANDATORY
+  ["$OPTION_MANAGER_OPATCH_FILE_NAME"]=$OPTION_TARGET_MANAGER_OPTIONAL
+  ["$OPTION_MANAGER_OMSPATCHER_FILE_NAME"]=$OPTION_TARGET_MANAGER_OPTIONAL
+  ["$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME"]=$OPTION_TARGET_MANAGER_OPTIONAL
+  ["$OPTION_MANAGER_PATCHES_FILE_NAMES"]=$OPTION_TARGET_MANAGER_OPTIONAL
+  ["$OPTION_MANAGER_RESPONSE_FILE_NAME"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_MANAGER_PORTS_FILE_NAME"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_MANAGER_BASE_DIRECTORY_NAME"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_MANAGER_HOME_DIRECTORY_NAME"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_MANAGER_HOSTNAME"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT_MANDATORY))
+  ["$OPTION_MANAGER_USER_PORT"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_MANAGER_UPLOAD_PORT"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT_MANDATORY))
+  ["$OPTION_MANAGER_PASSWORD"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
+  ["$OPTION_MANAGER_KEYSTORE_FILE_NAME"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_MANAGER_CONTROLLER_FILE_NAME"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_AGENT_VERSION"]=$OPTION_TARGET_AGENT
+  ["$OPTION_AGENT_BASE_DIRECTORY_NAME"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
+  ["$OPTION_AGENT_HOME_DIRECTORY_NAME"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
+  ["$OPTION_AGENT_INSTANCE_DIRECTORY_NAME"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
+  ["$OPTION_AGENT_PORT"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
+  ["$OPTION_AGENT_PASSWORD"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
+  ["$OPTION_AGENT_CONTROLLER_FILE_NAME"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
+  ["$OPTION_WEBLOGIC_PORT"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_WEBLOGIC_USER"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_WEBLOGIC_PASSWORD"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_SUDOERS_FILE_NAME"]=$OPTION_TARGET_ALL
+  ["$OPTION_SWAP_GOAL"]=$OPTION_TARGET_ALL
+  ["$OPTION_SWAP_FILE_NAME"]=$OPTION_TARGET_ALL
+  ["$OPTION_SYSCTL_FILE_NAME"]=$OPTION_TARGET_ALL
+  ["$OPTION_LIMITS_DATABASE_FILE_NAME"]=$OPTION_TARGET_DATABASE
+  ["$OPTION_LIMITS_MANAGER_FILE_NAME"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_CONTROLLER_FILE_NAME"]=$OPTION_TARGET_ALL
+  ["$OPTION_SYSTEMD_SERVICE_NAME"]=$OPTION_TARGET_ALL
+  ["$OPTION_SYSTEMD_FILE_NAME"]=$OPTION_TARGET_ALL
 )
 
 # Option default values
@@ -1321,6 +1411,7 @@ processInstallationOptionsFile() {
 ##                         the program option values.
 ## @param[in]  Values      The name of the variable that contains the program
 ##                         option values.
+## @param[in]  Target      The target of the installation..
 ## @param[in]  Option      The option.
 ## @param[out] Value       The name of the variable in which to store the value
 ##                         of the program option.  The variable is marked as
@@ -1341,19 +1432,31 @@ retrieveOption() {
   local -i Retcode=${1:-$RETCODE_SUCCESS}
   local -n _RetrieveSources="${2:-SourcesDummy}"
   local -n _RetrieveValues="${3:-ValuesDummy}"
-  local -r Option="${4:-${OPTION_UNKNOWN}}"
-  local -n _Value="${5:-ValueDummy}"
-  local -n _Description="${6:-DescriptionDummy}"
+  local -r -i Target=${4:-$OPTION_TARGET_NONE}
+  local -r Option="${5:-${OPTION_UNKNOWN}}"
+  local -n _Value="${6:-ValueDummy}"
+  local -n _Description="${7:-DescriptionDummy}"
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    if [[ -z "$Option" ]] || [[ "$OPTION_UNKNOWN" == "$Option" ]] ; then
+    local -r -i TargetFoundational=$((Target * $OPTION_TARGET_FOUNDATIONAL_MULTIPLIER))
+    local -r -i TargetOptional=$((Target * $OPTION_TARGET_OPTIONAL_MULTIPLIER))
+    if [[ $OPTION_TARGET_NONE -eq $Target ]] ; then
+      echoError $RETCODE_INTERNAL_ERROR 'option target not provided' $Target
+      Retcode=$?
+    elif [[ -z "$Option" ]] || [[ "$OPTION_UNKNOWN" == "$Option" ]] ; then
       echoError $RETCODE_INTERNAL_ERROR 'option not provided' "$Option"
+      Retcode=$?
+    elif [[ $OPTION_TARGET_ANY -ne $Target ]] && [[ $((Target & ${OPTION_TARGETS[${Option}]})) -ne $Target ]] ; then
+      echoError $RETCODE_INTERNAL_ERROR 'option not expected for retrieval' "$Option" $Target
+      Retcode=$?
+    elif [[ $OPTION_TARGET_ANY -ne $Target ]] && [[ $((TargetFoundational & ${OPTION_TARGETS[${Option}]})) -eq $TargetFoundational ]] ; then
+      echoError $RETCODE_INTERNAL_ERROR 'optional value not allowed for retrieval' "$Option" $Target
       Retcode=$?
     else
       local -i Source=${_RetrieveSources[${Option}]}
       _Value="${_RetrieveValues[${Option}]}"
       _Description="${OPTION_DESCRIPTIONS[${Option}]}"
       if [[ $OPTION_SOURCE_UNSET -eq $Source ]] || [[ -z "$_Value" ]] ; then
-        if [[ -z "${OPTIONS_OPTIONAL[${Option}]}" ]] ; then
+        if [[ $OPTION_TARGET_ANY -eq $Target ]] || [[ $((TargetOptional & ${OPTION_TARGETS[${Option}]})) -ne $TargetOptional ]] ; then
           echoError $RETCODE_INTERNAL_ERROR 'value not provided for option' "$Option"
           Retcode=$?
         fi
@@ -1925,15 +2028,20 @@ createControllerFile() {
     case "$Product" in
       "$PRODUCT_ALL")
         local -r ControllerFileDescription="$DESCRIPTION_CONTROLLER_FILE"
-        retrieveOption $Retcode "$2" "$3" "$OPTION_CONTROLLER_FILE_NAME"          'FileName'
-        retrieveOption $?       "$2" "$3" "$OPTION_DATABASE_CONTROLLER_FILE_NAME" 'DatabaseFileName'
-        retrieveOption $?       "$2" "$3" "$OPTION_MANAGER_CONTROLLER_FILE_NAME"  'ManagerFileName'
-        retrieveOption $?       "$2" "$3" "$OPTION_AGENT_CONTROLLER_FILE_NAME"    'AgentFileName'
+        retrieveOption $Retcode "$2" "$3" $OPTION_TARGET_ANY      "$OPTION_INSTALLATION_USER"             'User' 'UserDescription'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_ANY      "$OPTION_INSTALLATION_GROUP"            'Group'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_ANY      "$OPTION_CONTROLLER_FILE_NAME"          'FileName'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_CONTROLLER_FILE_NAME" 'DatabaseFileName'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_MANAGER  "$OPTION_MANAGER_CONTROLLER_FILE_NAME"  'ManagerFileName'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_AGENT    "$OPTION_AGENT_CONTROLLER_FILE_NAME"    'AgentFileName'
+        Retcode=$?
         ;;
       "$PRODUCT_DATABASE")
         local -r ControllerFileDescription="$DESCRIPTION_DATABASE_CONTROLLER_FILE"
-        retrieveOption $Retcode "$2" "$3" "$OPTION_DATABASE_HOME_DIRECTORY_NAME"  'HomeDirectoryName'
-        retrieveOption $?       "$2" "$3" "$OPTION_DATABASE_CONTROLLER_FILE_NAME" 'FileName'
+        retrieveOption $Retcode "$2" "$3" $OPTION_TARGET_DATABASE "$OPTION_INSTALLATION_USER"             'User' 'UserDescription'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_DATABASE "$OPTION_INSTALLATION_GROUP"            'Group'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_HOME_DIRECTORY_NAME"  'HomeDirectoryName'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_CONTROLLER_FILE_NAME" 'FileName'
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           local -r StartCommand="${HomeDirectoryName}/bin/dbstart"
@@ -1950,8 +2058,10 @@ createControllerFile() {
         ;;
       "$PRODUCT_MANAGER")
         local -r ControllerFileDescription="$DESCRIPTION_MANAGER_CONTROLLER_FILE"
-        retrieveOption $Retcode "$2" "$3" "$OPTION_MANAGER_HOME_DIRECTORY_NAME"  'HomeDirectoryName'
-        retrieveOption $?       "$2" "$3" "$OPTION_MANAGER_CONTROLLER_FILE_NAME" 'FileName'
+        retrieveOption $Retcode "$2" "$3" $OPTION_TARGET_MANAGER "$OPTION_INSTALLATION_USER"            'User' 'UserDescription'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_MANAGER "$OPTION_INSTALLATION_GROUP"           'Group'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_MANAGER "$OPTION_MANAGER_HOME_DIRECTORY_NAME"  'HomeDirectoryName'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_MANAGER "$OPTION_MANAGER_CONTROLLER_FILE_NAME" 'FileName'
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           local -r StartCommand="${HomeDirectoryName}/bin/emctl"
@@ -1968,8 +2078,10 @@ createControllerFile() {
         ;;
       "$PRODUCT_AGENT")
         local -r ControllerFileDescription="$DESCRIPTION_AGENT_CONTROLLER_FILE"
-        retrieveOption $Retcode "$2" "$3" "$OPTION_AGENT_HOME_DIRECTORY_NAME"  'HomeDirectoryName'
-        retrieveOption $?       "$2" "$3" "$OPTION_AGENT_CONTROLLER_FILE_NAME" 'FileName'
+        retrieveOption $Retcode "$2" "$3" $OPTION_TARGET_AGENT "$OPTION_INSTALLATION_USER"          'User' 'UserDescription'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_AGENT "$OPTION_INSTALLATION_GROUP"         'Group'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_AGENT "$OPTION_AGENT_HOME_DIRECTORY_NAME"  'HomeDirectoryName'
+        retrieveOption $?       "$2" "$3" $OPTION_TARGET_AGENT "$OPTION_AGENT_CONTROLLER_FILE_NAME" 'FileName'
         Retcode=$?
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
           local -r StartCommand="${HomeDirectoryName}/bin/emctl"
@@ -1989,10 +2101,6 @@ createControllerFile() {
         Retcode=$?
         ;;
     esac
-
-    retrieveOption $Retcode "$2" "$3" "$OPTION_INSTALLATION_USER"  'User' 'UserDescription'
-    retrieveOption $?       "$2" "$3" "$OPTION_INSTALLATION_GROUP" 'Group'
-    Retcode=$?
   fi
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -2632,21 +2740,21 @@ installDatabase() {
   local ServiceName=''
   echoTitle "installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
   processInstallationOptionsFile $? "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_HOME_DIRECTORY_NAME"
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_PATCHES_DIRECTORY_NAME"            'PatchesDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_INVENTORY_DIRECTORY_NAME"          'InventoryDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_INSTALLATION_USER"                 'User' 'UserDescription'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_INSTALLATION_GROUP"                'Group'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"  'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_RESPONSE_FILE_NAME"       'ResponseFileName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_BASE_DIRECTORY_NAME"      'BaseDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_HOME_DIRECTORY_NAME"      'HomeDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_DATA_DIRECTORY_NAME"      'DataDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"  'RecoveryDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_NAME"                     'DatabaseName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_HOSTNAME"                 'HostName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME" 'DBAGroupName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_PASSWORD"                 'Password'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_SYSTEMD_SERVICE_NAME"              'ServiceName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_PATCHES_DIRECTORY_NAME"            'PatchesDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_INVENTORY_DIRECTORY_NAME"          'InventoryDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_INSTALLATION_USER"                 'User' 'UserDescription'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_INSTALLATION_GROUP"                'Group'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"  'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_DATABASE_RESPONSE_FILE_NAME"       'ResponseFileName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_DATABASE_BASE_DIRECTORY_NAME"      'BaseDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_DATABASE_HOME_DIRECTORY_NAME"      'HomeDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_DATABASE_DATA_DIRECTORY_NAME"      'DataDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"  'RecoveryDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_DATABASE_NAME"                     'DatabaseName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_DATABASE_HOSTNAME"                 'HostName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME" 'DBAGroupName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_DATABASE_PASSWORD"                 'Password'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_DATABASE "$OPTION_SYSTEMD_SERVICE_NAME"              'ServiceName'
   local -i Retcode=$?
   local -r InventoryInstaller="${InventoryDirectoryName}/orainstRoot.sh"
   local -r InventoryInstallerDescription='Oracle Inventory root installer program'
@@ -2979,20 +3087,20 @@ provisionDatabase() {
   local RecoveryDirectoryName=''
   local DBAGroupName=''
   echoTitle "provisioning the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} software"
-  retrieveOption $? "$1" "$2" "$OPTION_PATCHES_DIRECTORY_NAME"            'PatchesDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DIRECTORY_PERMISSIONS"             'DirectoryPermissions'
-  retrieveOption $? "$1" "$2" "$OPTION_BASE_DATA_DIRECTORY_NAME"          'BaseDataDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_BASE_RECOVERY_DIRECTORY_NAME"      'BaseRecoveryDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                 'User'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_PACKAGE_FILE_NAME"        'PackageFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_OPATCH_FILE_NAME"         'OPatchFileName' 'OPatchFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"  'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_BASE_DIRECTORY_NAME"      'BaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME_DIRECTORY_NAME"      'HomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_DATA_DIRECTORY_NAME"      'DataDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"  'RecoveryDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME" 'DBAGroupName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_PATCHES_DIRECTORY_NAME"            'PatchesDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_DIRECTORY_PERMISSIONS"             'DirectoryPermissions'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_BASE_DATA_DIRECTORY_NAME"          'BaseDataDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_BASE_RECOVERY_DIRECTORY_NAME"      'BaseRecoveryDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_INSTALLATION_USER"                 'User'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_INSTALLATION_GROUP"                'Group'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_PACKAGE_FILE_NAME"        'PackageFileName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_OPATCH_FILE_NAME"         'OPatchFileName' 'OPatchFileNameDescription'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_UPGRADE_PATCH_FILE_NAME"  'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_BASE_DIRECTORY_NAME"      'BaseDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_HOME_DIRECTORY_NAME"      'HomeDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_DATA_DIRECTORY_NAME"      'DataDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_RECOVERY_DIRECTORY_NAME"  'RecoveryDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME" 'DBAGroupName'
   local -i Retcode=$?
   local -r MarkerProvisioned="${HomeDirectoryName}/${INSTALLATION_STEP_PROVISIONED}"
   local -r MarkerInstalled="${HomeDirectoryName}/${INSTALLATION_STEP_INSTALLED}"
@@ -3150,10 +3258,10 @@ uninstallDatabase() {
   local HomeDirectoryName
   echoTitle "de-installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]}"
   processInstallationOptionsFile $? "$1" "$2" 'UninstallationSources' 'UninstallationValues' "$OPTION_DATABASE_HOME_DIRECTORY_NAME"
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_INSTALLATION_USER"            'User'
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_INSTALLATION_GROUP"           'Group'
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_DATABASE_BASE_DIRECTORY_NAME" 'BaseDirectoryName'
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_DATABASE_HOME_DIRECTORY_NAME" 'HomeDirectoryName'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_DATABASE "$OPTION_INSTALLATION_USER"            'User'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_DATABASE "$OPTION_INSTALLATION_GROUP"           'Group'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_DATABASE "$OPTION_DATABASE_BASE_DIRECTORY_NAME" 'BaseDirectoryName'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_DATABASE "$OPTION_DATABASE_HOME_DIRECTORY_NAME" 'HomeDirectoryName'
   local -i Retcode=$?
   local -r Deinstaller="${HomeDirectoryName}/deinstall/deinstall"
   local -r DeinstallerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} de-installer program"
@@ -3361,40 +3469,40 @@ installManager() {
   local WeblogicPassword=''
   echoTitle "installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
   processInstallationOptionsFile $? "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_HOME_DIRECTORY_NAME"
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_STAGING_DIRECTORY_NAME"          'StagingDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_PATCHES_DIRECTORY_NAME"          'PatchesDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_INVENTORY_DIRECTORY_NAME"        'InventoryDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_INSTALLATION_USER"               'User' 'UserDescription'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_INSTALLATION_GROUP"              'Group'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_DATA_DIRECTORY_NAME"    'DatabaseDataDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_NAME"                   'DatabaseName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_HOSTNAME"               'DatabaseHostName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_PORT"                   'DatabasePort'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_DATABASE_PASSWORD"               'DatabasePassword'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_VERSION"                 'Version'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME" 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_PATCHES_FILE_NAMES"      'PatchesFileNames' 'PatchesFileNamesDescription'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_RESPONSE_FILE_NAME"      'ResponseFileName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_PORTS_FILE_NAME"         'PortsFileName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_BASE_DIRECTORY_NAME"     'BaseDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_HOME_DIRECTORY_NAME"     'HomeDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME" 'InstanceDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_HOSTNAME"                'HostName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_USER_PORT"               'UserPort' 'UserPortDescription'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_UPLOAD_PORT"             'UploadPort' 'UploadPortDescription'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_PASSWORD"                'ManagerPassword'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_KEYSTORE_FILE_NAME"      'KeystoreFileName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_KEYSTORE_PASSWORD"       'KeystorePassword'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"    'TruststoreFileName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"     'TruststorePassword'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'AgentBaseDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_AGENT_HOME_DIRECTORY_NAME"       'AgentHomeDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_AGENT_INSTANCE_DIRECTORY_NAME"   'AgentInstanceDirectoryName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_AGENT_PORT"                      'AgentPort' 'AgentPortDescription'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_AGENT_PASSWORD"                  'AgentPassword'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_WEBLOGIC_PORT"                   'WeblogicPort' 'WeblogicPortDescription'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_WEBLOGIC_USER"                   'WeblogicUser'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' "$OPTION_WEBLOGIC_PASSWORD"               'WeblogicPassword'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_STAGING_DIRECTORY_NAME"          'StagingDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_PATCHES_DIRECTORY_NAME"          'PatchesDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_INVENTORY_DIRECTORY_NAME"        'InventoryDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_INSTALLATION_USER"               'User' 'UserDescription'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_INSTALLATION_GROUP"              'Group'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_DATABASE_DATA_DIRECTORY_NAME"    'DatabaseDataDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_DATABASE_NAME"                   'DatabaseName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_DATABASE_HOSTNAME"               'DatabaseHostName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_DATABASE_PORT"                   'DatabasePort'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_DATABASE_PASSWORD"               'DatabasePassword'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_VERSION"                 'Version'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME" 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_PATCHES_FILE_NAMES"      'PatchesFileNames' 'PatchesFileNamesDescription'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_RESPONSE_FILE_NAME"      'ResponseFileName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_PORTS_FILE_NAME"         'PortsFileName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_BASE_DIRECTORY_NAME"     'BaseDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_HOME_DIRECTORY_NAME"     'HomeDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME" 'InstanceDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_HOSTNAME"                'HostName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_USER_PORT"               'UserPort' 'UserPortDescription'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_UPLOAD_PORT"             'UploadPort' 'UploadPortDescription'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_PASSWORD"                'ManagerPassword'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_KEYSTORE_FILE_NAME"      'KeystoreFileName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_KEYSTORE_PASSWORD"       'KeystorePassword'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"    'TruststoreFileName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"     'TruststorePassword'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'AgentBaseDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_HOME_DIRECTORY_NAME"       'AgentHomeDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_INSTANCE_DIRECTORY_NAME"   'AgentInstanceDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_PORT"                      'AgentPort' 'AgentPortDescription'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_PASSWORD"                  'AgentPassword'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_WEBLOGIC_PORT"                   'WeblogicPort' 'WeblogicPortDescription'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_WEBLOGIC_USER"                   'WeblogicUser'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_WEBLOGIC_PASSWORD"               'WeblogicPassword'
   local -i Retcode=$?
   local -r Installer="${HomeDirectoryName}/sysman/install/ConfigureGC.sh"
   local -r InstallerDescription="configuration program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
@@ -3741,24 +3849,24 @@ provisionManager() {
   local AgentBaseDirectoryName=''
   local AgentHomeDirectoryName=''
   echoTitle "provisioning the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} software"
-  retrieveOption $? "$1" "$2" "$OPTION_STAGING_DIRECTORY_NAME"          'StagingDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_PATCHES_DIRECTORY_NAME"          'PatchesDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DIRECTORY_PERMISSIONS"           'DirectoryPermissions'
-  retrieveOption $? "$1" "$2" "$OPTION_INVENTORY_DIRECTORY_NAME"        'InventoryDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"               'User'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"              'Group'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                 'Version'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PACKAGES_FILE_NAMES"     'PackagesFileNames' 'PackagesFileNamesDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_OPATCH_FILE_NAME"        'OPatchFileName' 'OPatchFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_OMSPATCHER_FILE_NAME"    'OMSPatcherFileName' 'OMSPatcherFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME" 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_PATCHES_FILE_NAMES"      'PatchesFileNames' 'PatchesFileNamesDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_RESPONSE_FILE_NAME"      'ResponseFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_BASE_DIRECTORY_NAME"     'BaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME_DIRECTORY_NAME"     'HomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME" 'InstanceDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'AgentBaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_HOME_DIRECTORY_NAME"       'AgentHomeDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_STAGING_DIRECTORY_NAME"          'StagingDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_PATCHES_DIRECTORY_NAME"          'PatchesDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_DIRECTORY_PERMISSIONS"           'DirectoryPermissions'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_INVENTORY_DIRECTORY_NAME"        'InventoryDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_INSTALLATION_USER"               'User'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_INSTALLATION_GROUP"              'Group'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_MANAGER_VERSION"                 'Version'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_MANAGER_PACKAGES_FILE_NAMES"     'PackagesFileNames' 'PackagesFileNamesDescription'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_MANAGER_OPATCH_FILE_NAME"        'OPatchFileName' 'OPatchFileNameDescription'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_MANAGER_OMSPATCHER_FILE_NAME"    'OMSPatcherFileName' 'OMSPatcherFileNameDescription'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_MANAGER_UPGRADE_PATCH_FILE_NAME" 'UpgradePatchFileName' 'UpgradePatchFileNameDescription'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_MANAGER_PATCHES_FILE_NAMES"      'PatchesFileNames' 'PatchesFileNamesDescription'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_MANAGER_RESPONSE_FILE_NAME"      'ResponseFileName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_MANAGER_BASE_DIRECTORY_NAME"     'BaseDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_MANAGER_HOME_DIRECTORY_NAME"     'HomeDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME" 'InstanceDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'AgentBaseDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER "$OPTION_AGENT_HOME_DIRECTORY_NAME"       'AgentHomeDirectoryName'
   local -i Retcode=$?
   local -r Repository="${StagingDirectoryName}/manager-${Version}"
   local -r RepositoryDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} installation repository directory"
@@ -4119,16 +4227,16 @@ uninstallManager() {
   local WeblogicPassword
   echoTitle "de-installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
   processInstallationOptionsFile $? "$1" "$2" 'UninstallationSources' 'UninstallationValues' "$OPTION_MANAGER_HOME_DIRECTORY_NAME"
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_STAGING_DIRECTORY_NAME"          'StagingDirectoryName'
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_INSTALLATION_USER"               'User'
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_INSTALLATION_GROUP"              'Group'
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_DATABASE_PASSWORD"               'DatabasePassword'
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_MANAGER_BASE_DIRECTORY_NAME"     'BaseDirectoryName'
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_MANAGER_HOME_DIRECTORY_NAME"     'HomeDirectoryName'
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME" 'InstanceDirectoryName'
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_MANAGER_PASSWORD"                'ManagerPassword'
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'AgentBaseDirectoryName'
-  retrieveOption $? 'UninstallationSources' 'UninstallationValues' "$OPTION_WEBLOGIC_PASSWORD"               'WeblogicPassword'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_STAGING_DIRECTORY_NAME"          'StagingDirectoryName'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_INSTALLATION_USER"               'User'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_INSTALLATION_GROUP"              'Group'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_DATABASE_PASSWORD"               'DatabasePassword'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_BASE_DIRECTORY_NAME"     'BaseDirectoryName'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_HOME_DIRECTORY_NAME"     'HomeDirectoryName'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME" 'InstanceDirectoryName'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_PASSWORD"                'ManagerPassword'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'AgentBaseDirectoryName'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_WEBLOGIC_PASSWORD"               'WeblogicPassword'
   local -i Retcode=$?
   local -r Deinstaller1="${HomeDirectoryName}/sysman/install/EMDeinstall.pl"
   local -r Deinstaller2="${StagingDirectoryName}/EMDeinstall.pl"
@@ -4316,30 +4424,30 @@ prepareInstallation() {
   local ServiceName
   local SystemdFileName
   echoTitle 'preparing for installation of the Oracle products'
-  retrieveOption $? "$1" "$2" "$OPTION_STAGING_DIRECTORY_NAME"            'StagingDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_PATCHES_DIRECTORY_NAME"            'PatchesDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DIRECTORY_PERMISSIONS"             'DirectoryPermissions'
-  retrieveOption $? "$1" "$2" "$OPTION_BASE_APPLICATIONS_DIRECTORY_NAME"  'BaseApplicationsDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_BASE_DATA_DIRECTORY_NAME"          'BaseDataDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_BASE_RECOVERY_DIRECTORY_NAME"      'BaseRecoveryDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_INVENTORY_DIRECTORY_NAME"          'InventoryDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_USER"                 'User' 'UserDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_INSTALLATION_GROUP"                'Group' 'GroupDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_HOME_DIRECTORY_NAME"      'DatabaseHomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_NAME"                     'DatabaseName'
-  retrieveOption $? "$1" "$2" "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME" 'DBAGroupName'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_VERSION"                   'ManagerVersion'
-  retrieveOption $? "$1" "$2" "$OPTION_MANAGER_HOME_DIRECTORY_NAME"       'ManagerHomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_BASE_DIRECTORY_NAME"         'AgentBaseDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_AGENT_HOME_DIRECTORY_NAME"         'AgentHomeDirectoryName'
-  retrieveOption $? "$1" "$2" "$OPTION_SUDOERS_FILE_NAME"                 'SudoersFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SWAP_GOAL"                         'SwapGoal' 'SwapGoalDescription'
-  retrieveOption $? "$1" "$2" "$OPTION_SWAP_FILE_NAME"                    'SwapFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSCTL_FILE_NAME"                  'SysctlFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_DATABASE_FILE_NAME"         'LimitsDatabaseFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_LIMITS_MANAGER_FILE_NAME"          'LimitsManagerFileName'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_SERVICE_NAME"              'ServiceName'
-  retrieveOption $? "$1" "$2" "$OPTION_SYSTEMD_FILE_NAME"                 'SystemdFileName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_STAGING_DIRECTORY_NAME"            'StagingDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_PATCHES_DIRECTORY_NAME"            'PatchesDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_DIRECTORY_PERMISSIONS"             'DirectoryPermissions'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_BASE_APPLICATIONS_DIRECTORY_NAME"  'BaseApplicationsDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_BASE_DATA_DIRECTORY_NAME"          'BaseDataDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_BASE_RECOVERY_DIRECTORY_NAME"      'BaseRecoveryDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_INVENTORY_DIRECTORY_NAME"          'InventoryDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_INSTALLATION_USER"                 'User' 'UserDescription'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_INSTALLATION_GROUP"                'Group' 'GroupDescription'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_HOME_DIRECTORY_NAME"      'DatabaseHomeDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_NAME"                     'DatabaseName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_DATABASE_ADMINISTRATOR_GROUP_NAME" 'DBAGroupName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER  "$OPTION_MANAGER_VERSION"                   'ManagerVersion'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER  "$OPTION_MANAGER_HOME_DIRECTORY_NAME"       'ManagerHomeDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER  "$OPTION_AGENT_BASE_DIRECTORY_NAME"         'AgentBaseDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER  "$OPTION_AGENT_HOME_DIRECTORY_NAME"         'AgentHomeDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_SUDOERS_FILE_NAME"                 'SudoersFileName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_SWAP_GOAL"                         'SwapGoal' 'SwapGoalDescription'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_SWAP_FILE_NAME"                    'SwapFileName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_SYSCTL_FILE_NAME"                  'SysctlFileName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_DATABASE "$OPTION_LIMITS_DATABASE_FILE_NAME"         'LimitsDatabaseFileName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_MANAGER  "$OPTION_LIMITS_MANAGER_FILE_NAME"          'LimitsManagerFileName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_SYSTEMD_SERVICE_NAME"              'ServiceName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_SYSTEMD_FILE_NAME"                 'SystemdFileName'
   local -i Retcode=$?
 
   if [[ $RETCODE_SUCCESS -ne $Retcode ]] ; then
