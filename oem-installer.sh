@@ -3645,13 +3645,16 @@ installManager() {
 
       ### Validate that the database information connects to an Oracle database. ###
 
-      echoCommand 'sudo' '-u' "$User" '-g' "$Group" 'sh' '-c' "LD_LIBRARY_PATH='${HomeDirectoryName}/sqlplus/lib:${HomeDirectoryName}/lib' ORACLE_HOME='${HomeDirectoryName}' ${HomeDirectoryName}/bin/sqlplus -L 'sys/${DatabasePassword}@${DatabaseHostName}:${DatabasePort}/${DatabaseName} AS SYSDBA'"
-      sudo '-u' "$User" '-g' "$Group" 'sh' '-c' "LD_LIBRARY_PATH='${HomeDirectoryName}/sqlplus/lib:${HomeDirectoryName}/lib' ORACLE_HOME='${HomeDirectoryName}' ${HomeDirectoryName}/bin/sqlplus -L 'sys/${DatabasePassword}@${DatabaseHostName}:${DatabasePort}/${DatabaseName} AS SYSDBA'" <<EOF
+      local CommandContent=''
+      read -d '' -r CommandContent <<EOF
 EXIT
 EOF
-        2>&1 | tee -a "$LogFile"
+      readonly Command Content
+      executeSudoShellCommand "$User" "$Group" "( export ORACLE_HOME='${HomeDirectoryName}'; export LD_LIBRARY_PATH='${HomeDirectoryName}/sqlplus/lib:${HomeDirectoryName}/lib'; cd '${HomeDirectoryName}'; ${HomeDirectoryName}/bin/sqlplus -L 'sys/${DatabasePassword}@${DatabaseHostName}:${DatabasePort}/${DatabaseName} AS SYSDBA' <<EOF${CHARACTER_NEWLINE}${CommandContent}${CHARACTER_NEWLINE}EOF${CHARACTER_NEWLINE} )"
       processCommandCode $? "failed to connect to an instance of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} with the information provided" "$DatabaseName" "$DatabaseHostName"
       Retcode=$?
+
+return $Retcode
 
       ### Generate the static ports file. ###
 
@@ -4257,24 +4260,36 @@ uninstallManager() {
   local User
   local Group
   local DatabasePassword
+  local UploadPort=''
+  local UploadPortDescription=''
   local BaseDirectoryName
   local HomeDirectoryName
   local InstanceDirectoryName
   local ManagerPassword
+  local UserPort=''
+  local UserPortDescription=''
   local AgentBaseDirectoryName
+  local AgentPort=''
+  local AgentPortDescription=''
   local WeblogicPassword
+  local WeblogicPort=''
+  local WeblogicPortDescription=''
   echoTitle "de-installing the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
   processInstallationOptionsFile $? "$1" "$2" 'UninstallationSources' 'UninstallationValues' "$OPTION_MANAGER_HOME_DIRECTORY_NAME"
   retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_STAGING_DIRECTORY_NAME"          'StagingDirectoryName'
   retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_INSTALLATION_USER"               'User'
   retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_INSTALLATION_GROUP"              'Group'
   retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_DATABASE_PASSWORD"               'DatabasePassword'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_UPLOAD_PORT"             'UploadPort' 'UploadPortDescription'
   retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_BASE_DIRECTORY_NAME"     'BaseDirectoryName'
   retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_HOME_DIRECTORY_NAME"     'HomeDirectoryName'
   retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME" 'InstanceDirectoryName'
   retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_PASSWORD"                'ManagerPassword'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_USER_PORT"               'UserPort' 'UserPortDescription'
   retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'AgentBaseDirectoryName'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_PORT"                      'AgentPort' 'AgentPortDescription'
   retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_WEBLOGIC_PASSWORD"               'WeblogicPassword'
+  retrieveOption $? 'UninstallationSources' 'UninstallationValues' $OPTION_TARGET_MANAGER "$OPTION_WEBLOGIC_PORT"                   'WeblogicPort' 'WeblogicPortDescription'
   local -i Retcode=$?
   local -r Deinstaller1="${HomeDirectoryName}/sysman/install/EMDeinstall.pl"
   local -r Deinstaller2="${StagingDirectoryName}/EMDeinstall.pl"
@@ -4341,8 +4356,6 @@ uninstallManager() {
   if [[ $VALUE_TRUE -eq $bProceed ]] ; then
     echoSection "De-installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
     executeSudoShellCommand "$User" "$Group" "( printf 'y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n' | '${HomeDirectoryName}/perl/bin/perl' '$Deinstaller2' -mwHome '$HomeDirectoryName' -stageLoc '$StagingDirectoryName' )"
-#    echoCommand 'printf' "y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n" '|' 'sudo' 'su' '-' "$User" '-s' '/usr/bin/bash' '-c' "${HomeDirectoryName}/perl/bin/perl" "$Deinstaller2" '-mwHome' "$HomeDirectoryName" '-stageLoc' "$StagingDirectoryName"
-#    printf "y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n" | sudo 'su' '-' "${User}" '-s' '/usr/bin/bash' '-c' "${HomeDirectoryName}/perl/bin/perl ${Deinstaller2} -mwHome ${HomeDirectoryName} -stageLoc ${StagingDirectoryName}"
     processCommandCode $? "an error occurred when running the ${DeinstallerDescription}" "$Deinstaller2"
     Retcode=$?
   fi
