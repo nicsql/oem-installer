@@ -3583,6 +3583,8 @@ installManager() {
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_WEBLOGIC_USER"                   'WeblogicUser'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_WEBLOGIC_PASSWORD"               'WeblogicPassword'
   local -i Retcode=$?
+  local -r RepositoryManager="${HomeDirectoryName}/sysman/admin/emdrep/bin/RepManager"
+  local -r RepositoryManagerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} repository manager"
   local -r Installer="${HomeDirectoryName}/sysman/install/ConfigureGC.sh"
   local -r InstallerDescription="configuration program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
   local -r AgentInstaller="${AgentHomeDirectoryName}/sysman/install/agentDeploy.sh"
@@ -3649,12 +3651,23 @@ installManager() {
       read -d '' -r CommandContent <<EOF
 EXIT
 EOF
-      readonly Command Content
+      readonly CommandContent
       executeSudoShellCommand "$User" "$Group" "( export ORACLE_HOME='${HomeDirectoryName}'; export LD_LIBRARY_PATH='${HomeDirectoryName}/sqlplus/lib:${HomeDirectoryName}/lib'; cd '${HomeDirectoryName}'; ${HomeDirectoryName}/bin/sqlplus -L 'sys/${DatabasePassword}@${DatabaseHostName}:${DatabasePort}/${DatabaseName} AS SYSDBA' <<EOF${CHARACTER_NEWLINE}${CommandContent}${CHARACTER_NEWLINE}EOF${CHARACTER_NEWLINE} )"
       processCommandCode $? "failed to connect to an instance of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} with the information provided" "$DatabaseName" "$DatabaseHostName"
       Retcode=$?
 
-return $Retcode
+      ### Delete any existing repository of the Oracle Enterprise Manager in the Oracle Database. ###
+
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$RepositoryManager" '-a' '-x' "$RepositoryManager"
+        if [[ 0 -eq $? ]] ; then
+          echoCommandSuccess
+          executeSudoShellCommand "$User" "$Group" "( cd '${HomeDirectoryName}'; ${RepositoryManager} '${DatabaseHostName}' '${DatabasePort}' '${DatabaseName}' -action drop -dbUser 'sys' -dbPassword '${DatabasePassword}' -dbRole 'sysdba' -reposName 'SYSMAN' -mwHome '${HomeDirectoryName}' -mwOraHome '${HomeDirectoryName}' -oracleHome '${HomeDirectoryName}/sysman' )"
+          processCommandCode $? "an error occurred during the executino of the ${RepositoryManagerDescription}" "$RepositoryManager"
+        else
+          echoCommandMessage "the ${RepositoryManagerDescription} was not found" "$RepositoryManager"
+        fi
+      fi
 
       ### Generate the static ports file. ###
 
@@ -4355,7 +4368,7 @@ uninstallManager() {
 
   if [[ $VALUE_TRUE -eq $bProceed ]] ; then
     echoSection "De-installation of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
-    executeSudoShellCommand "$User" "$Group" "( printf 'y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n' | '${HomeDirectoryName}/perl/bin/perl' '$Deinstaller2' -mwHome '$HomeDirectoryName' -stageLoc '$StagingDirectoryName' )"
+    executeSudoShellCommand "$User" "$Group" "( cd '${StagingDirectoryName}'; printf 'y\n${DatabasePassword}\n${ManagerPassword}\n${WeblogicPassword}\n' | '${HomeDirectoryName}/perl/bin/perl' '$Deinstaller2' -mwHome '$HomeDirectoryName' -stageLoc '$StagingDirectoryName' )"
     processCommandCode $? "an error occurred when running the ${DeinstallerDescription}" "$Deinstaller2"
     Retcode=$?
   fi
