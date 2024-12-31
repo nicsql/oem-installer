@@ -143,6 +143,7 @@ declare -r OPTION_MANAGER_KEYSTORE_FILE_NAME='keystore-file'
 declare -r OPTION_MANAGER_KEYSTORE_PASSWORD='keystore-password'
 declare -r OPTION_MANAGER_TRUSTSTORE_FILE_NAME='truststore-file'
 declare -r OPTION_MANAGER_TRUSTSTORE_PASSWORD='truststore-password'
+declare -r OPTION_MANAGER_PLUGIN_FILE_NAME='manager-plugin-file-name'
 declare -r OPTION_MANAGER_CONTROLLER_FILE_NAME='manager-controller-file-name'
 declare -r OPTION_AGENT_VERSION='agent-version'
 declare -r OPTION_AGENT_BASE_DIRECTORY_NAME='agent-base-directory'
@@ -212,6 +213,7 @@ declare -r -a OPTIONS=(
   "$OPTION_MANAGER_KEYSTORE_PASSWORD"
   "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"
   "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"
+  "$OPTION_MANAGER_PLUGIN_FILE_NAME"
   "$OPTION_MANAGER_CONTROLLER_FILE_NAME"
   "$OPTION_AGENT_VERSION"
   "$OPTION_AGENT_BASE_DIRECTORY_NAME"
@@ -317,6 +319,7 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]=$OPTION_SOURCE_CONFIGURATION_FILE
   ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]=$OPTION_SOURCE_CONFIGURATION_FILE
+  ["$OPTION_MANAGER_PLUGIN_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_CONTROLLER_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_AGENT_VERSION"]=$OPTION_SOURCE_ALL
   ["$OPTION_AGENT_BASE_DIRECTORY_NAME"]=$OPTION_SOURCE_ALL
@@ -418,6 +421,7 @@ declare -r -A -i OPTION_TARGETS=(
   ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]=$OPTION_TARGET_MANAGER
   ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]=$OPTION_TARGET_MANAGER
   ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_MANAGER_PLUGIN_FILE_NAME"]=$OPTION_TARGET_MANAGER
   ["$OPTION_MANAGER_CONTROLLER_FILE_NAME"]=$OPTION_TARGET_MANAGER
   ["$OPTION_AGENT_VERSION"]=$OPTION_TARGET_AGENT
   ["$OPTION_AGENT_BASE_DIRECTORY_NAME"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
@@ -562,6 +566,8 @@ declare -r DESCRIPTION_MANAGER_KEYSTORE="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGE
 declare -r DESCRIPTION_MANAGER_KEYSTORE_FILE="${DESCRIPTION_MANAGER_KEYSTORE} file"
 declare -r DESCRIPTION_MANAGER_TRUSTSTORE="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} trust store"
 declare -r DESCRIPTION_MANAGER_TRUSTSTORE_FILE="${DESCRIPTION_MANAGER_TRUSTSTORE} file"
+declare -r DESCRIPTION_MANAGER_PLUGIN="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} MySQL plugin"
+declare -r DESCRIPTION_MANAGER_PLUGIN_FILE="installation file for the ${DESCRIPTION_MANAGER_PLUGIN}"
 declare -r DESCRIPTION_MANAGER_CONTROLLER_FILE="service controller program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
 declare -r DESCRIPTION_AGENT_BASE_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} base directory"
 declare -r DESCRIPTION_AGENT_HOME_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} home directory"
@@ -629,6 +635,7 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]="password for the ${OPTION_MANAGER_KEYSTORE_FILE}"
   ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]="name of the ${OPTION_MANAGER_TRUSTSTORE_FILE}"
   ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]="password for the ${OPTION_MANAGER_TRUSTSTORE_FILE}"
+  ["$OPTION_MANAGER_PLUGIN_FILE_NAME"]="name of the ${DESCRIPTION_MANAGER_PLUGIN_FILE}"
   ["$OPTION_MANAGER_CONTROLLER_FILE_NAME"]="name of the ${DESCRIPTION_MANAGER_CONTROLLER_FILE}"
   ["$OPTION_AGENT_VERSION"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} version"
   ["$OPTION_AGENT_BASE_DIRECTORY_NAME"]="name of the ${DESCRIPTION_AGENT_BASE_DIRECTORY}"
@@ -3092,7 +3099,7 @@ ALTER SYSTEM CHECKPOINT;
 SHUTDOWN TRANSACTIONAL
 EOF
         readonly CommandContent
-        executeSudoShellCommand "$User" "$Group" "( export ORACLE_HOME='${HomeDirectoryName}'; cd '${HomeDirectoryName}'; ${HomeDirectoryName}/bin/sqlplus /nolog <<EOF${CHARACTER_NEWLINE}${CommandContent}${CHARACTER_NEWLINE}EOF${CHARACTER_NEWLINE})"
+        executeSudoShellCommand "$User" "$Group" "( export ORACLE_HOME='${HomeDirectoryName}'; cd '${HomeDirectoryName}'; ${HomeDirectoryName}/bin/sqlplus /nolog <<EOF${CHARACTER_NEWLINE}${CommandContent}${CHARACTER_NEWLINE}EOF${CHARACTER_NEWLINE} )"
         processCommandCode $? "failed to configure the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} parameters" "$DatabaseName"
         Retcode=$?
       fi
@@ -3492,13 +3499,21 @@ uninstallDatabase() {
 ##
 ## @note This function performs the following steps:
 ##
+## @li Installation of the necessary patches.
+## @li Test of the connection to the repository server.
+## @li Clean the repository of an existing objects.
+## @li Generations of a configuration file with the list of ports to be used.
 ## @li Generation of a response file for the automated installation of the
 ##     Oracle Enterprise Manager.
 ## @li Installation of the Oracle Enterprise Manager.
-## @li Deletion of the automated installation response file.
+## @li Deletion of the ports and automated installation response files.
 ## @li Execution of the allroot.sh script.
 ## @li Configuration of Firewalld to allow external network access to Oracle
 ##     Enterprise Manager.
+## @li Update of the installation user's .bashrc file.
+## @li Creation of the Oracle Database controller script in the installation
+##     user's home directory.
+## @li Import of the MySQL plugin for the Oracle Enterprise Manager.
 ##
 ## @return The return code of the function execution.
 ################################################################################
@@ -3536,6 +3551,7 @@ installManager() {
   local KeystorePassword=''
   local TruststoreFileName=''
   local TruststorePassword=''
+  local PluginFileName=''
   local AgentBaseDirectoryName=''
   local AgentHomeDirectoryName=''
   local AgentInstanceDirectoryName=''
@@ -3574,6 +3590,7 @@ installManager() {
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_KEYSTORE_PASSWORD"       'KeystorePassword'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"    'TruststoreFileName'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"     'TruststorePassword'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_PLUGIN_FILE_NAME"        'PluginFileName'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'AgentBaseDirectoryName'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_HOME_DIRECTORY_NAME"       'AgentHomeDirectoryName'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_INSTANCE_DIRECTORY_NAME"   'AgentInstanceDirectoryName'
@@ -3589,9 +3606,12 @@ installManager() {
   local -r InstallerDescription="configuration program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
   local -r AgentInstaller="${AgentHomeDirectoryName}/sysman/install/agentDeploy.sh"
   local -r AgentInstallerDescription="installer program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]}"
+  local -r PluginDirectoryName="${StagingDirectoryName}/plugin"
+  local -r PluginDirectoryDescription="staging directory for the ${DESCRIPTION_MANAGER_PLUGIN}"
   local -r MarkerProvisioned="${HomeDirectoryName}/${INSTALLATION_STEP_PROVISIONED}"
   local -r MarkerAgentProvisioned="${AgentHomeDirectoryName}/${INSTALLATION_STEP_PROVISIONED}"
   local -r MarkerInstalled="${HomeDirectoryName}/${INSTALLATION_STEP_INSTALLED}"
+  local -r MarkerInstalledPlugin="${MarkerInstalled}_PLUGIN"
   local -r MarkerAgentInstalled="${AgentHomeDirectoryName}/${INSTALLATION_STEP_INSTALLED}"
   local -r MarkerFirewalldConfigured="${HomeDirectoryName}/${INSTALLATION_STEP_CONFIGURED}_FIREWALLD"
   local -r MarkerPatched="${HomeDirectoryName}/${INSTALLATION_STEP_PATCHED}"
@@ -3878,6 +3898,51 @@ EOF
   createControllerFile $Retcode "$1" "$2" "$PRODUCT_MANAGER"
   createControllerFile $?       "$1" "$2" "$PRODUCT_AGENT"
   Retcode=$?
+
+  #####################################
+  # Installation of the MySQL plugin. #
+  #####################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "installation of the ${DESCRIPTION_MANAGER_PLUGIN}"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalledPlugin"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DESCRIPTION_MANAGER_PLUGIN} is already installed" "$HomeDirectoryName"
+    else
+      echoCommandMessage "the ${DESCRIPTION_MANAGER_PLUGIN} has not been installed" "$HomeDirectoryName"
+      createDirectory $? "$User" "$Group" "755" "$PluginDirectoryDescription" "$PluginDirectoryName"
+      extractFile $? "$User" "$Group" "$DESCRIPTION_MANAGER_PLUGIN_FILE" "$PluginFileName" "$PluginDirectoryDescription" "$PluginDirectoryName"
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        local -r PluginOParFileName=$(ls -1 ${PluginDirectoryName}/*.opar)
+        if [[ 0 -ne $? ]] || [[ -z "$PluginOParFileName" ]] ; then
+          echoInfo "unable to find 'opar' file in ${PluginDirectoryDescription}" "$PluginDirectoryName"
+        else
+          echoInfo "Plugin found in ${PluginDirectoryDescription}" "$PluginDirectoryName" "$PluginOParFileName"
+          executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$PluginOParFileName"
+          if [[ 0 -eq $? ]] ; then
+            local ImportContent
+            read -d '' -r ImportContent <<EOF
+login(username='sysman',password='${ManagerPassword}')
+set_connection_mode(mode='offline')
+Result=import_update(file='${PluginOParFileName}',omslocal=True)
+Result.error()
+set_connection_mode(mode='online')
+exit(Result.exit_code())
+EOF
+            readonly ImportContent
+            echoCommandSuccess
+            executeSudoShellCommand "$User" "$Group" "${HomeDirectoryName}/bin/emcli <<EOF${CHARACTER_NEWLINE}${ImportContent}${CHARACTER_NEWLINE}EOF"
+            processCommandCode $? "failed to install ${DESCRIPTION_MANAGER_PLUGIN}" "$PluginFileName"
+            createMarkerFile $? "$User" "$Group" "$MarkerInstalledPlugin"
+          else
+            echoError $RETCODE_OPERATION_ERROR "the ${DESCRIPTION_MANAGER_PLUGIN} does not exist or is inacessible" "$PluginOParFileName" "$PluginDirectoryName"
+          fi
+          Retcode=$?
+        fi
+      fi
+    fi
+  fi
 
   return $Retcode
 }
@@ -4643,12 +4708,12 @@ prepareInstallation() {
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local SudoersContent=''
-    read -d '' SudoersContent <<EOF
+    read -d '' -r SudoersContent <<EOF
 # Created by ${PROGRAM} on $(date)
 # Grant sudo privileges to the Oracle installation user
 ${User} ALL=(ALL) NOPASSWD:ALL
 EOF
-    local -r SudoersContent
+    readonly SudoersContent
     createFile $Retcode 'root' 'root' '440' "$DESCRIPTION_SUDOERS_FILE" "$SudoersFileName" 'SudoersContent'
     Retcode=$?
   fi
@@ -4771,7 +4836,7 @@ EOF
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       local SysctlContent=''
       local -i bSysctlCreated=$VALUE_FALSE
-      read -d '' SysctlContent <<EOF
+      read -d '' -r SysctlContent <<EOF
 # Created by ${PROGRAM} on $(date)
 fs.file-max = 6815744
 kernel.sem = 250 32000 100 128
@@ -4788,7 +4853,7 @@ net.ipv4.conf.default.rp_filter = 2
 fs.aio-max-nr = 1048576
 net.ipv4.ip_local_port_range = 9000 65500
 EOF
-      local -r SysctlContent
+      readonly SysctlContent
       createFile $Retcode 'root' 'root' '644' "$DESCRIPTION_SYSCTL_FILE" "$SysctlFileName" 'SysctlContent' $VALUE_FALSE 'bSysctlCreated'
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALUE_TRUE -eq $bSysctlCreated ]] ; then
@@ -4812,7 +4877,7 @@ EOF
 
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       local LimitsDatabaseContent=''
-      read -d '' LimitsDatabaseContent <<EOF
+      read -d '' -r LimitsDatabaseContent <<EOF
 # Created by ${PROGRAM} on $(date)
 ${User} soft nofile  1024
 ${User} hard nofile  65536
@@ -4823,7 +4888,7 @@ ${User} hard stack   32768
 ${User} hard memlock 134217728
 ${User} soft memlock 134217728
 EOF
-      local -r LimitsDatabaseContent
+      readonly LimitsDatabaseContent
       createFile $Retcode 'root' 'root' '644' "$DESCRIPTION_LIMITS_DATABASE_FILE" "$LimitsDatabaseFileName" 'LimitsDatabaseContent'
       Retcode=$?
     fi
@@ -4838,14 +4903,14 @@ EOF
 
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       local LimitsManagerContent=''
-      read -d '' LimitsManagerContent <<EOF
+      read -d '' -r LimitsManagerContent <<EOF
 # Created by ${PROGRAM} on $(date)
 ${User} soft nofile 30000
 ${User} hard nofile 65536
 ${User} soft nproc  30000
 ${User} hard nproc  30000
 EOF
-      local -r LimitsManagerContent
+      readonly LimitsManagerContent
       createFile $Retcode 'root' 'root' '644' "$DESCRIPTION_LIMITS_MANAGER_FILE" "$LimitsManagerFileName" 'LimitsManagerContent'
       Retcode=$?
     fi
@@ -4873,12 +4938,12 @@ EOF
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local InventoryContent=''
-    read -d '' InventoryContent <<EOF
+    read -d '' -r InventoryContent <<EOF
 # Created by ${PROGRAM} on $(date)
 inventory_loc=${InventoryDirectoryName}
 inst_group=${Group}
 EOF
-    local -r InventoryContent
+    readonly InventoryContent
     createFile $Retcode "$User" "$Group" '664' "Oracle Central Inventory pointer file" "$ORAINST_FILE_NAME" 'InventoryContent'
     Retcode=$?
   fi
@@ -4895,7 +4960,7 @@ EOF
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
       local SystemdContent=''
       local bSystemdCreated=$VALUE_FALSE
-      read -d '' SystemdContent <<EOF
+      read -d '' -r SystemdContent <<EOF
 # Created by ${PROGRAM} on $(date)
 
 [Unit]
@@ -4916,7 +4981,7 @@ ExecStop=/bin/bash ${ControllerFileName} stop
 [Install]
 WantedBy=multi-user.target
 EOF
-      local -r SystemdContent
+      readonly SystemdContent
       createFile $Retcode 'root' 'root' '644' "$DESCRIPTION_SYSTEMD_SERVICE_FILE" "$SystemdFileName" 'SystemdContent' $VALUE_TRUE 'bSystemdCreated'
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ $VALLUE_TRUE -eq $bSystemdCreated ]] ; then
