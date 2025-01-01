@@ -1,8 +1,9 @@
 #!/bin/bash
 
+#declare -r COMMAND='prepare'
 #declare -r COMMAND='provision'
-#declare -r COMMAND='install'
-declare -r COMMAND='uninstall'
+declare -r COMMAND='install'
+#declare -r COMMAND='uninstall'
 
 #declare -r TARGET='database'
 declare -r TARGET='em'
@@ -49,6 +50,7 @@ else
     --manager-omspatcher-file-name="${ARCHIVE_DIR}/p19999993_135000_Generic.zip" \
     --manager-upgrade-patch-file-name="${ARCHIVE_DIR}/p36761595_135000_Generic.zip" \
     --manager-patches-file-names="${ARCHIVE_DIR}/p31657681_191000_Generic.zip, ${ARCHIVE_DIR}/p34153238_122140_Generic.zip, ${ARCHIVE_DIR}/p35430934_122140_Generic.zip" \
+    --plugin-file-name="${ARCHIVE_DIR}/V1021772-01.zip" \
     "$COMMAND" "$TARGET"
 fi
 
