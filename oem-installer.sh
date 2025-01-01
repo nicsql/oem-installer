@@ -807,7 +807,26 @@ echoMessage() {
 ## @return RETCODE_SUCCESS
 ################################################################################
 echoCommand() {
-  echoLog "$@"
+  local Output=''
+  local -i bFirst=$VALUE_TRUE
+  for Item in "$@" ; do
+    if [[ -n "$Output" ]] ; then
+      Output+=' '
+    fi
+    if [[ '|' == "$Item" ]] ; then
+      Output+=$(printf '%s' "$Item")
+      bFirst=$VALUE_TRUE
+    elif [[ $VALUE_TRUE -eq $bFirst ]] ; then
+      Output+=$(printf '%s' "$Item")
+      bFirst=$VALUE_FALSE
+    else
+      Output+=$(printf "'%s'" "$Item")
+    fi
+  done
+  if [[ -n "$Output" ]] ; then
+    echoLog "$Output"
+  fi
+#  echoLog "$@"
   return $RETCODE_SUCCESS
 }
 
@@ -1069,41 +1088,138 @@ echoTitle() {
 ################################################################################
 ## @fn executeCommand
 ##
+## @brief Echo a shell command then execute it and capture the output to a
 ## @brief Echo a shell command and its parameters, then execute it.
 ##
-## @param[in] ... The command and its parameters.
+## @param[in] ... The command to execute and its parameters..
 ##
 ## @return The return code of the function execution.
 ################################################################################
 executeCommand() {
-  echoCommand "$@"
-  set -o pipefail
-  ($@) 2>&1 | tee -a "$LogFile"
-  local -r Retcode=$?
-  set +o pipefail
-  return $Retcode
+  if [[ 1 -gt $# ]] ; then
+    return $RETCODE_SUCCESS
+  else
+    echoCommand "$@"
+    set -o pipefail
+    ( "$@" ) 2>&1 | tee -a "$LogFile"
+    local -r -i Retcode=$?
+    set +o pipefail
+    return $Retcode
+  fi
 }
 
 ################################################################################
 ## @fn executeCommandOutput
 ##
-## @brief Echo a shell command and its parameters, and execute it and capture
-##        its output into a provided variable.
+## @brief Echo a shell command then execute it and capture the output to a
+##        provided variable.
 ##
 ## @param[out] Output The name of a variable in which to store the output of the
 ##                    of the command.
-## @param[in] ...     The command and its parameters.
+## @param[in] ...     The command to execute and its parameters..
 ##
 ## @return The return code of the function execution.
 ################################################################################
 executeCommandOutput() {
   local _CommandOutputDummy=''
-  local -n _Output="${1:-_CommandOutputDummy}"
+  local -n _CommandOutput="${1:-_CommandOutputDummy}"
   shift
-  echoCommand "$@"
-  _Output=$($@)
-  echo "$_Output" 2>&1 | tee -a "$LogFile"
-  return $?
+  if [[ 1 -gt $# ]] ; then
+    local -r -i Retcode=$RETCODE_SUCCESS
+    _CommandOutput=''
+  else
+    echoCommand "$@"
+    set -o pipefail
+    _CommandOutput=$( ( "$@" ) 2>&1 )
+    local -r -i Retcode=$?
+    set +o pipefail
+    if [[ -n "$_CommandOutput" ]] ; then
+      echo "$_CommandOutput" 2>&1 | tee -a "$LogFile"
+    fi
+  fi
+  readonly _CommandOutput
+  return $Retcode
+}
+
+################################################################################
+## @fn executePipeCommand
+##
+## @brief Echo two shell commands to be piped then execute them.  The commands
+##        are provided as name references to array varables.
+##
+## @param[in] Left  The left-side command of the pipe.
+## @param[in] Right The right-side command of the pipe.
+##
+## @return The return code of the function execution.
+################################################################################
+executePipeCommand() {
+  local -n _Left="$1"
+  local -n _Right="$2"
+  echoCommand "${_Left[@]}" "$Pipe" "${_Right[@]}"
+  set -o pipefail
+  ( "${_Left[@]}" | "${_Right[@]}" ) 2>&1 | tee -a "$LogFile"
+  local -r -i Retcode=$?
+  set +o pipefail
+  return $Retcode
+}
+
+################################################################################
+## @fn executePipeCommandOutput
+##
+## @brief Echo two or more shell commands to be piped then execute them and
+##        capture the output to a provided variable.  The commands are provided
+##        as name references to array varables.
+##
+## @param[out] Output The name of a variable in which to store the output of the
+##                    of the command.
+## @param[in]  Left  The left-side command of the pipe.
+## @param[in]  Right The first right-side command of the pipe.
+## @param[in]  ...   Up to three more commands can optionally be piped to the
+##                   right side.
+##
+## @return The return code of the function execution.
+################################################################################
+executePipeCommandOutput() {
+  local _PipeCommandOutputDummy=''
+  local -n _PipeCommandOutput="${1:-_PipeCommandOutputDummy}"
+  local -n _Left="$2"
+  local -n _Right="$3"
+  set -o pipefail
+  case $# in
+    3)
+      echoCommand "${_Left[@]}" '|' "${_Right[@]}"
+      _PipeCommandOutput=$( ( "${_Left[@]}" | "${_Right[@]}" ) 2>&1 )
+      ;;
+    4)
+      local -n _Right1="$4"
+      echoCommand "${_Left[@]}" '|' "${_Right[@]}" '|' "${_Right1[@]}"
+      _PipeCommandOutput=$( ( "${_Left[@]}" | "${_Right[@]}" | "${_Right1[@]}" ) 2>&1 )
+      ;;
+    5)
+      local -n _Right1="$4"
+      local -n _Right2="$5"
+      echoCommand "${_Left[@]}" '|' "${_Right[@]}" '|' "${_Right1[@]}" '|' "${_Right2[@]}"
+      _PipeCommandOutput=$( ( "${_Left[@]}" | "${_Right[@]}" | "${_Right1[@]}" | "${_Right2[@]}" ) 2>&1 )
+      ;;
+    6)
+      local -n _Right1="$4"
+      local -n _Right2="$5"
+      local -n _Right3="$6"
+      echoCommand "${_Left[@]}" '|' "${_Right[@]}" '|' "${_Right1[@]}" '|' "${_Right2[@]}" '|' "${_Right3[@]}"
+      _PipeCommandOutput=$( ( "${_Left[@]}" | "${_Right[@]}" | "${_Right1[@]}" | "${_Right2[@]}" | "${_Right3[@]}" ) 2>&1 )
+      ;;
+    *)
+      set +o pipefail
+      echoError $RETCODE_INTERNAL_ERROR 'invalid number of shell commands to be piped'
+      return $?
+      ;;
+  esac
+  local -r -i Retcode=$?
+  set +o pipefail
+  if [[ -n "$_PipeCommandOutput" ]] ; then
+    echo "$_PipeCommandOutput" | tee -a "$LogFile"
+  fi
+  return $Retcode
 }
 
 ################################################################################
@@ -1122,6 +1238,7 @@ executeSudoShellCommand() {
   local -r User="${1:-root}"
   local -r Group="${2:-}"
   local -r Command="${3:-}"
+  set -o pipefail
   if [[ -z "$Group" ]] ; then
     echoCommand 'sudo' '-u' "$User" 'sh' '-c' "$Command"
     ( sudo '-u' "$User" 'sh' '-c' "$Command" ) 2>&1 | tee -a "$LogFile"
@@ -1129,7 +1246,9 @@ executeSudoShellCommand() {
     echoCommand 'sudo' '-u' "$User" '-g' "$Group" 'sh' '-c' "$Command"
     ( sudo '-u' "$User" '-g' "$Group" 'sh' '-c' "$Command" ) 2>&1 | tee -a "$LogFile"
   fi
-  return $?
+  local -r -i Retcode=$?
+  set +o pipefail
+  return $Retcode
 }
 
 ################################################################################
@@ -1488,28 +1607,28 @@ retrieveOption() {
 ##                               return immediately when the code denotes an
 ##                               error.  The default value of this parameter is
 ##                               RETCODE_SUCCESS.
+## @param[out] HomeDirectoryName The name of the home directory.
 ## @param[in]  UserDescription   The description of the system user.
 ## @param[in]  User              The system user that owns the home directory to
 ##                               retrieve.
-## @param[out] HomeDirectoryName The name of the home directory.
 ##
 ## @return The value of the parameter Retcode if it denotes an error, or
 ##         otherwise the return code of the function execution.
 ################################################################################
 retrieveHomeDirectoryName() {
   local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -r UserDescription=${2:-installation user}
-  local -r User=${3:-}
-  local -n _HomeDirectoryName="$4"
+  local -n _HomeDirectoryName="$2"
+  local -r UserDescription=${3:-installation user}
+  local -r User=${4:-}
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     if [[ -z "$User" ]] ; then
       echoError $RETCODE_INTERNAL_ERROR 'user name no provided'
       Retcode=$?
     else
-      echoCommand 'getent' 'passwd' "$User" '|' 'cut' '-d:' '-f6'
-      _HomeDirectoryName=$(getent 'passwd' "$User" | cut '-d:' '-f6')
+      local -r -a Left=( 'getent' 'passwd' "$User" )
+      local -r -a Right=( 'cut' '-d:' '-f6' )
+      executePipeCommandOutput '_HomeDirectoryName' 'Left' 'Right'
       local -i ExitCode=$?
-      echo "$_HomeDirectoryName" | tee -a "$LogFile"
       if [[ 0 -eq $ExitCode ]] && [[ -z "$_HomeDirectoryName" ]] ; then
         ExitCode=1
       fi
@@ -1568,7 +1687,7 @@ appendLine() {
         local CleanLine
         echoCommandSuccess
         echoCommand "sudo 'grep' '-o' '^[^#]*' '${Filename}'"
-        while read -r ReadLine; do
+        while read -r ReadLine ; do
           CleanLine=$(echo "$ReadLine" | sed -re 's/^[[:blank:]]+|[[:blank:]]+$//g' -e 's/[[:blank:]]+/ /g')
           if [[ "$Line" == "$CleanLine" ]] ; then
             echoCommandSuccess
@@ -2119,7 +2238,7 @@ createControllerFile() {
     esac
   fi
 
-  retrieveHomeDirectoryName $Retcode "$UserDescription" "$User" 'UserHomeDirectoryName'
+  retrieveHomeDirectoryName $Retcode 'UserHomeDirectoryName' "$UserDescription" "$User"
   Retcode=$?
 
 #echo '--------------------'
@@ -2362,31 +2481,31 @@ extractFile() {
 ##                                 return immediately when the code denotes an
 ##                                 error.  The default value of this parameter
 ##                                 is RETCODE_SUCCESS.
+## @param[out] PatchNumber         The patch number.
 ## @param[in]  FileName            The name of the package zip file that
 ##                                 contains the patch.
 ## @param[in]  FileNameDescription The description of the name of the package
 ##                                 zip file.
-## @param[out] PatchNumber         The patch number.
 ##
 ## @return The value of the parameter Retcode if it denotes an error, or the
 ##         return code of the function execution.
 ################################################################################
 determinePatchNumber() {
   local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -r FileName="${2:-}"
-  local -r FileNameDescription="${3:-name of the patch file}"
-  local -n _DeterminedPatchNumber="$4"
+  local -n _DeterminedPatchNumber="$2"
+  local -r FileName="${3:-}"
+  local -r FileNameDescription="${4:-name of the patch file}"
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     if [[ -z "$FileName" ]] ; then
       echoError $RETCODE_PARAMETER_ERROR "the ${FileNameDescription} was not provided"
     else
-      echoCommand 'basename' "$FileName" '|' 'sed' '-E' 's/p([0-9]*)_.*\.zip/\1/g'
-      _DeterminedPatchNumber=$(basename "$FileName" | sed -E 's/p([0-9]*)_.*\.zip/\1/g')
+      local -r -a Left=( 'basename' "$FileName" )
+      local -r -a Right=( 'sed' '-E' 's/p([0-9]*)_.*\.zip/\1/g' )
+      executePipeCommandOutput '_DeterminedPatchNumber' 'Left' 'Right'
       local -i ExitCode=$?
-      echo "$_DeterminedPatchNumber" | tee -a "$LogFile"
-      if [[ 0 -eq $ExitCode ]] && [[ -z "$_DeterminedPatchNumber" ]] ; then
-        ExitCode=1
+      if [[ 0 -eq $ExitCode ]] && ! [[ "$_DeterminedPatchNumber" =~ ^[0-9]+$ ]] ; then
+        ExitCode=2
       fi
       processCommandCode $ExitCode "unable to determine a patch number from the ${FileNameDescription}" "$FileName"
     fi
@@ -2464,7 +2583,7 @@ extractPatch() {
 #echo "HomeDirectoryName:    ${HomeDirectoryName}"
 
   if [[ -z "$PatchNumber" ]] ; then
-    determinePatchNumber $Retcode "$FileName" "$FileNameDescription" 'PatchNumber'
+    determinePatchNumber $Retcode 'PatchNumber' "$FileName" "$FileNameDescription"
     Retcode=$?
   fi
   readonly PatchNumber
@@ -2565,7 +2684,7 @@ applyPatch() {
 #echo "HomeDirectoryName:    ${HomeDirectoryName}"
 #echo "MarkerBase:           ${MarkerBase}"
 
-  determinePatchNumber $Retcode "$FileName" "$FileNameDescription" 'PatchNumber'
+  determinePatchNumber $Retcode 'PatchNumber' "$FileName" "$FileNameDescription"
   Retcode=$?
   readonly PatchNumber
 #echo "PatchNumber:          ${PatchNumber}"
@@ -2738,26 +2857,26 @@ updatePatcher() {
 ##                               return immediately when the code denotes an
 ##                               error.  The default value of this parameter is
 ##                               RETCODE_SUCCESS.
+## @param[out] Values            An array that will contain the list of values.
 ## @param[in]  OptionName        The name of the option.
 ## @param[in]  OptionDescription The description of the option.
 ## @param[in]  OptionValue       The value of the option, which should be a
 ##                               comma-seperated list of values.
-## @param[out] Values            An array that will contain the list of values.
 ##
 ## @return The value of the parameter Retcode if it denotes an error, or
 ##         otherwise the return code of the function execution.
 ################################################################################
 readOptionValues() {
   local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -r OptionName=${2:-}
-  local -r OptionDescription=${3:-file names}
-  local -r OptionValue=${4:-}
-  local -n _OptionValues="$5"
+  local -n _OptionValues="$2"
+  local -r OptionName=${3:-}
+  local -r OptionDescription=${4:-file names}
+  local -r OptionValue=${5:-}
 
   _OptionValues=()
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$OptionValue" ]] ; then
-    echoCommand "IFS=',' read -ra <<< ${OptionValue}"
+    echoCommand "IFS=',' read -ra <<< '${OptionValue}'"
     IFS=',' read -ra '_OptionValues' <<< "$OptionValue"
     processCommandCode $? "failed to read the ${OptionDescription}" "$OptionName"
     Retcode=$?
@@ -2930,7 +3049,7 @@ EOF
       else
         echoCommandMessage "the ${PRODUCT_DESCRIPTIONS[${PRODUCT_DATABASE}]} has not been installed" "$HomeDirectoryName"
         if [[ -n "$UpgradePatchFileName" ]] ; then
-          determinePatchNumber $Retcode "$UpgradePatchFileName" "$UpgradePatchFileNameDescription" 'PatchNumber'
+          determinePatchNumber $Retcode 'PatchNumber' "$UpgradePatchFileName" "$UpgradePatchFileNameDescription"
           Retcode=$?
         fi
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -3059,7 +3178,7 @@ EOF
 
   ### Update the .bashrc of the installation user. ###
 
-  retrieveHomeDirectoryName $Retcode "$UserDescription" "$User" 'UserHomeDirectoryName'
+  retrieveHomeDirectoryName $Retcode 'UserHomeDirectoryName' "$UserDescription" "$User"
   appendLine $? "$User" "$Group" "${UserHomeDirectoryName}/.bashrc" "export ORACLE_HOSTNAME='${HostName}'" "'"
   appendLine $? "$User" "$Group" "${UserHomeDirectoryName}/.bashrc" "export ORACLE_SID='${DatabaseName}'" "'"
   appendLine $? "$User" "$Group" "${UserHomeDirectoryName}/.bashrc" "export DATABASE_HOME='${HomeDirectoryName}'" "'"
@@ -3252,7 +3371,7 @@ provisionDatabase() {
     local -r OPatchHomeDirectoryName="${HomeDirectoryName}/OPatch"
     local PatchNumber=''
     echoSection "update the ${DESCRIPTION_DATABASE_OPATCH}" "$OPatchFileName" "$OPatchHomeDirectoryName"
-    determinePatchNumber $? "$OPatchFileName" "$OPatchFileNameDescription" 'PatchNumber'
+    determinePatchNumber $? 'PatchNumber' "$OPatchFileName" "$OPatchFileNameDescription"
     updatePatcher \
       $? \
       "$User" \
@@ -3611,9 +3730,10 @@ installManager() {
   local -r MarkerProvisioned="${HomeDirectoryName}/${INSTALLATION_STEP_PROVISIONED}"
   local -r MarkerAgentProvisioned="${AgentHomeDirectoryName}/${INSTALLATION_STEP_PROVISIONED}"
   local -r MarkerInstalled="${HomeDirectoryName}/${INSTALLATION_STEP_INSTALLED}"
-  local -r MarkerInstalledPlugin="${MarkerInstalled}_PLUGIN"
   local -r MarkerAgentInstalled="${AgentHomeDirectoryName}/${INSTALLATION_STEP_INSTALLED}"
   local -r MarkerFirewalldConfigured="${HomeDirectoryName}/${INSTALLATION_STEP_CONFIGURED}_FIREWALLD"
+  local -r MarkerPluginInstalled="${HomeDirectoryName}/${INSTALLATION_STEP_INSTALLED}_PLUGIN"
+  local -r MarkerPluginConfigured="${HomeDirectoryName}/${INSTALLATION_STEP_CONFIGURED}_PLUGIN"
   local -r MarkerPatched="${HomeDirectoryName}/${INSTALLATION_STEP_PATCHED}"
   local -i bResponseCreated=$VALUE_FALSE
   local -i bPortsCreated=$VALUE_FALSE
@@ -3637,7 +3757,7 @@ installManager() {
 
   ### Patch the Oracle Enterprise Manager. ###
 
-  readOptionValues $Retcode "$OPTION_MANAGER_PACKAGES_FILE_NAMES" "$PatchesFileNamesDescription" "$PatchesFileNames" 'FileNames'
+  readOptionValues $Retcode 'FileNames' "$OPTION_MANAGER_PACKAGES_FILE_NAMES" "$PatchesFileNamesDescription" "$PatchesFileNames"
   Retcode=$?
   if [[ 0 -lt ${#FileNames[@]} ]] ; then
     for FileName in ${FileNames[@]} ; do
@@ -3888,7 +4008,7 @@ EOF
 
   ### Update the .bashrc of the installation user. ###
 
-  retrieveHomeDirectoryName $Retcode "$UserDescription" "$User" 'UserHomeDirectoryName'
+  retrieveHomeDirectoryName $Retcode 'UserHomeDirectoryName' "$UserDescription" "$User"
   appendLine $? "$User" "$Group" "${UserHomeDirectoryName}/.bashrc" "export OMS_HOME='${HomeDirectoryName}'" "'"
   appendLine $? "$User" "$Group" "${UserHomeDirectoryName}/.bashrc" "export AGENT_HOME='${AgentHomeDirectoryName}'" "'"
   Retcode=$?
@@ -3905,7 +4025,7 @@ EOF
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     echoSection "installation of the ${DESCRIPTION_MANAGER_PLUGIN}"
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerInstalledPlugin"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerPluginInstalled"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${DESCRIPTION_MANAGER_PLUGIN} is already installed" "$HomeDirectoryName"
     else
@@ -3934,13 +4054,42 @@ EOF
             echoCommandSuccess
             executeSudoShellCommand "$User" "$Group" "${HomeDirectoryName}/bin/emcli <<EOF${CHARACTER_NEWLINE}${ImportContent}${CHARACTER_NEWLINE}EOF"
             processCommandCode $? "failed to install ${DESCRIPTION_MANAGER_PLUGIN}" "$PluginFileName"
-            createMarkerFile $? "$User" "$Group" "$MarkerInstalledPlugin"
+            createMarkerFile $? "$User" "$Group" "$MarkerPluginInstalled"
           else
             echoError $RETCODE_OPERATION_ERROR "the ${DESCRIPTION_MANAGER_PLUGIN} does not exist or is inacessible" "$PluginOParFileName" "$PluginDirectoryName"
           fi
           Retcode=$?
         fi
       fi
+    fi
+  fi
+
+  ###################################
+  # Deployment of the MySQL plugin. #
+  ###################################
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    echoSection "deployment of the ${DESCRIPTION_MANAGER_PLUGIN}"
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerPluginConfigured"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${DESCRIPTION_MANAGER_PLUGIN} is already deployed" "$HomeDirectoryName"
+    else
+      local DeployContent
+      read -d '' -r DeployContent <<EOF
+login(username='sysman',password='${ManagerPassword}')
+ResultOMS=deploy_plugin_on_server(plugin='oracle.mysql.omys',sys_password='${DatabasePassword}',prereq_check=False)
+ResultOMS.error()
+#ResultAgent=deploy_plugin_on_agent(plugin='oracle.mysql.omys',agent_names='${HostName}:${AgentPort}')
+#ResultAgent.error()
+exit(ResultOMS.exit_code())
+EOF
+      readonly DeployContent
+      echoCommandMessage "the ${DESCRIPTION_MANAGER_PLUGIN} has not been deployed" "$HomeDirectoryName"
+      executeSudoShellCommand "$User" "$Group" "${HomeDirectoryName}/bin/emcli <<EOF${CHARACTER_NEWLINE}${DeployContent}${CHARACTER_NEWLINE}EOF"
+echo "RETCODE: $?"
+      processCommandCode $? "failed to deploy ${DESCRIPTION_MANAGER_PLUGIN}" "$PluginFileName"
+      createMarkerFile $? "$User" "$Group" "$MarkerPluginConfigured"
+      Retcode=$?
     fi
   fi
 
@@ -4089,7 +4238,7 @@ provisionManager() {
 
         ### Read the names of the manager package files. ###
 
-        readOptionValues $Retcode "$OPTION_MANAGER_PACKAGES_FILE_NAMES" "$PackagesFileNamesDescription" "$PackagesFileNames" 'FileNames'
+        readOptionValues $Retcode 'FileNames' "$OPTION_MANAGER_PACKAGES_FILE_NAMES" "$PackagesFileNamesDescription" "$PackagesFileNames"
         Retcode=$?
 
         ### Extract the manager package files to the manager repository directory. ###
@@ -4135,7 +4284,7 @@ provisionManager() {
 
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PatchesFileNames" ]] ; then
         echoSection "extraction of the ${DESCRIPTION_MANAGER_PATCH_FILES}" "$PatchesFileNames" "$PatchesDirectoryName"
-        readOptionValues $? "$OPTION_MANAGER_PACKAGES_FILE_NAMES" "$PatchesFileNamesDescription" "$PatchesFileNames" 'FileNames'
+        readOptionValues $? 'FileNames' "$OPTION_MANAGER_PACKAGES_FILE_NAMES" "$PatchesFileNamesDescription" "$PatchesFileNames"
         Retcode=$?
         for FileName in ${FileNames[@]} ; do
           extractPatch \
@@ -4251,7 +4400,7 @@ EOF
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$OPatchFileName" ]] ; then
     local -r OPatchHomeDirectoryName="${HomeDirectoryName}/OPatch"
     echoSection "update the ${DESCRIPTION_MANAGER_OPATCH}" "$OPatchFileName" "$OPatchHomeDirectoryName"
-    determinePatchNumber $? "$OPatchFileName" "$OPatchFileNameDescription" 'PatchNumber'
+    determinePatchNumber $? 'PatchNumber' "$OPatchFileName" "$OPatchFileNameDescription"
     updatePatcher \
       $? \
       "$User" \
@@ -4270,7 +4419,7 @@ EOF
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$OMSPatcherFileName" ]] ; then
     local -r OMSPatcherHomeDirectoryName="${HomeDirectoryName}/OMSPatcher"
     echoSection "update the ${DESCRIPTION_MANAGER_OMSPATCHER}" "$OMSPatcherFileName" "$OMSPatcherHomeDirectoryName"
-    determinePatchNumber $? "$OMSPatcherFileName" "$OMSPatcherFileNameDescription" 'PatchNumber'
+    determinePatchNumber $? 'PatchNumber' "$OMSPatcherFileName" "$OMSPatcherFileNameDescription"
     updatePatcher \
       $? \
       "$User" \
@@ -4548,7 +4697,6 @@ displayOptions() {
 ################################################################################
 prepareInstallation() {
   local -r Target="${3:-${PRODUCT_ALL}}"
-  local Capture=''
   local StagingDirectoryName
   local PatchesDirectoryName
   local DirectoryPermissions
@@ -4619,37 +4767,40 @@ prepareInstallation() {
   ### Create the installation group. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    executeCommandOutput 'Capture' 'sudo' 'getent' 'group' "$Group"
+    local GroupOutput=''
+    executeCommandOutput 'GroupOutput' 'getent' 'group' "$Group"
     if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${GroupDescription} already exists" "$Group" "$Capture"
+      echoCommandMessage "the ${GroupDescription} already exists" "$Group" "$GroupOutput"
     else
-      echoCommandMessage "the ${GroupDescription} does not exist" "$Group" "$Capture"
+      echoCommandMessage "the ${GroupDescription} does not exist" "$Group" "$GroupOutput"
       executeCommand 'sudo' '/usr/sbin/groupadd' '-g' '54321' "$Group"
       processCommandCode $? "failed to create the ${GroupDescription}" "$Group"
+      Retcode=$?
     fi
-    Retcode=$?
   fi
 
   ### Create the installation user. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    local Output1=''
-    local Output2=''
-    echoCommand 'id' "$User"
-    Output1=$(id "$User")
+    local UserOutput1=''
+    local UserOutput2=''
+    executeCommandOutput 'UserOutput1' 'id' "$User" 
     if [[ 0 -eq $? ]] ; then
+      local -r -a UserCommand1=( 'echo' "$UserOutput1" )
+      local -r -a UserCommand2=( 'awk' '-F' ' ' '{ print $2 }' )
+      local -r -a UserCommand3=( 'awk' '-F' '(' '{ print $2 }' )
+      local -r -a UserCommand4=( 'tr' '-d' ')' )
       echoCommandMessage "the ${UserDescription} already exists" "$User"
-      echoCommand 'echo' "$Output1" '|' 'awk' "-F ' ' '{ print \$2 }'" '|' 'awk' "-F '(' '{ print \$2 }'" '|' 'tr' "-d' ')'"
-      Output2=$(echo "$Output1" | awk -F ' ' '{ print $2 }' | awk -F '(' '{ print $2 }' | tr -d ')')
+      executePipeCommandOutput 'UserOutput2' 'UserCommand1' 'UserCommand2' 'UserCommand3' 'UserCommand4'
       processCommandCode $? "failed to validate group membership of the ${UserDescription}" "$User"
       Retcode=$?
       if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        if [[ "$Group" == "$Output2" ]] ; then
+        if [[ "$Group" == "$UserOutput2" ]] ; then
           echoInfo "the primary group of the ${UserDescription} '${User}' is the ${GroupDescription}" "$Group"
         else
-          echoError $RETCODE_OPERATION_ERROR "the primary group of the ${UserDescription} '${User}' is not the ${GroupDescription}" "$Group" "$Output2"
+          echoError $RETCODE_OPERATION_ERROR "the primary group of the ${UserDescription} '${User}' is not the ${GroupDescription}" "$Group" "$UserOutput2"
+          Retcode=$?
         fi
-        Retcode=$?
       fi
     else
       echoCommandMessage "the ${UserDescription} does not exist" "$User"
@@ -4659,48 +4810,60 @@ prepareInstallation() {
     fi
   fi
 
-  if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
-    ### Create the database administrator group. ###
+  #################################################################################
+  # Addition of the database administrator system group to the installation user. #
+  #################################################################################
 
+  if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      executeCommandOutput 'Capture' 'sudo' 'getent' 'group' "$DBAGroupName"
+      local DBAOutput1=''
+      local DBAOutput2=''
+      local -i bAddDBA=$VALUE_FALSE
+      echoSection "Addition of the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP} '${DBAGroupName}' to the ${UserDescription} '${User}'"
+      executeCommandOutput 'DBAOutput1' 'getent' 'group' "$DBAGroupName"
       if [[ 0 -eq $? ]] ; then
-        echoCommandMessage "the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP} already exists" "$DBAGroupName" "$Capture"
+        local -r -a DBACommand1=( 'echo' "$DBAOutput1" )
+        local -r -a DBACommand2=( 'awk' '-F' ':' '{ print $4 }' )
+        echoCommandMessage "the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP} already exists" "$DBAGroupName"
+        executePipeCommandOutput 'DBAOutput2' 'DBACommand1' 'DBACommand2'
+        processCommandCode $? "unable to read the users of the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}" "$DBAGroupName"
+        Retcode=$?
+        if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+          local -a GroupUsers=()
+          local GroupUser=''
+          bAddDBA=$VALUE_TRUE
+          readOptionValues $Retcode 'GroupUsers' '' "${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP} users" "$DBAOutput2"
+          Retcode=$?
+          for GroupUser in "${GroupUsers[@]}" ; do
+            if [[ "$User" == "$GroupUser" ]] ; then
+              bAddDBA=$VALUE_FALSE
+              break
+            fi
+          done
+        fi
       else
-        echoCommandMessage "the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP} does not exist" "$DBAGroupName" "$Capture"
+        echoCommandMessage "the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP} does not exist" "$DBAGroupName"
         executeCommand 'sudo' '/usr/sbin/groupadd' '-g' '54322' "$DBAGroupName"
         processCommandCode $? "failed to create the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}" "$DBAGroupName"
-      fi
-      Retcode=$?
-    fi
-
-    ### Confirm that the installation user is member of the database administrator group. ###
-
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      local Output3=''
-      local Output4=''
-      echoCommand 'sudo' 'getent' 'group' "$DBAGroupName"
-      Output3=$(sudo getent 'group' "$DBAGroupName")
-      processCommandCode $? "the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP} does not exist" "$DBAGroupName"
-      Retcode=$?
-      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-        echoCommand 'echo' "$Output3" '|' 'awk' '-F' ':' '{ print $4}'
-        Output4=$(echo "$Output3" | awk -F ':' '{ print $4}')
-        if [[ 0 -eq $? ]] && [[ "$User" == "$Output4" ]] ; then
-          echoCommandMessage "the ${UserDescription} '${User}' is already a member of the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}" "$DBAGroupName"
-        else
-          echoCommandMessage "the ${UserDescription} '${User}' is not a member of the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}" "$DBAGroupName" "$Output4"
-          executeCommand 'sudo' 'usermod' '-a' '-G' "$DBAGroupName" "$User"
-          processCommandCode $? "failed to add the ${UserDescription} '${User}' to the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}" "$DBAGroupName"
-        fi
         Retcode=$?
+        bAddDBA=$VALUE_TRUE
+      fi
+      if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+        if [[ $VALUE_FALSE -eq $bAddDBA ]] ; then
+          echoInfo "the ${UserDescription} is already a member of the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}" "$DBAGroupName" "$User"
+        else
+          echoInfo "the ${UserDescription} is not a member of the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}" "$DBAGroupName" "$User"
+          executeCommand 'sudo' 'usermod' '-a' '-G' "$DBAGroupName" "$User"
+          processCommandCode $? "failed to add the ${UserDescription} to the ${DESCRIPTION_DATABASE_ADMINISTRATOR_GROUP}" "$DBAGroupName" "$User"
+          Retcode=$?
+        fi
       fi
     fi
   fi
 
   ### Update the .bashrc of the new installation user. ###
 
-  retrieveHomeDirectoryName $Retcode "$UserDescription" "$User" 'UserHomeDirectoryName'
+  retrieveHomeDirectoryName $Retcode 'UserHomeDirectoryName' "$UserDescription" "$User"
   appendLine $? "$User" "$Group" "${UserHomeDirectoryName}/.bashrc" 'export PATH="/usr/local/bin:${PATH}"' '"'
   Retcode=$?
 
@@ -4748,18 +4911,15 @@ EOF
 
   if [[ "$PRODUCT_ALL" == "$Target" ]] || [[ "$PRODUCT_DATABASE" == "$Target" ]] ; then
     if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+      local -r -a SwapCommand1=( 'sudo' 'swapon' '--show' '--raw' '--noheadings' )
+      local -r -a SwapCommand2=( 'awk' '-F' ' ' 'BEGIN{ Total = 0} { if ( "G" == substr($3,length($3),1) ) Total+=int(substr($3,1,length($3)-1)) } END{ print Total }' )
+      local SwapOutput=''
       echoSection "Adjustment of the ${DESCRIPTION_SWAP} for at least ${SwapGoal}GB"
-    fi
-
-    ### Add an extra system swap file, if needed. ###
-
-    if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-      local SwapString=''
-      echoCommand 'sudo' 'swapon' '--show' '--raw' '--noheadings' '|' 'awk' '-F' "' '" "'BEGIN{ Total = 0 } { if ( ${CHARACTER_DOUBLE_QUOTE}G${CHARACTER_DOUBLE_QUOTE} == substr(\$3,length(\$3),1) ) Total += substr(\$3,1,length(\$3)-1) } END{ print Total }'"
-      SwapString=`sudo swapon '--show' '--raw' '--noheadings' | awk '-F' ' ' 'BEGIN{ Total = 0} { if ( "G" == substr($3,length($3),1) ) Total+=int(substr($3,1,length($3)-1)) } END{ print Total }'`
+      executePipeCommandOutput 'SwapOutput' 'SwapCommand1' 'SwapCommand2'
       processCommandCode $? "failed to ascertain the ${DESCRIPTION_SWAP} size"
-      if [[ $RETCODE_SUCCESS -eq $? ]] && [[ -n "$SwapString" ]] && [[ "$SwapString" =~ ^[0-9]+$ ]] ; then
-        local -r -i SwapSize=$SwapString
+      Retcode=$?
+      if [[ $RETCODE_SUCCESS -eq $? ]] && [[ -n "$SwapOutput" ]] && [[ "$SwapOutput" =~ ^[0-9]+$ ]] ; then
+        local -r -i SwapSize=$SwapOutput
         echoInfo "${DESCRIPTION_SWAP}" "${SwapSize}GB"
         echoInfo "${SwapGoalDescription}" "${SwapGoal}GB"
       else
@@ -4799,16 +4959,17 @@ EOF
           fi
         fi
         if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-          executeCommand 'grep' '-e' "^${SwapFileName}[[:space:]]" "$FSTAB_FILE_NAME"
+          local -r -a SwapLeft=( 'grep' '-G' "^${SwapFileName}[[:space:]].*$" "$FSTAB_FILE_NAME" )
+          local -r -a SwapRight=( 'grep' '-F' "${SwapFileName}" )
+          executePipeCommand 'SwapLeft' 'SwapRight'
           if [[ 0 -eq $? ]] ; then
-            echoCommandMessage "a ${DESCRIPTION_SWAP_FILE} entry already exists in ${FSTAB_FILE_NAME}" "$SwapFileName"
+            echoCommandMessage "an ${DESCRIPTION_SWAP_FILE} entry already exists in ${FSTAB_FILE_NAME}" "$SwapFileName"
           else
-            echoCommandSuccess
-            echoCommand 'sudo' 'sh' '-c' "echo '-e' '${SwapFileName}\tnone\tswap\tsw\t0\t0' >> '${FSTAB_FILE_NAME}'"
-            sudo 'sh' '-c' "echo -e '${SwapFileName}\tnone\tswap\tsw\t0\t0' >> '${FSTAB_FILE_NAME}'"
+            echoCommandMessage "an ${DESCRIPTION_SWAP_FILE} entry does not exist in ${FSTAB_FILE_NAME}" "$SwapFileName"
+            executeSudoShellCommand '' '' "echo '-e' '${SwapFileName}\tnone\tswap\tsw\t0\t0' >> '${FSTAB_FILE_NAME}'"
             processCommandCode $? "failed to add entry to ${FSTAB_FILE_NAME} for the ${DESCRIPTION_SWAP_FILE}" "$SwapFileName"
+            Retcode=$?
           fi
-          Retcode=$?
         fi
         if [[ $RETCODE_SUCCESS -ne $Retcode ]] && [[ $VALUE_TRUE -eq $bSwapAdded ]] ; then
           executeCommand 'sudo' 'swapoff' "$SwapFileName"
