@@ -576,7 +576,7 @@ declare -r DESCRIPTION_AGENT_BASE_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_AG
 declare -r DESCRIPTION_AGENT_HOME_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} home directory"
 declare -r DESCRIPTION_AGENT_INSTANCE_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} instance directory"
 declare -r DESCRIPTION_AGENT_CONTROLLER_FILE="service controller program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]}"
-declare -r DESCRIPTION_PLUGIN="MySQL plugin for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+declare -r DESCRIPTION_PLUGIN="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} for MySQL Database plugin"
 declare -r DESCRIPTION_PLUGIN_FILE="installation file for the ${DESCRIPTION_PLUGIN}"
 declare -r DESCRIPTION_SUDOERS_FILE='installation system user sudoers definition file'
 declare -r DESCRIPTION_SWAP='system swap'
@@ -3632,13 +3632,15 @@ uninstallDatabase() {
 ##     Oracle Enterprise Manager.
 ## @li Installation of the Oracle Enterprise Manager.
 ## @li Deletion of the ports and automated installation response files.
-## @li Execution of the allroot.sh script.
 ## @li Configuration of Firewalld to allow external network access to Oracle
 ##     Enterprise Manager.
 ## @li Update of the installation user's .bashrc file.
 ## @li Creation of the Oracle Database controller script in the installation
 ##     user's home directory.
+## @li Extraction of the MySQL plugin package file.
+## @li Synchronization of the tool emcli with the OMS.
 ## @li Import of the MySQL plugin for the Oracle Enterprise Manager.
+## @li Deploy the MySQL plugin to the OMS and its central agent.
 ##
 ## @return The return code of the function execution.
 ################################################################################
@@ -4051,22 +4053,66 @@ EOF
           if [[ 0 -eq $? ]] ; then
             local ImportContent
             read -d '' -r ImportContent <<EOF
-login(username='sysman',password='${ManagerPassword}')
-set_connection_mode(mode='offline')
-Result=import_update(file='${PluginOParFileName}',omslocal=True)
-Result.error()
-set_connection_mode(mode='online')
+from emcli import *
+import time
+
+set_client_property('EMCLI_OMS_URL','https://${HostName}:${UserPort}/em')
+set_client_property('EMCLI_OUTPUT_TYPE','TEXT')
+Result=login(username='sysman',password='${ManagerPassword}')
+if 0 <> Result.exit_code():
+    print Result.error()
+    exit(Result.exit_code())
+
+Result=list(resource='Updates',bind="et_name='core_emplugin'")
+if 0 == Result.exit_code() and 0 <= Result.out().find(' MySQL Database '):
+    print 'The ${DESCRIPTION_PLUGIN} is already imported into the OMS.'
+elif 0 == Result.exit_code():
+    WasOffline=False
+    Result=get_connection_mode()
+    if 0 == Result.exit_code() and 0 <= Result.out().find('offline'):
+        WasOffline=True
+    Offline=WasOffline
+    if False == Offline:
+        Result=set_connection_mode(mode='offline')
+        print Result.out()
+        if 0 == Result.exit_code() and 0 <= Result.out().find('offline'):
+            Offline=True
+    if 0 == Result.exit_code():
+        Result=import_update(file='${PluginOParFileName}',omslocal=True)
+#        Result=import_custom_plugin_update(archive='${PluginFileName}',overwrite=False)
+        if 0 == Result.exit_code():
+            while True:
+                Result=list(resource='Updates',bind="et_name='core_emplugin'")
+                if 0 <> Result.exit_code():
+                    break
+                elif 0 <= Result.out().find(' MySQL Database '):
+                    print 'The ${DESCRIPTION_PLUGIN} was successfully imported into the OMS.'
+                    break
+                time.sleep(1)
+    if False == WasOffline and True == Offline:
+        set_connection_mode(mode='online')
+
+if 0 <> Result.exit_code():
+    print Result.error()
+
+logout()
 exit(Result.exit_code())
 EOF
             readonly ImportContent
             echoCommandSuccess
-            executeSudoShellCommand "$User" "$Group" "${HomeDirectoryName}/bin/emcli <<EOF${CHARACTER_NEWLINE}${ImportContent}${CHARACTER_NEWLINE}EOF"
-            processCommandCode $? "failed to install ${DESCRIPTION_PLUGIN}" "$PluginFileName"
-            createMarkerFile $? "$User" "$Group" "$MarkerPluginInstalled"
+            executeSudoShellCommand "$User" "$Group" "${HomeDirectoryName}/bin/emcli sync -url='https://${HostName}:${UserPort}/em' -username='sysman' -password='$ManagerPassword' -trustall"
+            processCommandCode $? "failed to synchronize the emcli tool of the ${DESCRIPTION_PLUGIN}" "$HomeDirectoryName"
+            Retcode=$?
+            if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+              executeSudoShellCommand "$User" "$Group" "${HomeDirectoryName}/bin/emcli <<EOF${CHARACTER_NEWLINE}${ImportContent}${CHARACTER_NEWLINE}EOF"
+              processCommandCode $? "failed to install ${DESCRIPTION_PLUGIN}" "$PluginFileName"
+              createMarkerFile $? "$User" "$Group" "$MarkerPluginInstalled"
+              Retcode=$?
+            fi
           else
             echoError $RETCODE_OPERATION_ERROR "the ${DESCRIPTION_PLUGIN} does not exist or is inacessible" "$PluginOParFileName" "$PluginDirectoryName"
+            Retcode=$?
           fi
-          Retcode=$?
         fi
       fi
     fi
@@ -4102,16 +4148,17 @@ if 0 == Result.exit_code():
         Result=list_plugins_on_server()
         if 0 <> Result.exit_code():
             print Result.error()
+            logout()
             exit(Result.exit_code())
         elif 0 <= Result.out().find(' ${PluginName} '):
             print 'The ${DESCRIPTION_PLUGIN} was successfully deployed on the OMS.'
             break
-        else:
-            time.sleep(1)
+        time.sleep(1)
 elif 254 == Result.exit_code() and 0 <= Result.error().find(' already deployed'):
     print 'The ${DESCRIPTION_PLUGIN} is already deployed on the OMS.'
 else:
     print Result.error()
+    logout()
     exit(Result.exit_code())
 
 # Deploy the MySQL plugin on the central agent.
@@ -4126,14 +4173,15 @@ if 0 == Result.exit_code():
             Result=list_plugins_on_agent(agent_names='${HostName}:${AgentPort}')
             if 0 <> Result.exit_code():
                 print Result.error()
+                logout()
                 exit(Result.exit_code())
             elif 0 <= Result.out().find(' ${PluginName} '):
                 print 'The ${DESCRIPTION_PLUGIN} was successfully deployed on the central agent.'
                 break
-            else:
-                time.sleep(1)
+            time.sleep(1)
 else:
     print Result.error()
+    logout()
     exit(Result.exit_code())
 
 logout()
