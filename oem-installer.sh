@@ -99,6 +99,7 @@ declare -r OPTION_UNKNOWN='Unknown'
 declare -r OPTION_FILE_NAME='options-file-name'
 declare -r OPTION_STAGING_DIRECTORY_NAME='staging-directory'
 declare -r OPTION_PATCHES_DIRECTORY_NAME='staging-patches-directory'
+declare -r OPTION_PLUGINS_DIRECTORY_NAME='staging-plugins-directory'
 declare -r OPTION_DIRECTORY_PERMISSIONS='directory-permissions'
 declare -r OPTION_ROOT_APPLICATIONS_DIRECTORY_NAME='root-applications-directory'
 declare -r OPTION_ROOT_DATA_DIRECTORY_NAME='root-data-directory'
@@ -139,11 +140,10 @@ declare -r OPTION_MANAGER_HOSTNAME='manager-hostname'
 declare -r OPTION_MANAGER_USER_PORT='manager-user-port'
 declare -r OPTION_MANAGER_UPLOAD_PORT='manager-upload-port'
 declare -r OPTION_MANAGER_PASSWORD='manager-password'
-declare -r OPTION_MANAGER_KEYSTORE_FILE_NAME='keystore-file'
-declare -r OPTION_MANAGER_KEYSTORE_PASSWORD='keystore-password'
-declare -r OPTION_MANAGER_TRUSTSTORE_FILE_NAME='truststore-file'
-declare -r OPTION_MANAGER_TRUSTSTORE_PASSWORD='truststore-password'
 declare -r OPTION_MANAGER_CONTROLLER_FILE_NAME='manager-controller-file-name'
+declare -r OPTION_PLUGIN_VERSION='plugin-version'
+declare -r OPTION_PLUGIN_NAME='plugin-name'
+declare -r OPTION_PLUGIN_FILE_NAME='plugin-file-name'
 declare -r OPTION_AGENT_VERSION='agent-version'
 declare -r OPTION_AGENT_BASE_DIRECTORY_NAME='agent-base-directory'
 declare -r OPTION_AGENT_HOME_DIRECTORY_NAME='agent-home-directory'
@@ -151,8 +151,6 @@ declare -r OPTION_AGENT_INSTANCE_DIRECTORY_NAME='agent-instance-directory'
 declare -r OPTION_AGENT_PORT='agent-port'
 declare -r OPTION_AGENT_PASSWORD='agent-password'
 declare -r OPTION_AGENT_CONTROLLER_FILE_NAME='agent-controller-file-name'
-declare -r OPTION_PLUGIN_NAME='plugin-name'
-declare -r OPTION_PLUGIN_FILE_NAME='plugin-file-name'
 declare -r OPTION_WEBLOGIC_PORT='weblogic-port'
 declare -r OPTION_WEBLOGIC_USER='weblogic-user'
 declare -r OPTION_WEBLOGIC_PASSWORD='weblogic-password'
@@ -172,6 +170,7 @@ declare -r -a OPTIONS=(
   "$OPTION_FILE_NAME"
   "$OPTION_STAGING_DIRECTORY_NAME"
   "$OPTION_PATCHES_DIRECTORY_NAME"
+  "$OPTION_PLUGINS_DIRECTORY_NAME"
   "$OPTION_DIRECTORY_PERMISSIONS"
   "$OPTION_ROOT_APPLICATIONS_DIRECTORY_NAME"
   "$OPTION_ROOT_DATA_DIRECTORY_NAME"
@@ -210,11 +209,10 @@ declare -r -a OPTIONS=(
   "$OPTION_MANAGER_USER_PORT"
   "$OPTION_MANAGER_UPLOAD_PORT"
   "$OPTION_MANAGER_PASSWORD"
-  "$OPTION_MANAGER_KEYSTORE_FILE_NAME"
-  "$OPTION_MANAGER_KEYSTORE_PASSWORD"
-  "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"
-  "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"
   "$OPTION_MANAGER_CONTROLLER_FILE_NAME"
+  "$OPTION_PLUGIN_VERSION"
+  "$OPTION_PLUGIN_NAME"
+  "$OPTION_PLUGIN_FILE_NAME"
   "$OPTION_AGENT_VERSION"
   "$OPTION_AGENT_BASE_DIRECTORY_NAME"
   "$OPTION_AGENT_HOME_DIRECTORY_NAME"
@@ -222,8 +220,6 @@ declare -r -a OPTIONS=(
   "$OPTION_AGENT_PORT"
   "$OPTION_AGENT_PASSWORD"
   "$OPTION_AGENT_CONTROLLER_FILE_NAME"
-  "$OPTION_PLUGIN_NAME"
-  "$OPTION_PLUGIN_FILE_NAME"
   "$OPTION_WEBLOGIC_PORT"
   "$OPTION_WEBLOGIC_USER"
   "$OPTION_WEBLOGIC_PASSWORD"
@@ -277,6 +273,7 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_FILE_NAME"]=$OPTION_SOURCE_COMMAND
   ["$OPTION_STAGING_DIRECTORY_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_PATCHES_DIRECTORY_NAME"]=$OPTION_SOURCE_PROGRAM
+  ["$OPTION_PLUGINS_DIRECTORY_NAME"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_DIRECTORY_PERMISSIONS"]=$OPTION_SOURCE_PROGRAM
   ["$OPTION_ROOT_APPLICATIONS_DIRECTORY_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_ROOT_DATA_DIRECTORY_NAME"]=$OPTION_SOURCE_ALL
@@ -317,11 +314,10 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_MANAGER_USER_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_UPLOAD_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_MANAGER_PASSWORD"]=$OPTION_SOURCE_CONFIGURATION_FILE
-  ["$OPTION_MANAGER_KEYSTORE_FILE_NAME"]=$OPTION_SOURCE_ALL
-  ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]=$OPTION_SOURCE_CONFIGURATION_FILE
-  ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]=$OPTION_SOURCE_ALL
-  ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]=$OPTION_SOURCE_CONFIGURATION_FILE
   ["$OPTION_MANAGER_CONTROLLER_FILE_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_PLUGIN_VERSION"]=$OPTION_SOURCE_ALL
+  ["$OPTION_PLUGIN_NAME"]=$OPTION_SOURCE_ALL
+  ["$OPTION_PLUGIN_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_AGENT_VERSION"]=$OPTION_SOURCE_ALL
   ["$OPTION_AGENT_BASE_DIRECTORY_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_AGENT_HOME_DIRECTORY_NAME"]=$(($OPTION_SOURCE_PROGRAM + $OPTION_SOURCE_INSTALLATION_FILE))
@@ -329,8 +325,6 @@ declare -r -A -i OPTION_SOURCES=(
   ["$OPTION_AGENT_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_AGENT_PASSWORD"]=$OPTION_SOURCE_CONFIGURATION_FILE
   ["$OPTION_AGENT_CONTROLLER_FILE_NAME"]=$OPTION_SOURCE_ALL
-  ["$OPTION_PLUGIN_NAME"]=$OPTION_SOURCE_ALL
-  ["$OPTION_PLUGIN_FILE_NAME"]=$OPTION_SOURCE_ALL
   ["$OPTION_WEBLOGIC_PORT"]=$OPTION_SOURCE_ALL
   ["$OPTION_WEBLOGIC_USER"]=$OPTION_SOURCE_ALL
   ["$OPTION_WEBLOGIC_PASSWORD"]=$OPTION_SOURCE_CONFIGURATION_FILE
@@ -380,6 +374,7 @@ declare -r -A -i OPTION_TARGETS=(
   ["$OPTION_FILE_NAME"]=$OPTION_TARGET_ALL_OPTIONAL
   ["$OPTION_STAGING_DIRECTORY_NAME"]=$OPTION_TARGET_ALL_MANDATORY
   ["$OPTION_PATCHES_DIRECTORY_NAME"]=$OPTION_TARGET_ALL
+  ["$OPTION_PLUGINS_DIRECTORY_NAME"]=$OPTION_TARGET_MANAGER
   ["$OPTION_DIRECTORY_PERMISSIONS"]=$OPTION_TARGET_ALL
   ["$OPTION_ROOT_APPLICATIONS_DIRECTORY_NAME"]=$OPTION_TARGET_ALL_FOUNDATIONAL
   ["$OPTION_ROOT_DATA_DIRECTORY_NAME"]=$OPTION_TARGET_DATABASE_FOUNDATIONAL
@@ -420,11 +415,10 @@ declare -r -A -i OPTION_TARGETS=(
   ["$OPTION_MANAGER_USER_PORT"]=$OPTION_TARGET_MANAGER
   ["$OPTION_MANAGER_UPLOAD_PORT"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT_MANDATORY))
   ["$OPTION_MANAGER_PASSWORD"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
-  ["$OPTION_MANAGER_KEYSTORE_FILE_NAME"]=$OPTION_TARGET_MANAGER
-  ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]=$OPTION_TARGET_MANAGER
-  ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]=$OPTION_TARGET_MANAGER
-  ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]=$OPTION_TARGET_MANAGER
   ["$OPTION_MANAGER_CONTROLLER_FILE_NAME"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_PLUGIN_VERSION"]=$OPTION_TARGET_MANAGER
+  ["$OPTION_PLUGIN_NAME"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
+  ["$OPTION_PLUGIN_FILE_NAME"]=$OPTION_TARGET_MANAGER
   ["$OPTION_AGENT_VERSION"]=$OPTION_TARGET_AGENT
   ["$OPTION_AGENT_BASE_DIRECTORY_NAME"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
   ["$OPTION_AGENT_HOME_DIRECTORY_NAME"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
@@ -432,8 +426,6 @@ declare -r -A -i OPTION_TARGETS=(
   ["$OPTION_AGENT_PORT"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
   ["$OPTION_AGENT_PASSWORD"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
   ["$OPTION_AGENT_CONTROLLER_FILE_NAME"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
-  ["$OPTION_PLUGIN_NAME"]=$((OPTION_TARGET_MANAGER + $OPTION_TARGET_AGENT))
-  ["$OPTION_PLUGIN_FILE_NAME"]=$OPTION_TARGET_MANAGER
   ["$OPTION_WEBLOGIC_PORT"]=$OPTION_TARGET_MANAGER
   ["$OPTION_WEBLOGIC_USER"]=$OPTION_TARGET_MANAGER
   ["$OPTION_WEBLOGIC_PASSWORD"]=$OPTION_TARGET_MANAGER
@@ -460,6 +452,7 @@ declare -r DEFAULT_BASE_DATA_DIRECTORY_NAME="${DEFAULT_ROOT_DATA_DIRECTORY_NAME}
 declare -r DEFAULT_BASE_RECOVERY_DIRECTORY_NAME="${DEFAULT_ROOT_RECOVERY_DIRECTORY_NAME}/recovery"
 declare -r DEFAULT_DATABASE_VERSION='19.3.0.0.0'
 declare -r DEFAULT_MANAGER_VERSION='13.5.0.0.0'
+declare -r DEFAULT_PLUGIN_VERSION="$DEFAULT_MANAGER_VERSION"
 declare -r DEFAULT_AGENT_VERSION="$DEFAULT_MANAGER_VERSION"
 declare -r DEFAULT_DATABASE_NAME='emrep'
 declare -r DEFAULT_SYSTEMD_SERVICE_NAME='oracle.service'
@@ -498,11 +491,9 @@ declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_MANAGER_USER_PORT"]='7803'
   ["$OPTION_MANAGER_UPLOAD_PORT"]='4903'
   ["$OPTION_MANAGER_PASSWORD"]="$DEFAULT_PASSWORD"
-  ["$OPTION_MANAGER_KEYSTORE_FILE_NAME"]="${DEFAULT_BASE_APPLICATIONS_DIRECTORY_NAME}/${PRODUCT_MANAGER}/oradata/ewallet-keystore.p12"
-  ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]="$DEFAULT_PASSWORD"
-  ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]="${DEFAULT_BASE_APPLICATIONS_DIRECTORY_NAME}/${PRODUCT_MANAGER}/oradata/ewallet-truststore.p12"
-  ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]="$DEFAULT_PASSWORD"
   ["$OPTION_MANAGER_CONTROLLER_FILE_NAME"]="${PRODUCT_MANAGER}.sh"
+  ["$OPTION_PLUGIN_VERSION"]="$DEFAULT_PLUGIN_VERSION"
+  ["$OPTION_PLUGIN_NAME"]='oracle.mysql.omys'
   ["$OPTION_AGENT_VERSION"]="$DEFAULT_AGENT_VERSION"
   ["$OPTION_AGENT_BASE_DIRECTORY_NAME"]="${DEFAULT_BASE_APPLICATIONS_DIRECTORY_NAME}/${PRODUCT_AGENT}"
   ["$OPTION_AGENT_HOME_DIRECTORY_NAME"]="${DEFAULT_BASE_APPLICATIONS_DIRECTORY_NAME}/${PRODUCT_AGENT}/agent_${DEFAULT_AGENT_VERSION}"
@@ -510,7 +501,6 @@ declare -r -A OPTION_DEFAULT_VALUES=(
   ["$OPTION_AGENT_PORT"]='3872'
   ["$OPTION_AGENT_PASSWORD"]="$DEFAULT_PASSWORD"
   ["$OPTION_AGENT_CONTROLLER_FILE_NAME"]="${PRODUCT_AGENT}.sh"
-  ["$OPTION_PLUGIN_NAME"]='oracle.mysql.omys'
   ["$OPTION_WEBLOGIC_PORT"]='7102'
   ["$OPTION_WEBLOGIC_USER"]='weblogic'
   ["$OPTION_WEBLOGIC_PASSWORD"]="$DEFAULT_PASSWORD"
@@ -529,6 +519,7 @@ declare -r -A OPTION_DEFAULT_VALUES=(
 
 declare -r DESCRIPTION_STAGING_DIRECTORY='installation staging directory'
 declare -r DESCRIPTION_PATCHES_DIRECTORY='staging directory for product patches'
+declare -r DESCRIPTION_PLUGINS_DIRECTORY="staging directory for ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} plugins"
 declare -r DESCRIPTION_ROOT_APPLICATIONS_DIRECTORY='root installation directory of the Oracle programs'
 declare -r DESCRIPTION_ROOT_DATA_DIRECTORY='root directory of the Oracle data directory'
 declare -r DESCRIPTION_ROOT_RECOVERY_DIRECTORY='root directory of the Oracle recovery directory'
@@ -567,17 +558,13 @@ declare -r DESCRIPTION_MANAGER_PORTS_FILE="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANA
 declare -r DESCRIPTION_MANAGER_BASE_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} base directory"
 declare -r DESCRIPTION_MANAGER_HOME_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} home directory"
 declare -r DESCRIPTION_MANAGER_INSTANCE_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} instance directory"
-declare -r DESCRIPTION_MANAGER_KEYSTORE="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} key store"
-declare -r DESCRIPTION_MANAGER_KEYSTORE_FILE="${DESCRIPTION_MANAGER_KEYSTORE} file"
-declare -r DESCRIPTION_MANAGER_TRUSTSTORE="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} trust store"
-declare -r DESCRIPTION_MANAGER_TRUSTSTORE_FILE="${DESCRIPTION_MANAGER_TRUSTSTORE} file"
 declare -r DESCRIPTION_MANAGER_CONTROLLER_FILE="service controller program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+declare -r DESCRIPTION_PLUGIN="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} for MySQL Database plugin"
+declare -r DESCRIPTION_PLUGIN_FILE="installation file for the ${DESCRIPTION_PLUGIN}"
 declare -r DESCRIPTION_AGENT_BASE_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} base directory"
 declare -r DESCRIPTION_AGENT_HOME_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} home directory"
 declare -r DESCRIPTION_AGENT_INSTANCE_DIRECTORY="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} instance directory"
 declare -r DESCRIPTION_AGENT_CONTROLLER_FILE="service controller program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]}"
-declare -r DESCRIPTION_PLUGIN="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} for MySQL Database plugin"
-declare -r DESCRIPTION_PLUGIN_FILE="installation file for the ${DESCRIPTION_PLUGIN}"
 declare -r DESCRIPTION_SUDOERS_FILE='installation system user sudoers definition file'
 declare -r DESCRIPTION_SWAP='system swap'
 declare -r DESCRIPTION_SWAP_FILE="additional file for the ${DESCRIPTION_SWAP}"
@@ -596,6 +583,7 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_FILE_NAME"]='name of an optional file that contains options to override the default option values of this program'
   ["$OPTION_STAGING_DIRECTORY_NAME"]="name of the ${DESCRIPTION_STAGING_DIRECTORY}"
   ["$OPTION_PATCHES_DIRECTORY_NAME"]="name of the ${DESCRIPTION_PATCHES_DIRECTORY}"
+  ["$OPTION_PLUGINS_DIRECTORY_NAME"]="name of the ${DESCRIPTION_PLUGINS_DIRECTORY}"
   ["$OPTION_DIRECTORY_PERMISSIONS"]='file system permissions of the Oracle installation directories'
   ["$OPTION_ROOT_APPLICATIONS_DIRECTORY_NAME"]="name of the ${DESCRIPTION_ROOT_APPLICATIONS_DIRECTORY}"
   ["$OPTION_ROOT_DATA_DIRECTORY_NAME"]="name of the ${DESCRIPTION_ROOT_DATA_DIRECTORY}"
@@ -636,11 +624,10 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_MANAGER_USER_PORT"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} port"
   ["$OPTION_MANAGER_UPLOAD_PORT"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} upload port"
   ["$OPTION_MANAGER_PASSWORD"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} sysman account password"
-  ["$OPTION_MANAGER_KEYSTORE_FILE_NAME"]="name of the ${OPTION_MANAGER_KEYSTORE_FILE}"
-  ["$OPTION_MANAGER_KEYSTORE_PASSWORD"]="password for the ${OPTION_MANAGER_KEYSTORE_FILE}"
-  ["$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"]="name of the ${OPTION_MANAGER_TRUSTSTORE_FILE}"
-  ["$OPTION_MANAGER_TRUSTSTORE_PASSWORD"]="password for the ${OPTION_MANAGER_TRUSTSTORE_FILE}"
   ["$OPTION_MANAGER_CONTROLLER_FILE_NAME"]="name of the ${DESCRIPTION_MANAGER_CONTROLLER_FILE}"
+  ["$OPTION_PLUGIN_VERSION"]="${DESCRIPTION_PLUGIN} version"
+  ["$OPTION_PLUGIN_NAME"]="name of the ${DESCRIPTION_PLUGIN}"
+  ["$OPTION_PLUGIN_FILE_NAME"]="name of the ${DESCRIPTION_PLUGIN_FILE}"
   ["$OPTION_AGENT_VERSION"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} version"
   ["$OPTION_AGENT_BASE_DIRECTORY_NAME"]="name of the ${DESCRIPTION_AGENT_BASE_DIRECTORY}"
   ["$OPTION_AGENT_HOME_DIRECTORY_NAME"]="name of the ${DESCRIPTION_AGENT_HOME_DIRECTORY}"
@@ -648,8 +635,6 @@ declare -r -A OPTION_DESCRIPTIONS=(
   ["$OPTION_AGENT_PORT"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} port"
   ["$OPTION_AGENT_PASSWORD"]="${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]} account password"
   ["$OPTION_AGENT_CONTROLLER_FILE_NAME"]="name of the ${DESCRIPTION_AGENT_CONTROLLER_FILE}"
-  ["$OPTION_PLUGIN_NAME"]="name of the ${DESCRIPTION_PLUGIN}"
-  ["$OPTION_PLUGIN_FILE_NAME"]="name of the ${DESCRIPTION_PLUGIN_FILE}"
   ["$OPTION_WEBLOGIC_PORT"]='Weblogic administration port'
   ["$OPTION_WEBLOGIC_USER"]='Weblogic administration username'
   ["$OPTION_WEBLOGIC_PASSWORD"]='Weblogic account password'
@@ -832,7 +817,6 @@ echoCommand() {
   if [[ -n "$Output" ]] ; then
     echoLog "$Output"
   fi
-#  echoLog "$@"
   return $RETCODE_SUCCESS
 }
 
@@ -1487,16 +1471,12 @@ processOptionsFile() {
 ##         otherwise the return code of the function execution.
 ################################################################################
 processInstallationOptionsFile() {
-  local -A _InstallationOptionsFileInputSourcesDummy=()
-  local -A _InstallationOptionsFileInputValuesDummy=()
-  local -A _InstallationOptionsFileOutputSourcesDummy=()
-  local -A _InstallationOptionsFileOutputValuesDummy=()
   local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -n _InputSources="${2:-_InstallationOptionsFileInputSourcesDummy}"
-  local -n _InputValues="${3:-_InstallationOptionsFileInputValuesDummy}"
-  local -n _OutputSources="${4:-_InstallationOptionsFileOutputSourcesDummy}"
-  local -n _OutputValues="${5:-_InstallationOptionsFileOutputValuesDummy}"
-  local -r OptionName="${6:-}"
+  local -n _InputSources="$2"
+  local -n _InputValues="$3"
+  local -n _OutputSources="$4"
+  local -n _OutputValues="$5"
+  local -r OptionName="${6:-INVALID OPTION}"
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
     local Option=''
@@ -1558,13 +1538,11 @@ processInstallationOptionsFile() {
 ##         otherwise RETCODE_SUCCESS.
 ################################################################################
 retrieveOption() {
-  local -r -A _OptionsSourcesDummy=()
-  local -r -A _OptionsValuesDummy=()
   local _OptionsValueDummy=''
   local _OptionsDescriptionDummy=''
   local -i Retcode=${1:-$RETCODE_SUCCESS}
-  local -n _RetrieveSources="${2:-_OptionsSourcesDummy}"
-  local -n _RetrieveValues="${3:-_OptionsValuesDummy}"
+  local -n _RetrieveSources="$2"
+  local -n _RetrieveValues="$3"
   local -r -i Target=${4:-$OPTION_TARGET_NONE}
   local -r Option="${5:-${OPTION_UNKNOWN}}"
   local -n _Value="${6:-_OptionsValueDummy}"
@@ -3632,15 +3610,15 @@ uninstallDatabase() {
 ##     Oracle Enterprise Manager.
 ## @li Installation of the Oracle Enterprise Manager.
 ## @li Deletion of the ports and automated installation response files.
+## @li Synchronization of the tool emcli with the OMS.
 ## @li Configuration of Firewalld to allow external network access to Oracle
 ##     Enterprise Manager.
 ## @li Update of the installation user's .bashrc file.
 ## @li Creation of the Oracle Database controller script in the installation
 ##     user's home directory.
 ## @li Extraction of the MySQL plugin package file.
-## @li Synchronization of the tool emcli with the OMS.
-## @li Import of the MySQL plugin for the Oracle Enterprise Manager.
-## @li Deploy the MySQL plugin to the OMS and its central agent.
+## @li Import and deployment of the MySQL plugin for the Oracle Enterprise
+##     Manager.
 ##
 ## @return The return code of the function execution.
 ################################################################################
@@ -3649,6 +3627,7 @@ installManager() {
   local -A InstallationValues=()
   local StagingDirectoryName=''
   local PatchesDirectoryName=''
+  local PluginsDirectoryName=''
   local InventoryDirectoryName=''
   local User=''
   local UserDescription=''
@@ -3674,18 +3653,15 @@ installManager() {
   local UploadPort=''
   local UploadPortDescription=''
   local ManagerPassword=''
-  local KeystoreFileName=''
-  local KeystorePassword=''
-  local TruststoreFileName=''
-  local TruststorePassword=''
+  local PluginVersion=''
+  local PluginName=''
+  local PluginFileName=''
   local AgentBaseDirectoryName=''
   local AgentHomeDirectoryName=''
   local AgentInstanceDirectoryName=''
   local AgentPort=''
   local AgentPortDescription=''
   local AgentPassword=''
-  local PluginName
-  local PluginFileName=''
   local WeblogicPort=''
   local WeblogicPortDescription=''
   local WeblogicUser=''
@@ -3694,6 +3670,7 @@ installManager() {
   processInstallationOptionsFile $? "$1" "$2" 'InstallationSources' 'InstallationValues' "$OPTION_MANAGER_HOME_DIRECTORY_NAME"
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_STAGING_DIRECTORY_NAME"          'StagingDirectoryName'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_PATCHES_DIRECTORY_NAME"          'PatchesDirectoryName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_PLUGINS_DIRECTORY_NAME"          'PluginsDirectoryName'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_INVENTORY_DIRECTORY_NAME"        'InventoryDirectoryName'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_INSTALLATION_USER"               'User' 'UserDescription'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_INSTALLATION_GROUP"              'Group'
@@ -3714,17 +3691,14 @@ installManager() {
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_USER_PORT"               'UserPort' 'UserPortDescription'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_UPLOAD_PORT"             'UploadPort' 'UploadPortDescription'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_PASSWORD"                'ManagerPassword'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_KEYSTORE_FILE_NAME"      'KeystoreFileName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_KEYSTORE_PASSWORD"       'KeystorePassword'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"    'TruststoreFileName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_MANAGER_TRUSTSTORE_PASSWORD"     'TruststorePassword'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_PLUGIN_VERSION"                  'PluginVersion'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_PLUGIN_NAME"                     'PluginName'
+  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_PLUGIN_FILE_NAME"                'PluginFileName'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_BASE_DIRECTORY_NAME"       'AgentBaseDirectoryName'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_HOME_DIRECTORY_NAME"       'AgentHomeDirectoryName'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_INSTANCE_DIRECTORY_NAME"   'AgentInstanceDirectoryName'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_PORT"                      'AgentPort' 'AgentPortDescription'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_AGENT_PASSWORD"                  'AgentPassword'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_PLUGIN_NAME"                     'PluginName'
-  retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_PLUGIN_FILE_NAME"                'PluginFileName'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_WEBLOGIC_PORT"                   'WeblogicPort' 'WeblogicPortDescription'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_WEBLOGIC_USER"                   'WeblogicUser'
   retrieveOption $? 'InstallationSources' 'InstallationValues' $OPTION_TARGET_MANAGER "$OPTION_WEBLOGIC_PASSWORD"               'WeblogicPassword'
@@ -3733,14 +3707,17 @@ installManager() {
   local -r RepositoryManagerDescription="${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]} repository manager"
   local -r Installer="${HomeDirectoryName}/sysman/install/ConfigureGC.sh"
   local -r InstallerDescription="configuration program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
+  local -r EMCLI="${HomeDirectoryName}/bin/emcli"
+  local -r EMCLIDescription="tool 'emcli' of the ${PRODUCT_DESCRIPTIONS[${PRODUCT_MANAGER}]}"
   local -r AgentInstaller="${AgentHomeDirectoryName}/sysman/install/agentDeploy.sh"
   local -r AgentInstallerDescription="installer program for the ${PRODUCT_DESCRIPTIONS[${PRODUCT_AGENT}]}"
-  local -r PluginDirectoryName="${StagingDirectoryName}/plugin"
+  local -r PluginDirectoryName="${PluginsDirectoryName}/${PluginName}-${PluginVersion}"
   local -r PluginDirectoryDescription="staging directory for the ${DESCRIPTION_PLUGIN}"
   local -r MarkerProvisioned="${HomeDirectoryName}/${INSTALLATION_STEP_PROVISIONED}"
   local -r MarkerAgentProvisioned="${AgentHomeDirectoryName}/${INSTALLATION_STEP_PROVISIONED}"
   local -r MarkerInstalled="${HomeDirectoryName}/${INSTALLATION_STEP_INSTALLED}"
   local -r MarkerAgentInstalled="${AgentHomeDirectoryName}/${INSTALLATION_STEP_INSTALLED}"
+  local -r MarkerConfigured="${HomeDirectoryName}/${INSTALLATION_STEP_CONFIGURED}"
   local -r MarkerFirewalldConfigured="${HomeDirectoryName}/${INSTALLATION_STEP_CONFIGURED}_FIREWALLD"
   local -r MarkerPluginInstalled="${HomeDirectoryName}/${INSTALLATION_STEP_INSTALLED}_PLUGIN"
   local -r MarkerPluginConfigured="${HomeDirectoryName}/${INSTALLATION_STEP_CONFIGURED}_PLUGIN"
@@ -3884,13 +3861,6 @@ AGENT_BASE_DIR=${AgentBaseDirectoryName}
 AGENT_REGISTRATION_PASSWORD=${AgentPassword}
 AGENT_REGISTRATION_CONFIRM_PASSWORD=${AgentPassword}
 START_AGENT=true
-# TLS
-# Is_oneWaySSL=false
-# Is_twoWaySSL=true
-# TRUSTSTORE_PASSWORD=${TruststorePassword}
-# TRUSTSTORE_LOCATION=${TruststoreFileName}
-# KEYSTORE_PASSWORD=${KeystorePassword}
-# KEYSTORE_LOCATION=${KeystoreFileName}
 EOF
         readonly ResponsesFileContent
         createFile $Retcode "$User" "$Group" '' "$DESCRIPTION_MANAGER_RESPONSE_FILE" "$ResponseFileName" 'ResponsesFileContent' $VALUE_TRUE 'bResponseCreated'
@@ -3973,6 +3943,22 @@ EOF
     deleteFile "$DESCRIPTION_MANAGER_PORTS_FILE" "$PortsFileName" "$User"
   fi
 
+  ### Configure the tool emcli. ###
+
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
+    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerConfigured"
+    if [[ 0 -eq $? ]] ; then
+      echoCommandMessage "the ${EMCLIDescription} has already been configured"
+      Retcode=$?
+    else
+      echoCommandMessage "the ${EMCLIDescription} has not already been configured"
+      executeSudoShellCommand "$User" "$Group" "${EMCLI} sync -url='https://${HostName}:${UserPort}/em' -username='sysman' -password='$ManagerPassword' -trustall"
+      processCommandCode $? "failed to synchronize the ${EMCLIDescription}" "$EMCLI"
+      createMarkerFile $? "$User" "$Group" "$MarkerConfigured"
+      Retcode=$?
+    fi
+  fi
+
   ### Configure firewalld to allow network access to the Oracle Enterprise Manager. ###
 
   if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
@@ -4029,12 +4015,12 @@ EOF
   createControllerFile $?       "$1" "$2" "$PRODUCT_AGENT"
   Retcode=$?
 
-  #####################################
-  # Installation of the MySQL plugin. #
-  #####################################
+  ####################################################
+  # Installation and deployment of the MySQL plugin. #
+  ####################################################
 
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "installation of the ${DESCRIPTION_PLUGIN}"
+  if [[ $RETCODE_SUCCESS -eq $Retcode ]] && [[ -n "$PluginFileName" ]] ; then
+    echoSection "installation and deployment of the ${DESCRIPTION_PLUGIN}"
     executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerPluginInstalled"
     if [[ 0 -eq $? ]] ; then
       echoCommandMessage "the ${DESCRIPTION_PLUGIN} is already installed" "$HomeDirectoryName"
@@ -4058,39 +4044,73 @@ import time
 
 set_client_property('EMCLI_OMS_URL','https://${HostName}:${UserPort}/em')
 set_client_property('EMCLI_OUTPUT_TYPE','TEXT')
-Result=login(username='sysman',password='${ManagerPassword}')
+Result = login(username='sysman',password='${ManagerPassword}')
 if 0 <> Result.exit_code():
     print Result.error()
     exit(Result.exit_code())
+else:
+    print Result.out()
 
-Result=list(resource='Updates',bind="et_name='core_emplugin'")
+Result = list(resource='Updates',bind="et_name='core_emplugin'")
 if 0 == Result.exit_code() and 0 <= Result.out().find(' MySQL Database '):
     print 'The ${DESCRIPTION_PLUGIN} is already imported into the OMS.'
 elif 0 == Result.exit_code():
-    WasOffline=False
-    Result=get_connection_mode()
+    WasOffline = False
+    Result = get_connection_mode()
     if 0 == Result.exit_code() and 0 <= Result.out().find('offline'):
-        WasOffline=True
-    Offline=WasOffline
-    if False == Offline:
-        Result=set_connection_mode(mode='offline')
+        WasOffline = True
+    Offline = WasOffline
+    if 0 == Result.exit_code() and False == Offline:
+        Result = set_connection_mode(mode='offline')
         print Result.out()
         if 0 == Result.exit_code() and 0 <= Result.out().find('offline'):
-            Offline=True
+            Offline = True
     if 0 == Result.exit_code():
-        Result=import_update(file='${PluginOParFileName}',omslocal=True)
-#        Result=import_custom_plugin_update(archive='${PluginFileName}',overwrite=False)
-        if 0 == Result.exit_code():
-            while True:
-                Result=list(resource='Updates',bind="et_name='core_emplugin'")
-                if 0 <> Result.exit_code():
-                    break
-                elif 0 <= Result.out().find(' MySQL Database '):
+        Result = import_update(file='${PluginOParFileName}',omslocal=True)
+        while 0 == Result.exit_code():
+            Result = list(resource='Updates',bind="et_name='core_emplugin'")
+            if 0 == Result.exit_code():
+                if 0 <= Result.out().find(' MySQL Database '):
                     print 'The ${DESCRIPTION_PLUGIN} was successfully imported into the OMS.'
                     break
                 time.sleep(1)
     if False == WasOffline and True == Offline:
         set_connection_mode(mode='online')
+
+# Deploy the MySQL plugin on the OMS.
+
+if 0 == Result.exit_code():
+    Result = deploy_plugin_on_server(plugin='${PluginName}',sys_password='${DatabasePassword}',prereq_check=False)
+    if 0 == Result.exit_code():
+        while True:
+            Result = list_plugins_on_server()
+            if 0 <> Result.exit_code():
+                break
+            elif 0 <= Result.out().find(' ${PluginName} '):
+                print 'The ${DESCRIPTION_PLUGIN} was successfully deployed on the OMS.'
+                break
+            time.sleep(1)
+    elif 254 == Result.exit_code() and 0 <= Result.error().find(' already deployed'):
+        print 'The ${DESCRIPTION_PLUGIN} is already deployed on the OMS.'
+        Result = status() # This call is just ot reset the content of Result to be successful.
+
+# Deploy the MySQL plugin on the central agent.
+
+if 0 == Result.exit_code():
+    Result = deploy_plugin_on_agent(plugin='${PluginName}',agent_names='${HostName}:${AgentPort}')
+    if 0 == Result.exit_code():
+        print Result.error()
+        if 0 <= Result.out().find('No deployment is required.'):
+            print 'The ${DESCRIPTION_PLUGIN} is already deployed on the central agent.'
+        else:
+            while True:
+                Result = list_plugins_on_agent(agent_names='${HostName}:${AgentPort}')
+                if 0 <> Result.exit_code():
+                    break
+                elif 0 <= Result.out().find(' ${PluginName} '):
+                    print 'The ${DESCRIPTION_PLUGIN} was successfully deployed on the central agent.'
+                    break
+                time.sleep(1)
 
 if 0 <> Result.exit_code():
     print Result.error()
@@ -4100,99 +4120,16 @@ exit(Result.exit_code())
 EOF
             readonly ImportContent
             echoCommandSuccess
-            executeSudoShellCommand "$User" "$Group" "${HomeDirectoryName}/bin/emcli sync -url='https://${HostName}:${UserPort}/em' -username='sysman' -password='$ManagerPassword' -trustall"
-            processCommandCode $? "failed to synchronize the emcli tool of the ${DESCRIPTION_PLUGIN}" "$HomeDirectoryName"
+            executeSudoShellCommand "$User" "$Group" "${EMCLI} <<EOF${CHARACTER_NEWLINE}${ImportContent}${CHARACTER_NEWLINE}EOF"
+            processCommandCode $? "failed to install ${DESCRIPTION_PLUGIN}" "$PluginFileName"
+            createMarkerFile $? "$User" "$Group" "$MarkerPluginInstalled"
             Retcode=$?
-            if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-              executeSudoShellCommand "$User" "$Group" "${HomeDirectoryName}/bin/emcli <<EOF${CHARACTER_NEWLINE}${ImportContent}${CHARACTER_NEWLINE}EOF"
-              processCommandCode $? "failed to install ${DESCRIPTION_PLUGIN}" "$PluginFileName"
-              createMarkerFile $? "$User" "$Group" "$MarkerPluginInstalled"
-              Retcode=$?
-            fi
           else
-            echoError $RETCODE_OPERATION_ERROR "the ${DESCRIPTION_PLUGIN} does not exist or is inacessible" "$PluginOParFileName" "$PluginDirectoryName"
+            echoError $RETCODE_OPERATION_ERROR "the ${DESCRIPTION_PLUGIN_FILE} does not exist or is inacessible" "$PluginOParFileName" "$PluginDirectoryName"
             Retcode=$?
           fi
         fi
       fi
-    fi
-  fi
-
-  ###################################
-  # Deployment of the MySQL plugin. #
-  ###################################
-
-  if [[ $RETCODE_SUCCESS -eq $Retcode ]] ; then
-    echoSection "deployment of the ${DESCRIPTION_PLUGIN}"
-    executeCommand 'sudo' '-u' "$User" '-g' "$Group" 'test' '-f' "$MarkerPluginConfigured"
-    if [[ 0 -eq $? ]] ; then
-      echoCommandMessage "the ${DESCRIPTION_PLUGIN} is already deployed" "$HomeDirectoryName"
-    else
-      local DeployContent
-      read -d '' -r DeployContent <<EOF
-from emcli import *
-import time
-
-set_client_property('EMCLI_OMS_URL','https://${HostName}:${UserPort}/em')
-set_client_property('EMCLI_OUTPUT_TYPE','TEXT')
-Result=login(username='sysman',password='${ManagerPassword}')
-if 0 <> Result.exit_code():
-    print Result.error()
-    exit(Result.exit_code())
-
-# Deploy the MySQL plugin on the OMS.
-
-Result=deploy_plugin_on_server(plugin='${PluginName}',sys_password='${DatabasePassword}',prereq_check=False)
-if 0 == Result.exit_code():
-    while True:
-        Result=list_plugins_on_server()
-        if 0 <> Result.exit_code():
-            print Result.error()
-            logout()
-            exit(Result.exit_code())
-        elif 0 <= Result.out().find(' ${PluginName} '):
-            print 'The ${DESCRIPTION_PLUGIN} was successfully deployed on the OMS.'
-            break
-        time.sleep(1)
-elif 254 == Result.exit_code() and 0 <= Result.error().find(' already deployed'):
-    print 'The ${DESCRIPTION_PLUGIN} is already deployed on the OMS.'
-else:
-    print Result.error()
-    logout()
-    exit(Result.exit_code())
-
-# Deploy the MySQL plugin on the central agent.
-
-Result=deploy_plugin_on_agent(plugin='${PluginName}',agent_names='${HostName}:${AgentPort}')
-if 0 == Result.exit_code():
-    print Result.error()
-    if 0 <= Result.out().find('No deployment is required.'):
-        print 'The ${DESCRIPTION_PLUGIN} is already deployed on the central agent.'
-    else:
-        while True:
-            Result=list_plugins_on_agent(agent_names='${HostName}:${AgentPort}')
-            if 0 <> Result.exit_code():
-                print Result.error()
-                logout()
-                exit(Result.exit_code())
-            elif 0 <= Result.out().find(' ${PluginName} '):
-                print 'The ${DESCRIPTION_PLUGIN} was successfully deployed on the central agent.'
-                break
-            time.sleep(1)
-else:
-    print Result.error()
-    logout()
-    exit(Result.exit_code())
-
-logout()
-exit(0)
-EOF
-      readonly DeployContent
-      echoCommandMessage "the ${DESCRIPTION_PLUGIN} has not been deployed" "$HomeDirectoryName"
-      executeSudoShellCommand "$User" "$Group" "${HomeDirectoryName}/bin/emcli <<EOF${CHARACTER_NEWLINE}${DeployContent}${CHARACTER_NEWLINE}EOF"
-      processCommandCode $? "failed to deploy ${DESCRIPTION_PLUGIN}" "$PluginFileName"
-      createMarkerFile $? "$User" "$Group" "$MarkerPluginConfigured"
-      Retcode=$?
     fi
   fi
 
@@ -4802,6 +4739,7 @@ prepareInstallation() {
   local -r Target="${3:-${PRODUCT_ALL}}"
   local StagingDirectoryName
   local PatchesDirectoryName
+  local PluginsDirectoryName
   local DirectoryPermissions
   local BaseApplicationsDirectoryName
   local BaseDataDirectoryName
@@ -4830,6 +4768,7 @@ prepareInstallation() {
   echoTitle 'preparing for installation of the Oracle products'
   retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_STAGING_DIRECTORY_NAME"            'StagingDirectoryName'
   retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_PATCHES_DIRECTORY_NAME"            'PatchesDirectoryName'
+  retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_PLUGINS_DIRECTORY_NAME"            'PluginsDirectoryName'
   retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_DIRECTORY_PERMISSIONS"             'DirectoryPermissions'
   retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_BASE_APPLICATIONS_DIRECTORY_NAME"  'BaseApplicationsDirectoryName'
   retrieveOption $? "$1" "$2" $OPTION_TARGET_ANY      "$OPTION_BASE_DATA_DIRECTORY_NAME"          'BaseDataDirectoryName'
@@ -5188,6 +5127,7 @@ EOF
     echoSection 'Creation of the installation directories for the Oracle products'
     createDirectory $? "$User" "$Group" "$DirectoryPermissions" "$DESCRIPTION_STAGING_DIRECTORY" "$StagingDirectoryName"
     createDirectory $? "$User" "$Group" "$DirectoryPermissions" "$DESCRIPTION_PATCHES_DIRECTORY" "$PatchesDirectoryName" "$DESCRIPTION_STAGING_DIRECTORY" "$StagingDirectoryName"
+    createDirectory $? "$User" "$Group" "$DirectoryPermissions" "$DESCRIPTION_PLUGINS_DIRECTORY" "$PluginsDirectoryName" "$DESCRIPTION_STAGING_DIRECTORY" "$StagingDirectoryName"
     createDirectory $? "$User" "$Group" "$DirectoryPermissions" "$DESCRIPTION_BASE_APPLICATIONS_DIRECTORY" "$BaseApplicationsDirectoryName"
     createDirectory $? "$User" "$Group" "$DirectoryPermissions" "$DESCRIPTION_INVENTORY_DIRECTORY" "$InventoryDirectoryName"
     Retcode=$?
@@ -5329,8 +5269,9 @@ Retcode=$?
 
 # Process the determined options.
 
-if [[ -n "${OptionSources[${OPTION_STAGING_DIRECTORY_NAME}]}" ]] && [[ -n "${OptionValues[${OPTION_STAGING_DIRECTORY_NAME}]}" ]] ; then
+if [[ $OPTION_SOURCE_UNSET -ne "${OptionSources[${OPTION_STAGING_DIRECTORY_NAME}]}" ]] && [[ -n "${OptionValues[${OPTION_STAGING_DIRECTORY_NAME}]}" ]] ; then
   setOption $Retcode 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_PATCHES_DIRECTORY_NAME" "${OptionValues[${OPTION_STAGING_DIRECTORY_NAME}]}/patches"
+  setOption $Retcode 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_PLUGINS_DIRECTORY_NAME" "${OptionValues[${OPTION_STAGING_DIRECTORY_NAME}]}/plugins"
   Retcode=$?
 fi
 setOption $Retcode 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_ROOT_APPLICATIONS_DIRECTORY_NAME" "${OPTION_DEFAULT_VALUES[${OPTION_ROOT_APPLICATIONS_DIRECTORY_NAME}]}"
@@ -5351,8 +5292,6 @@ setOption $? 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_MANA
 setOption $? 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_MANAGER_BASE_DIRECTORY_NAME"      "${OptionValues[${OPTION_BASE_APPLICATIONS_DIRECTORY_NAME}]}/${PRODUCT_MANAGER}"
 setOption $? 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_MANAGER_HOME_DIRECTORY_NAME"      "${OptionValues[${OPTION_MANAGER_BASE_DIRECTORY_NAME}]}/product/${OptionValues[${OPTION_MANAGER_VERSION}]}"
 setOption $? 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_MANAGER_INSTANCE_DIRECTORY_NAME"  "${OptionValues[${OPTION_MANAGER_BASE_DIRECTORY_NAME}]}/gc_inst"
-setOption $? 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_MANAGER_KEYSTORE_FILE_NAME"       "${OptionValues[${OPTION_MANAGER_BASE_DIRECTORY_NAME}]}/oradata/ewallet-keystore.p12"
-setOption $? 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_MANAGER_TRUSTSTORE_FILE_NAME"     "${OptionValues[${OPTION_MANAGER_BASE_DIRECTORY_NAME}]}/oradata/ewallet-truststore.p12"
 setOption $? 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_AGENT_VERSION"                    "${OPTION_DEFAULT_VALUES[${OPTION_AGENT_VERSION}]}"
 setOption $? 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_AGENT_BASE_DIRECTORY_NAME"        "${OptionValues[${OPTION_BASE_APPLICATIONS_DIRECTORY_NAME}]}/${PRODUCT_AGENT}"
 setOption $? 'OptionSources' 'OptionValues' $OPTION_SOURCE_PROGRAM "$OPTION_AGENT_HOME_DIRECTORY_NAME"        "${OptionValues[${OPTION_AGENT_BASE_DIRECTORY_NAME}]}/agent_${OptionValues[${OPTION_AGENT_VERSION}]}"
